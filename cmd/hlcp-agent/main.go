@@ -1,8 +1,27 @@
-// hlcp-agent will connect outward to the controller and execute allow-listed actions.
 package main
 
-import "fmt"
+import (
+	"context"
+	"flag"
+	"fmt"
+	"hlcp/internal/agent"
+	"os"
+	"os/signal"
+	"syscall"
+)
 
 func main() {
-	fmt.Println("hlcp-agent: protocol primitives are ready; session handling is next")
+	configPath := flag.String("config", "/etc/hlcp/agent.yaml", "agent YAML configuration")
+	flag.Parse()
+	config, err := agent.Load(*configPath)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	if err := agent.Run(ctx, config); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
