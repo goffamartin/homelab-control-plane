@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"hlcp/internal/liveness"
+	"hlcp/internal/protocol"
 	"hlcp/internal/session"
 	"log/slog"
 	"net"
@@ -23,6 +24,7 @@ type Server struct {
 	listener net.Listener
 	config   Config
 	registry *Registry
+	sessions *ActiveSessions
 }
 
 func Listen(address string, config Config) (*Server, error) {
@@ -42,11 +44,13 @@ func Listen(address string, config Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("listen on %s: %w", address, err)
 	}
-	return &Server{listener: listener, config: config, registry: NewRegistry()}, nil
+	tracker := NewCommandTracker()
+	return &Server{listener: listener, config: config, registry: NewRegistry(), sessions: NewActiveSessions(tracker)}, nil
 }
-func (server *Server) Address() net.Addr   { return server.listener.Addr() }
-func (server *Server) Registry() *Registry { return server.registry }
-func (server *Server) Close() error        { return server.listener.Close() }
+func (server *Server) Address() net.Addr         { return server.listener.Addr() }
+func (server *Server) Registry() *Registry       { return server.registry }
+func (server *Server) Sessions() *ActiveSessions { return server.sessions }
+func (server *Server) Close() error              { return server.listener.Close() }
 
 func (server *Server) Serve(ctx context.Context) error {
 	var closeOnce sync.Once
@@ -87,10 +91,14 @@ func (server *Server) handleConnection(raw net.Conn) {
 	registeredAt := time.Now()
 	server.registry.Register(registration, synchronization, registeredAt)
 	tracker, _ := liveness.NewTracker(server.config.LivenessPolicy, registeredAt)
+	writer := session.NewWriter(connection, 4)
+	server.sessions.Register(registration.NodeID, writer)
+	defer server.sessions.Remove(registration.NodeID, writer)
+	inbound := session.StartInbound(connection)
 	server.config.Logger.Info("agent registered", "node", registration.NodeID, "session", registration.SessionID)
-	err = session.RunHeartbeatLoop(connection, tracker, func(change session.StateChange) {
+	err = session.RunInboundLoop(inbound, tracker, func(change session.StateChange) {
 		server.registry.UpdateLiveness(registration.NodeID, registration.SessionID, change.State, change.LastActivity)
-	})
+	}, func(result protocol.CommandResultPayload) { server.sessions.HandleResult(result) })
 	server.registry.UpdateLiveness(registration.NodeID, registration.SessionID, liveness.NodeOffline, time.Now())
 	server.config.Logger.Info("agent session ended", "node", registration.NodeID, "session", registration.SessionID, "error", err)
 }
