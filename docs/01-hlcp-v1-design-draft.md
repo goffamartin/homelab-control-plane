@@ -58,6 +58,8 @@ connection loss
 
 On every new session, the agent sends a full inventory and state snapshot. The controller treats earlier dynamic state as stale until that synchronization completes.
 
+The controller selects the highest mutually supported protocol version, returns a cryptographically random session ID, and sets the heartbeat interval and missed-heartbeat threshold in `WELCOME`. Both directions apply a bounded handshake timeout; on any invalid frame or payload, the session is closed without becoming registered.
+
 ## 5. Framing
 
 Every frame has a fixed binary header and one encoded payload.

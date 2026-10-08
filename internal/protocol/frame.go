@@ -132,3 +132,24 @@ func Decode(reader io.Reader) (Frame, error) {
 
 	return Frame{Header: header, Payload: payload}, nil
 }
+
+// WriteFrame writes a complete encoded frame, including when writer performs
+// a short write without returning an error.
+func WriteFrame(writer io.Writer, frame Frame) error {
+	encoded, err := frame.Encode()
+	if err != nil {
+		return err
+	}
+
+	for len(encoded) > 0 {
+		written, err := writer.Write(encoded)
+		if err != nil {
+			return fmt.Errorf("write HLCP frame: %w", err)
+		}
+		if written == 0 {
+			return io.ErrShortWrite
+		}
+		encoded = encoded[written:]
+	}
+	return nil
+}
