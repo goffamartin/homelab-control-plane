@@ -26,6 +26,8 @@ Implement inventory and state snapshots, regular heartbeat transmission, node st
 
 **Exit criterion:** controller reports online/degraded/offline transitions and replaces stale state after reconnect.
 
+**Current progress:** inventory/state synchronization and a deterministic liveness tracker are implemented and unit-tested. The next slice is connecting the tracker to a long-running controller session loop.
+
 ## Stage 4 — Controlled commands
 
 Implement the allow-listed systemd adapter, command dispatch, ACK/result workflow, durable command journal, deduplication, and CLI read/control commands.
