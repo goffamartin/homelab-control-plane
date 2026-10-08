@@ -16,9 +16,11 @@ import (
 const defaultHandshakeTimeout = 10 * time.Second
 
 var (
-	ErrExpectedHello   = errors.New("hlcp session: expected HELLO")
-	ErrExpectedWelcome = errors.New("hlcp session: expected WELCOME")
-	ErrNoCommonVersion = errors.New("hlcp session: no common protocol version")
+	ErrExpectedHello             = errors.New("hlcp session: expected HELLO")
+	ErrExpectedWelcome           = errors.New("hlcp session: expected WELCOME")
+	ErrExpectedInventorySnapshot = errors.New("hlcp session: expected INVENTORY_SNAPSHOT")
+	ErrExpectedStateSnapshot     = errors.New("hlcp session: expected STATE_SNAPSHOT")
+	ErrNoCommonVersion           = errors.New("hlcp session: no common protocol version")
 )
 
 // Registration is the controller-side result of a validated HELLO/WELCOME
@@ -29,6 +31,13 @@ type Registration struct {
 	Capabilities []string
 	SessionID    string
 	Version      uint8
+}
+
+// Synchronization is the complete controller-visible state received directly
+// after a new session is registered.
+type Synchronization struct {
+	Inventory protocol.InventorySnapshot
+	State     protocol.StateSnapshot
 }
 
 // ControllerConfig selects the policy returned to a newly connected agent.
@@ -143,6 +152,61 @@ func Start(connection net.Conn, hello protocol.HelloPayload, timeout time.Durati
 	return welcome, nil
 }
 
+// SendInitialSynchronization sends the complete current inventory followed by
+// a state snapshot. The caller must invoke it after Start succeeds.
+func SendInitialSynchronization(connection net.Conn, synchronization Synchronization, timeout time.Duration) error {
+	if err := synchronization.Inventory.Validate(); err != nil {
+		return fmt.Errorf("validate inventory snapshot: %w", err)
+	}
+	if err := synchronization.State.ValidateAgainst(synchronization.Inventory); err != nil {
+		return fmt.Errorf("validate state snapshot: %w", err)
+	}
+	if timeout <= 0 {
+		timeout = defaultHandshakeTimeout
+	}
+	if err := connection.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return fmt.Errorf("set synchronization deadline: %w", err)
+	}
+	defer connection.SetDeadline(time.Time{})
+
+	if err := writePayloadFrame(connection, protocol.MessageInventorySnapshot, 2, synchronization.Inventory); err != nil {
+		return fmt.Errorf("write inventory snapshot: %w", err)
+	}
+	if err := writePayloadFrame(connection, protocol.MessageStateSnapshot, 3, synchronization.State); err != nil {
+		return fmt.Errorf("write state snapshot: %w", err)
+	}
+	return nil
+}
+
+// ReceiveInitialSynchronization receives the initial inventory and state in
+// wire order. The controller must call it after Accept succeeds and before it
+// treats a session as ready for commands.
+func ReceiveInitialSynchronization(connection net.Conn, timeout time.Duration) (Synchronization, error) {
+	if timeout <= 0 {
+		timeout = defaultHandshakeTimeout
+	}
+	if err := connection.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return Synchronization{}, fmt.Errorf("set synchronization deadline: %w", err)
+	}
+	defer connection.SetDeadline(time.Time{})
+
+	inventory, err := readPayloadFrame[protocol.InventorySnapshot](connection, protocol.MessageInventorySnapshot)
+	if err != nil {
+		return Synchronization{}, err
+	}
+	if err := inventory.Validate(); err != nil {
+		return Synchronization{}, fmt.Errorf("validate inventory snapshot: %w", err)
+	}
+	state, err := readPayloadFrame[protocol.StateSnapshot](connection, protocol.MessageStateSnapshot)
+	if err != nil {
+		return Synchronization{}, err
+	}
+	if err := state.ValidateAgainst(inventory); err != nil {
+		return Synchronization{}, fmt.Errorf("validate state snapshot: %w", err)
+	}
+	return Synchronization{Inventory: inventory, State: state}, nil
+}
+
 func (config ControllerConfig) withDefaults() ControllerConfig {
 	if len(config.SupportedVersions) == 0 {
 		config.SupportedVersions = []uint8{protocol.ProtocolVersion}
@@ -177,4 +241,38 @@ func randomSessionID() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(bytes), nil
+}
+
+func writePayloadFrame(connection net.Conn, messageType protocol.MessageType, messageID uint64, payloadValue any) error {
+	payload, err := protocol.EncodePayload(payloadValue)
+	if err != nil {
+		return err
+	}
+	frame, err := protocol.NewFrame(messageType, messageID, payload)
+	if err != nil {
+		return err
+	}
+	return protocol.WriteFrame(connection, frame)
+}
+
+func readPayloadFrame[T any](connection net.Conn, expectedType protocol.MessageType) (T, error) {
+	var payloadValue T
+	frame, err := protocol.Decode(connection)
+	if err != nil {
+		return payloadValue, err
+	}
+	if frame.Header.Type != expectedType {
+		switch expectedType {
+		case protocol.MessageInventorySnapshot:
+			return payloadValue, ErrExpectedInventorySnapshot
+		case protocol.MessageStateSnapshot:
+			return payloadValue, ErrExpectedStateSnapshot
+		default:
+			return payloadValue, fmt.Errorf("hlcp session: expected message type %d", expectedType)
+		}
+	}
+	if err := protocol.DecodePayload(frame.Payload, &payloadValue); err != nil {
+		return payloadValue, err
+	}
+	return payloadValue, nil
 }
