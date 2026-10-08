@@ -17,12 +17,13 @@ const (
 )
 
 var (
-	ErrInvalidNodeID       = errors.New("hlcp: invalid node ID")
-	ErrInvalidSessionID    = errors.New("hlcp: invalid session ID")
-	ErrNoProtocolVersions  = errors.New("hlcp: no protocol versions supplied")
-	ErrProtocolNotOffered  = errors.New("hlcp: selected protocol version was not offered")
-	ErrInvalidHeartbeat    = errors.New("hlcp: invalid heartbeat configuration")
-	ErrTooManyCapabilities = errors.New("hlcp: too many capabilities")
+	ErrInvalidNodeID            = errors.New("hlcp: invalid node ID")
+	ErrInvalidSessionID         = errors.New("hlcp: invalid session ID")
+	ErrNoProtocolVersions       = errors.New("hlcp: no protocol versions supplied")
+	ErrProtocolNotOffered       = errors.New("hlcp: selected protocol version was not offered")
+	ErrInvalidHeartbeat         = errors.New("hlcp: invalid heartbeat configuration")
+	ErrInvalidHeartbeatSequence = errors.New("hlcp: invalid heartbeat sequence")
+	ErrTooManyCapabilities      = errors.New("hlcp: too many capabilities")
 )
 
 var (
@@ -87,6 +88,20 @@ type WelcomePayload struct {
 	SessionID                string `cbor:"session_id"`
 	HeartbeatIntervalMillis  uint32 `cbor:"heartbeat_interval_ms"`
 	MissedHeartbeatThreshold uint8  `cbor:"missed_heartbeat_threshold"`
+}
+
+// HeartbeatPayload carries an agent-local increasing sequence number. It does
+// not use wall-clock time because controller and agent clocks need not agree.
+type HeartbeatPayload struct {
+	Sequence uint64 `cbor:"sequence"`
+}
+
+// Validate checks the minimal heartbeat contract for v1.
+func (payload HeartbeatPayload) Validate() error {
+	if payload.Sequence == 0 {
+		return ErrInvalidHeartbeatSequence
+	}
+	return nil
 }
 
 // ValidateAgainst checks whether the controller selected an offered version and

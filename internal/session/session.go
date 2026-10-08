@@ -207,6 +207,47 @@ func ReceiveInitialSynchronization(connection net.Conn, timeout time.Duration) (
 	return Synchronization{Inventory: inventory, State: state}, nil
 }
 
+// SendHeartbeat reports liveness after the initial synchronization completes.
+// Sequence must strictly increase for one agent session; sequence semantics are
+// checked by the controller dispatcher added in a later stage.
+func SendHeartbeat(connection net.Conn, messageID, sequence uint64, timeout time.Duration) error {
+	heartbeat := protocol.HeartbeatPayload{Sequence: sequence}
+	if err := heartbeat.Validate(); err != nil {
+		return err
+	}
+	if timeout <= 0 {
+		timeout = defaultHandshakeTimeout
+	}
+	if err := connection.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
+		return fmt.Errorf("set heartbeat write deadline: %w", err)
+	}
+	defer connection.SetWriteDeadline(time.Time{})
+	if err := writePayloadFrame(connection, protocol.MessageHeartbeat, messageID, heartbeat); err != nil {
+		return fmt.Errorf("write heartbeat: %w", err)
+	}
+	return nil
+}
+
+// ReceiveHeartbeat reads and validates a single heartbeat frame. A controller
+// must use its receipt time, rather than an agent wall clock, for liveness.
+func ReceiveHeartbeat(connection net.Conn, timeout time.Duration) (protocol.HeartbeatPayload, error) {
+	if timeout <= 0 {
+		timeout = defaultHandshakeTimeout
+	}
+	if err := connection.SetReadDeadline(time.Now().Add(timeout)); err != nil {
+		return protocol.HeartbeatPayload{}, fmt.Errorf("set heartbeat read deadline: %w", err)
+	}
+	defer connection.SetReadDeadline(time.Time{})
+	heartbeat, err := readPayloadFrame[protocol.HeartbeatPayload](connection, protocol.MessageHeartbeat)
+	if err != nil {
+		return protocol.HeartbeatPayload{}, err
+	}
+	if err := heartbeat.Validate(); err != nil {
+		return protocol.HeartbeatPayload{}, fmt.Errorf("validate heartbeat: %w", err)
+	}
+	return heartbeat, nil
+}
+
 func (config ControllerConfig) withDefaults() ControllerConfig {
 	if len(config.SupportedVersions) == 0 {
 		config.SupportedVersions = []uint8{protocol.ProtocolVersion}
@@ -267,6 +308,8 @@ func readPayloadFrame[T any](connection net.Conn, expectedType protocol.MessageT
 			return payloadValue, ErrExpectedInventorySnapshot
 		case protocol.MessageStateSnapshot:
 			return payloadValue, ErrExpectedStateSnapshot
+		case protocol.MessageHeartbeat:
+			return payloadValue, fmt.Errorf("hlcp session: expected HEARTBEAT")
 		default:
 			return payloadValue, fmt.Errorf("hlcp session: expected message type %d", expectedType)
 		}

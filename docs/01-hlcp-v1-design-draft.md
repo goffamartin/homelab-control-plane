@@ -127,7 +127,7 @@ This produces **at-least-once delivery attempt with at-most-once execution withi
 
 ## 8. Heartbeat and failure detection
 
-The negotiated configuration includes heartbeat interval `H` and missed-heartbeat threshold `N`. The controller changes a node from `ONLINE` to `DEGRADED` after a configurable warning threshold and to `OFFLINE` after `N × H` without any valid inbound activity. Any valid message renews liveness, not only a heartbeat.
+The negotiated configuration includes heartbeat interval `H` and missed-heartbeat threshold `N`. The controller changes a node from `ONLINE` to `DEGRADED` after a configurable warning threshold `D` and to `OFFLINE` after `N × H` without any valid inbound activity, where `0 < D < N`. Any valid message renews liveness, not only a heartbeat. A valid heartbeat carries an increasing agent-local sequence number; controller receipt time, rather than the agent clock, determines liveness.
 
 Initial experiment levels: `H = 1 s, 5 s, 10 s`, with a fixed baseline `N` documented in the experiment plan. The controller records transition time, observed missed count, and reason. A disconnected node is not automatically restarted or remediated by v1.
 

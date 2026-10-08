@@ -144,3 +144,32 @@ func TestReceiveInitialSynchronizationRejectsUnexpectedOrder(t *testing.T) {
 		t.Fatalf("ReceiveInitialSynchronization() error = %v, want ErrExpectedInventorySnapshot", err)
 	}
 }
+
+func TestSendAndReceiveHeartbeat(t *testing.T) {
+	controllerConnection, agentConnection := net.Pipe()
+	defer controllerConnection.Close()
+	defer agentConnection.Close()
+
+	result := make(chan struct {
+		heartbeat protocol.HeartbeatPayload
+		err       error
+	}, 1)
+	go func() {
+		heartbeat, err := ReceiveHeartbeat(controllerConnection, time.Second)
+		result <- struct {
+			heartbeat protocol.HeartbeatPayload
+			err       error
+		}{heartbeat, err}
+	}()
+
+	if err := SendHeartbeat(agentConnection, 4, 1, time.Second); err != nil {
+		t.Fatalf("SendHeartbeat() error = %v", err)
+	}
+	received := <-result
+	if received.err != nil {
+		t.Fatalf("ReceiveHeartbeat() error = %v", received.err)
+	}
+	if received.heartbeat.Sequence != 1 {
+		t.Fatalf("heartbeat sequence = %d, want 1", received.heartbeat.Sequence)
+	}
+}

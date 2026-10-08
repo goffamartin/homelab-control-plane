@@ -60,3 +60,10 @@ func TestHelloPayloadRejectsMissingNodeID(t *testing.T) {
 		t.Fatalf("Validate() error = %v, want ErrInvalidNodeID", err)
 	}
 }
+
+func TestHeartbeatPayloadRejectsZeroSequence(t *testing.T) {
+	err := (HeartbeatPayload{}).Validate()
+	if !errors.Is(err, ErrInvalidHeartbeatSequence) {
+		t.Fatalf("Validate() error = %v, want ErrInvalidHeartbeatSequence", err)
+	}
+}
