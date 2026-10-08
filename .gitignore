@@ -1,0 +1,9 @@
+# Per-project toolchain and Go build/module caches.
+.tools/
+.cache/
+
+# Local deployment material; never commit private keys or environment config.
+*.key
+*.pem
+*.crt
+config.local.yaml
