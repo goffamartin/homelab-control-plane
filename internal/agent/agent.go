@@ -28,15 +28,22 @@ type ResourceConfig struct {
 func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 	dispatcher := command.NewDispatcher()
 	for _, resource := range config.Resources {
-		if resource.Adapter != "systemd" || resource.Target == "" {
-			return nil, fmt.Errorf("resource %q: unsupported adapter configuration", resource.ID)
+		if resource.Target == "" {
+			return nil, fmt.Errorf("resource %q: target is required", resource.ID)
 		}
 		resource := resource
 		dispatcher.Register(resource.ID, func(action string) protocol.CommandResultPayload {
 			if !contains(resource.Actions, action) {
 				return protocol.CommandResultPayload{Code: "ACTION_NOT_SUPPORTED", Message: "action is not enabled"}
 			}
-			return (adapter.Systemd{Unit: resource.Target}).Execute(context.Background(), action)
+			switch resource.Adapter {
+			case "systemd":
+				return (adapter.Systemd{Unit: resource.Target}).Execute(context.Background(), action)
+			case "docker", "podman":
+				return (adapter.Container{Runtime: resource.Adapter, Name: resource.Target}).Execute(context.Background(), action)
+			default:
+				return protocol.CommandResultPayload{Code: "INVALID_CONFIGURATION", Message: "unsupported adapter"}
+			}
 		})
 	}
 	return dispatcher, nil

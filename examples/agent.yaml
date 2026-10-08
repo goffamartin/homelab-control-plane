@@ -7,9 +7,9 @@ node_id: debian-01
 agent_version: 0.1.0
 capabilities: [resource.control, systemd]
 resources:
-  - id: minecraft
-    type: service
-    adapter: systemd
-    target: minecraft.service
+  - id: example-catalog
+    type: container
+    adapter: docker
+    target: example-catalog
     actions: [status, restart]
     state: unknown
