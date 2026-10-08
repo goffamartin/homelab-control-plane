@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// Writer serializes every agent-to-controller frame on one connection.
+// Writer serializes every outbound frame on one connection.
 type Writer struct {
 	connection net.Conn
 	mutex      sync.Mutex
