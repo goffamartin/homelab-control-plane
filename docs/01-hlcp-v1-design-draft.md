@@ -58,6 +58,8 @@ connection loss
 
 On every new session, the agent sends a full inventory and state snapshot. The controller treats earlier dynamic state as stale until that synchronization completes.
 
+The initial synchronization has strict order: `INVENTORY_SNAPSHOT` followed by `STATE_SNAPSHOT`. The controller validates both payloads and requires the state payload's `inventory_revision` to match the inventory just received. Only then can the controller mark the session ready for subsequent liveness and command processing.
+
 The controller selects the highest mutually supported protocol version, returns a cryptographically random session ID, and sets the heartbeat interval and missed-heartbeat threshold in `WELCOME`. Both directions apply a bounded handshake timeout; on any invalid frame or payload, the session is closed without becoming registered.
 
 ## 5. Framing
