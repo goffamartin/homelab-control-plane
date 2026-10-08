@@ -26,7 +26,7 @@ Implement inventory and state snapshots, regular heartbeat transmission, node st
 
 **Exit criterion:** controller reports online/degraded/offline transitions and replaces stale state after reconnect.
 
-**Current progress:** inventory/state synchronization, a deterministic liveness tracker, and a controller-side heartbeat loop are implemented and unit-tested. The loop emits state transitions and closes an offline or protocol-invalid session. The next slice is the controller process and its node registry.
+**Current progress:** inventory/state synchronization, liveness tracking, a controller heartbeat loop, TCP listener, and in-memory node registry are implemented. The listener requires mTLS and ignores stale-session state updates after reconnect. The next slice is the matching runnable agent process.
 
 ## Stage 4 — Controlled commands
 
