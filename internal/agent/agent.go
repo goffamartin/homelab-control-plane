@@ -129,6 +129,13 @@ func Run(ctx context.Context, config Config) error {
 	if err := session.SendInitialSynchronization(connection, sync, 10*time.Second); err != nil {
 		return err
 	}
+	dispatcher, err := config.NewDispatcher()
+	if err != nil {
+		return err
+	}
+	writer := session.NewWriter(connection, 4)
+	commandErrors := make(chan error, 1)
+	go func() { commandErrors <- session.RunAgentCommandLoop(connection, writer, dispatcher) }()
 	ticker := time.NewTicker(time.Duration(welcome.HeartbeatIntervalMillis) * time.Millisecond)
 	defer ticker.Stop()
 	var sequence uint64
@@ -136,9 +143,11 @@ func Run(ctx context.Context, config Config) error {
 		select {
 		case <-ctx.Done():
 			return nil
+		case err := <-commandErrors:
+			return fmt.Errorf("command loop: %w", err)
 		case <-ticker.C:
 			sequence++
-			if err := session.SendHeartbeat(connection, sequence+3, sequence, 10*time.Second); err != nil {
+			if err := writer.Send(protocol.MessageHeartbeat, protocol.HeartbeatPayload{Sequence: sequence}); err != nil {
 				return fmt.Errorf("send heartbeat: %w", err)
 			}
 		}
