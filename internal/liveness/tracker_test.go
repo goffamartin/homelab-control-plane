@@ -30,6 +30,21 @@ func TestPolicyRejectsAmbiguousThresholds(t *testing.T) {
 	}
 }
 
+func TestNextEvaluationAtFollowsCurrentState(t *testing.T) {
+	registeredAt := time.Date(2026, 10, 8, 12, 0, 0, 0, time.UTC)
+	tracker, err := NewTracker(Policy{HeartbeatInterval: time.Second, DegradedAfter: 2, OfflineAfter: 5}, registeredAt)
+	if err != nil {
+		t.Fatalf("NewTracker() error = %v", err)
+	}
+	if got, want := tracker.NextEvaluationAt(), registeredAt.Add(2*time.Second); !got.Equal(want) {
+		t.Fatalf("online next evaluation = %v, want %v", got, want)
+	}
+	tracker.Evaluate(registeredAt.Add(2 * time.Second))
+	if got, want := tracker.NextEvaluationAt(), registeredAt.Add(5*time.Second); !got.Equal(want) {
+		t.Fatalf("degraded next evaluation = %v, want %v", got, want)
+	}
+}
+
 func assertState(t *testing.T, snapshot Snapshot, want NodeState, changed bool) {
 	t.Helper()
 	if snapshot.State != want || snapshot.Changed != changed {
