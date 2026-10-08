@@ -1,0 +1,131 @@
+package protocol
+
+import (
+	"errors"
+	"fmt"
+)
+
+const (
+	maxResourcesPerNode   = 256
+	maxActionsPerResource = 32
+	maxResourceIDLength   = 128
+	maxResourceTypeLength = 128
+	maxActionLength       = 64
+	maxStateLength        = 64
+)
+
+var (
+	ErrTooManyResources     = errors.New("hlcp: too many resources")
+	ErrDuplicateResource    = errors.New("hlcp: duplicate resource ID")
+	ErrUnknownResource      = errors.New("hlcp: state references an unknown resource")
+	ErrInvalidResource      = errors.New("hlcp: invalid resource")
+	ErrInvalidResourceState = errors.New("hlcp: invalid resource state")
+)
+
+// ResourceDescriptor describes a controller-visible resource. Adapter and
+// implementation target stay agent-local and are deliberately absent.
+type ResourceDescriptor struct {
+	ID      string   `cbor:"id"`
+	Type    string   `cbor:"type"`
+	Actions []string `cbor:"actions"`
+}
+
+func (resource ResourceDescriptor) validate() error {
+	if !isIdentifier(resource.ID, maxResourceIDLength) || !isIdentifier(resource.Type, maxResourceTypeLength) {
+		return ErrInvalidResource
+	}
+	if len(resource.Actions) == 0 || len(resource.Actions) > maxActionsPerResource {
+		return ErrInvalidResource
+	}
+
+	actions := make(map[string]struct{}, len(resource.Actions))
+	for _, action := range resource.Actions {
+		if !isIdentifier(action, maxActionLength) {
+			return ErrInvalidResource
+		}
+		if _, exists := actions[action]; exists {
+			return fmt.Errorf("%w: duplicate action %q", ErrInvalidResource, action)
+		}
+		actions[action] = struct{}{}
+	}
+	return nil
+}
+
+// InventorySnapshot replaces the controller's resource inventory for one node.
+// Revision increases whenever the agent's resource configuration changes.
+type InventorySnapshot struct {
+	Revision  uint64               `cbor:"revision"`
+	Resources []ResourceDescriptor `cbor:"resources"`
+}
+
+func (snapshot InventorySnapshot) Validate() error {
+	if len(snapshot.Resources) > maxResourcesPerNode {
+		return ErrTooManyResources
+	}
+
+	resources := make(map[string]struct{}, len(snapshot.Resources))
+	for _, resource := range snapshot.Resources {
+		if err := resource.validate(); err != nil {
+			return err
+		}
+		if _, exists := resources[resource.ID]; exists {
+			return fmt.Errorf("%w: %s", ErrDuplicateResource, resource.ID)
+		}
+		resources[resource.ID] = struct{}{}
+	}
+	return nil
+}
+
+// ResourceState is a current agent observation, not a desired state. State is
+// intentionally extensible; examples include running, stopped, failed, and
+// unknown.
+type ResourceState struct {
+	ResourceID string `cbor:"resource_id"`
+	State      string `cbor:"state"`
+}
+
+func (state ResourceState) validate() error {
+	if !isIdentifier(state.ResourceID, maxResourceIDLength) || !isIdentifier(state.State, maxStateLength) {
+		return ErrInvalidResourceState
+	}
+	return nil
+}
+
+// StateSnapshot replaces dynamic resource state for the stated inventory
+// revision. A controller must not combine it with an unrelated inventory.
+type StateSnapshot struct {
+	InventoryRevision uint64          `cbor:"inventory_revision"`
+	Resources         []ResourceState `cbor:"resources"`
+}
+
+func (snapshot StateSnapshot) ValidateAgainst(inventory InventorySnapshot) error {
+	if err := inventory.Validate(); err != nil {
+		return err
+	}
+	if snapshot.InventoryRevision != inventory.Revision {
+		return fmt.Errorf("hlcp: state snapshot revision %d does not match inventory revision %d", snapshot.InventoryRevision, inventory.Revision)
+	}
+	if len(snapshot.Resources) > maxResourcesPerNode {
+		return ErrTooManyResources
+	}
+
+	knownResources := make(map[string]struct{}, len(inventory.Resources))
+	for _, resource := range inventory.Resources {
+		knownResources[resource.ID] = struct{}{}
+	}
+
+	states := make(map[string]struct{}, len(snapshot.Resources))
+	for _, state := range snapshot.Resources {
+		if err := state.validate(); err != nil {
+			return err
+		}
+		if _, exists := knownResources[state.ResourceID]; !exists {
+			return fmt.Errorf("%w: %s", ErrUnknownResource, state.ResourceID)
+		}
+		if _, exists := states[state.ResourceID]; exists {
+			return fmt.Errorf("%w: %s", ErrDuplicateResource, state.ResourceID)
+		}
+		states[state.ResourceID] = struct{}{}
+	}
+	return nil
+}
