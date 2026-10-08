@@ -1,0 +1,13 @@
+controller_address: controller.home.goffa.cz:9443
+server_name: controller.home.goffa.cz
+certificate_file: /etc/hlcp/agent.crt
+private_key_file: /etc/hlcp/agent.key
+ca_file: /etc/hlcp/ca.crt
+node_id: debian-01
+agent_version: 0.1.0
+capabilities: [resource.control, systemd]
+resources:
+  - id: minecraft
+    type: service
+    actions: [status, restart]
+    state: unknown
