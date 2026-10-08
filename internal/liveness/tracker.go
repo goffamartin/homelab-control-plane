@@ -89,3 +89,13 @@ func (tracker *Tracker) Evaluate(now time.Time) Snapshot {
 	tracker.state = nextState
 	return Snapshot{State: tracker.state, Changed: changed, LastActivity: tracker.lastActivity}
 }
+
+// NextEvaluationAt returns the next instant at which the current state could
+// change if no new valid activity arrives.
+func (tracker *Tracker) NextEvaluationAt() time.Time {
+	missedIntervals := tracker.policy.DegradedAfter
+	if tracker.state == NodeDegraded {
+		missedIntervals = tracker.policy.OfflineAfter
+	}
+	return tracker.lastActivity.Add(tracker.policy.HeartbeatInterval * time.Duration(missedIntervals))
+}

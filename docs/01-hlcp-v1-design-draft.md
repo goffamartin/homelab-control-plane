@@ -131,6 +131,8 @@ The negotiated configuration includes heartbeat interval `H` and missed-heartbea
 
 Initial experiment levels: `H = 1 s, 5 s, 10 s`, with a fixed baseline `N` documented in the experiment plan. The controller records transition time, observed missed count, and reason. A disconnected node is not automatically restarted or remediated by v1.
 
+The controller session loop uses its next liveness transition as the socket read deadline. A timeout therefore causes exactly one transition event (`ONLINE → DEGRADED` and later `DEGRADED → OFFLINE`) rather than continuous polling. A repeated or decreasing heartbeat sequence ends the session as a protocol error.
+
 ## 9. Reconnect and synchronization
 
 After a network failure, the agent reconnects using bounded exponential backoff with jitter. It performs a new `HELLO/WELCOME` exchange and sends full snapshots. Pending commands are reconciled by their `command_id`: the controller may resend unresolved commands; the agent returns the journal state or cached result. Old session IDs never authorize a new session.
