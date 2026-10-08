@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"go.yaml.in/yaml/v4"
+	"hlcp/internal/adapter"
+	"hlcp/internal/command"
 	"hlcp/internal/protocol"
 	"hlcp/internal/session"
 	"hlcp/internal/transport"
@@ -17,9 +19,37 @@ import (
 type ResourceConfig struct {
 	ID      string   `yaml:"id"`
 	Type    string   `yaml:"type"`
+	Adapter string   `yaml:"adapter"`
+	Target  string   `yaml:"target"`
 	Actions []string `yaml:"actions"`
 	State   string   `yaml:"state"`
 }
+
+func (config Config) NewDispatcher() (*command.Dispatcher, error) {
+	dispatcher := command.NewDispatcher()
+	for _, resource := range config.Resources {
+		if resource.Adapter != "systemd" || resource.Target == "" {
+			return nil, fmt.Errorf("resource %q: unsupported adapter configuration", resource.ID)
+		}
+		resource := resource
+		dispatcher.Register(resource.ID, func(action string) protocol.CommandResultPayload {
+			if !contains(resource.Actions, action) {
+				return protocol.CommandResultPayload{Code: "ACTION_NOT_SUPPORTED", Message: "action is not enabled"}
+			}
+			return (adapter.Systemd{Unit: resource.Target}).Execute(context.Background(), action)
+		})
+	}
+	return dispatcher, nil
+}
+func contains(values []string, wanted string) bool {
+	for _, value := range values {
+		if value == wanted {
+			return true
+		}
+	}
+	return false
+}
+
 type Config struct {
 	ControllerAddress string           `yaml:"controller_address"`
 	ServerName        string           `yaml:"server_name"`
