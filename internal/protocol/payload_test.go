@@ -67,3 +67,21 @@ func TestHeartbeatPayloadRejectsZeroSequence(t *testing.T) {
 		t.Fatalf("Validate() error = %v, want ErrInvalidHeartbeatSequence", err)
 	}
 }
+
+func TestCommandPayloadRoundTrip(t *testing.T) {
+	original := CommandPayload{CommandID: "cmd-001", ResourceID: "minecraft", Action: "restart"}
+	encoded, err := EncodePayload(original)
+	if err != nil {
+		t.Fatalf("EncodePayload() error = %v", err)
+	}
+	var decoded CommandPayload
+	if err := DecodePayload(encoded, &decoded); err != nil {
+		t.Fatalf("DecodePayload() error = %v", err)
+	}
+	if err := decoded.Validate(); err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+	if decoded != original {
+		t.Fatalf("decoded = %#v, want %#v", decoded, original)
+	}
+}

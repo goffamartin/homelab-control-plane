@@ -23,6 +23,7 @@ var (
 	ErrProtocolNotOffered       = errors.New("hlcp: selected protocol version was not offered")
 	ErrInvalidHeartbeat         = errors.New("hlcp: invalid heartbeat configuration")
 	ErrInvalidHeartbeatSequence = errors.New("hlcp: invalid heartbeat sequence")
+	ErrInvalidCommand           = errors.New("hlcp: invalid command")
 	ErrTooManyCapabilities      = errors.New("hlcp: too many capabilities")
 )
 
@@ -94,6 +95,35 @@ type WelcomePayload struct {
 // not use wall-clock time because controller and agent clocks need not agree.
 type HeartbeatPayload struct {
 	Sequence uint64 `cbor:"sequence"`
+}
+
+// CommandPayload names an allow-listed resource action. It deliberately has no
+// shell command or adapter target.
+type CommandPayload struct {
+	CommandID  string `cbor:"command_id"`
+	ResourceID string `cbor:"resource_id"`
+	Action     string `cbor:"action"`
+}
+
+func (payload CommandPayload) Validate() error {
+	if !isIdentifier(payload.CommandID, 128) || !isIdentifier(payload.ResourceID, maxResourceIDLength) || !isIdentifier(payload.Action, maxActionLength) {
+		return ErrInvalidCommand
+	}
+	return nil
+}
+
+// CommandACKPayload proves that the agent accepted this command for processing.
+type CommandACKPayload struct {
+	CommandID string `cbor:"command_id"`
+	Status    string `cbor:"status"`
+}
+
+// CommandResultPayload is the immutable terminal result cached for duplicate delivery.
+type CommandResultPayload struct {
+	CommandID string `cbor:"command_id"`
+	Success   bool   `cbor:"success"`
+	Code      string `cbor:"code"`
+	Message   string `cbor:"message"`
 }
 
 // Validate checks the minimal heartbeat contract for v1.

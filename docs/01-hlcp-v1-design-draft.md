@@ -123,6 +123,8 @@ The controller retries the same `command_id` after an acknowledgement timeout. T
 
 This produces **at-least-once delivery attempt with at-most-once execution within the retained journal window**. It does not claim global exactly-once behaviour: an unrecoverable agent crash between external side effect and durable journal update remains a fundamental ambiguity. V1 therefore limits actions to operationally idempotent resource lifecycle actions and documents the remaining risk.
 
+`COMMAND` carries only `command_id`, `resource_id`, and `action`. `COMMAND_ACK` confirms acceptance (`accepted` or `in_progress`); `COMMAND_RESULT` carries the terminal success flag, stable error code, and diagnostic message. Neither payload contains a shell command, adapter target, or implementation-specific service name.
+
 **Open:** select the journal persistence strategy for the MVP. Recommended: a small local durable store on the agent, with an explicit retention period; an in-memory journal is unsuitable for reboot/reconnect testing.
 
 ## 8. Heartbeat and failure detection
