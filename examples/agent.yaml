@@ -9,5 +9,7 @@ capabilities: [resource.control, systemd]
 resources:
   - id: minecraft
     type: service
+    adapter: systemd
+    target: minecraft.service
     actions: [status, restart]
     state: unknown
