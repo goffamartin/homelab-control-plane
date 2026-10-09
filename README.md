@@ -23,6 +23,7 @@ The v1 implementation currently includes:
 - inventory/state synchronization and heartbeat-based liveness;
 - allow-listed `systemd`, Docker, and Podman resource actions;
 - controller-side command correlation and agent-side command-result deduplication;
+- ACK-aware bounded controller retries (durable controller ledger is still planned);
 - a loopback-only HTTP API consumed by the `hlcp` CLI.
 
 The CLI navigates the discovered inventory progressively:
@@ -42,6 +43,12 @@ hlcp-controller -listen :9443 -api-listen 127.0.0.1:9444 -api-token-file /etc/hl
 ```
 
 `hlcp` targets that local address by default. Use `hlcp --help` for the explicit long-form selectors and `--api` override.
+
+Controller retry defaults are `--command-ack-timeout 5s`,
+`--command-result-timeout 30s` and `--command-max-attempts 6`. Acknowledged
+commands are not resent for execution; ACK/result timeout is an unresolved
+outcome, not proof of non-execution. Controller restart/reconnect reconciliation
+and retention of late results are the remaining F6 work.
 
 The controller and CLI read a shared local bearer token from `/etc/hlcp/api.token`
 by default. Override the file with `--api-token-file`. On Unix the token file must
