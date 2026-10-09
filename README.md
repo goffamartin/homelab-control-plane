@@ -11,6 +11,8 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Implementation and evaluation roadmap](docs/02-implementation-and-evaluation-roadmap.md)
 - [Debian agent deployment](docs/03-debian-agent-deployment.md)
 - [Review findings and phased v1 completion plan](docs/04-review-and-completion-plan.md)
+- [HLCP v1 acceptance contract](docs/05-v1-acceptance.md)
+- [Architecture decisions](docs/adr/README.md)
 
 ## Status
 

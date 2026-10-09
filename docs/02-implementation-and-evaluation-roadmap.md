@@ -6,6 +6,10 @@ Confirm the payload encoding, command-journal persistence, development certifica
 
 **Exit criterion:** a reviewed HLCP v1 document describes every MVP message and failure path.
 
+**Current progress:** completed by the accepted ADR set and the v1 acceptance
+matrix. The detailed implementation continues in phases F1–F11 of
+`04-review-and-completion-plan.md`.
+
 ## Stage 1 — Repository skeleton and protocol primitives
 
 Create the Go module and separate packages for framing, encoded message payloads, and protocol validation. Add unit tests for valid framing, malformed lengths, unsupported versions, and message round-trips.

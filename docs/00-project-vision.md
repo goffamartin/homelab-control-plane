@@ -41,4 +41,4 @@ HLCP provides general concepts: node, resource, action, state, capability, comma
 
 ## Success criteria
 
-The MVP is successful when a configured agent can establish a mutually authenticated session, declare a systemd-backed resource, maintain a heartbeat, accept a `restart` command, acknowledge it, return one terminal result, and recover its state after a transient connection loss. The experiment must then quantify the selected liveness and retry policies under emulated network impairment.
+The product MVP is successful when a configured agent can establish an identity-bound mutually authenticated session, observe a Docker or rootless Podman container, maintain liveness, acknowledge an allow-listed action before execution completes, return a durable terminal or explicit unknown result, and reconcile the same command ID after a transient connection loss. The systemd adapter is an optional deployment profile. The experiment must then quantify the selected liveness and retry policies under emulated network impairment.
