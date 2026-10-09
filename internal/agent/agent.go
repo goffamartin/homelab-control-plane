@@ -11,9 +11,16 @@ import (
 	"hlcp/internal/protocol"
 	"hlcp/internal/session"
 	"hlcp/internal/transport"
+	"log/slog"
+	"math/rand"
 	"net"
 	"os"
 	"time"
+)
+
+const (
+	initialReconnectDelay = time.Second
+	maximumReconnectDelay = 30 * time.Second
 )
 
 type ResourceConfig struct {
@@ -124,27 +131,44 @@ func Run(ctx context.Context, config Config) error {
 	if err != nil {
 		return err
 	}
+	dispatcher, err := config.NewDispatcher()
+	if err != nil {
+		return err
+	}
+	for attempt := 0; ; attempt++ {
+		established, err := runSession(ctx, config, tlsConfig, sync, dispatcher)
+		if ctx.Err() != nil {
+			return nil
+		}
+		if established {
+			attempt = 0
+		}
+		delay := reconnectDelay(attempt, rand.Float64())
+		slog.Warn("agent session ended; reconnecting", "error", err, "delay", delay)
+		if !waitForReconnect(ctx, delay) {
+			return nil
+		}
+	}
+}
+
+func runSession(ctx context.Context, config Config, tlsConfig *tls.Config, synchronization session.Synchronization, dispatcher *command.Dispatcher) (bool, error) {
 	dialer := net.Dialer{}
 	raw, err := dialer.DialContext(ctx, "tcp", config.ControllerAddress)
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer raw.Close()
 	connection := tls.Client(raw, tlsConfig)
 	if err := connection.HandshakeContext(ctx); err != nil {
-		return err
+		return false, err
 	}
 	defer connection.Close()
 	welcome, err := session.Start(connection, config.hello(), 10*time.Second)
 	if err != nil {
-		return err
+		return false, err
 	}
-	if err := session.SendInitialSynchronization(connection, sync, 10*time.Second); err != nil {
-		return err
-	}
-	dispatcher, err := config.NewDispatcher()
-	if err != nil {
-		return err
+	if err := session.SendInitialSynchronization(connection, synchronization, 10*time.Second); err != nil {
+		return false, err
 	}
 	writer := session.NewWriter(connection, 4)
 	commandErrors := make(chan error, 1)
@@ -155,14 +179,42 @@ func Run(ctx context.Context, config Config) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return nil
+			return true, nil
 		case err := <-commandErrors:
-			return fmt.Errorf("command loop: %w", err)
+			return true, fmt.Errorf("command loop: %w", err)
 		case <-ticker.C:
 			sequence++
 			if err := writer.Send(protocol.MessageHeartbeat, protocol.HeartbeatPayload{Sequence: sequence}); err != nil {
-				return fmt.Errorf("send heartbeat: %w", err)
+				return true, fmt.Errorf("send heartbeat: %w", err)
 			}
 		}
+	}
+}
+
+func reconnectDelay(attempt int, random float64) time.Duration {
+	delay := initialReconnectDelay
+	for index := 0; index < attempt && delay < maximumReconnectDelay; index++ {
+		delay *= 2
+		if delay > maximumReconnectDelay {
+			delay = maximumReconnectDelay
+		}
+	}
+	if random < 0 {
+		random = 0
+	}
+	if random > 1 {
+		random = 1
+	}
+	return time.Duration(float64(delay) * (0.8 + 0.4*random))
+}
+
+func waitForReconnect(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }
