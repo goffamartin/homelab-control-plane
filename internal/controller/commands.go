@@ -15,6 +15,7 @@ type CommandTracker struct {
 }
 
 type commandWaiter struct {
+	nodeID    string
 	result    chan protocol.CommandResultPayload
 	completed bool
 }
@@ -23,18 +24,33 @@ func NewCommandTracker() *CommandTracker {
 	return &CommandTracker{pending: make(map[string]*commandWaiter)}
 }
 func (tracker *CommandTracker) Track(commandID string) error {
+	return tracker.TrackNode("", commandID)
+}
+
+func (tracker *CommandTracker) TrackNode(nodeID, commandID string) error {
 	tracker.mutex.Lock()
 	defer tracker.mutex.Unlock()
 	if _, exists := tracker.pending[commandID]; exists {
 		return ErrCommandAlreadyTracked
 	}
-	tracker.pending[commandID] = &commandWaiter{result: make(chan protocol.CommandResultPayload, 1)}
+	tracker.pending[commandID] = &commandWaiter{nodeID: nodeID, result: make(chan protocol.CommandResultPayload, 1)}
 	return nil
 }
 func (tracker *CommandTracker) Complete(result protocol.CommandResultPayload) bool {
+	return tracker.CompleteNode("", result)
+}
+
+func (tracker *CommandTracker) PendingNode(nodeID, commandID string) bool {
+	tracker.mutex.Lock()
+	defer tracker.mutex.Unlock()
+	waiter, exists := tracker.pending[commandID]
+	return exists && waiter.nodeID == nodeID && !waiter.completed
+}
+
+func (tracker *CommandTracker) CompleteNode(nodeID string, result protocol.CommandResultPayload) bool {
 	tracker.mutex.Lock()
 	waiter, exists := tracker.pending[result.CommandID]
-	if !exists || waiter.completed {
+	if !exists || waiter.completed || waiter.nodeID != nodeID {
 		tracker.mutex.Unlock()
 		return false
 	}

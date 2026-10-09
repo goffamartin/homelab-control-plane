@@ -25,7 +25,9 @@ type StateChange struct {
 }
 
 // RunHeartbeatLoop receives heartbeats until the connection closes or the
-// node crosses the offline threshold. connection is expected to be the already
+// node crosses the offline threshold. This legacy heartbeat-only helper is
+// retained for transport tests; production uses StartInbound/RunInboundLoop.
+// connection is expected to be the already
 // authenticated and synchronized controller-side TLS connection.
 func RunHeartbeatLoop(connection net.Conn, tracker *liveness.Tracker, onStateChange func(StateChange)) error {
 	if tracker == nil {

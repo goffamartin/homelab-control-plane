@@ -11,14 +11,15 @@ import (
 )
 
 type NodeRecord struct {
-	NodeID       string                     `json:"node_id"`
-	AgentVersion string                     `json:"agent_version"`
-	Capabilities []string                   `json:"capabilities"`
-	SessionID    string                     `json:"session_id"`
-	State        liveness.NodeState         `json:"state"`
-	LastActivity time.Time                  `json:"last_activity"`
-	Inventory    protocol.InventorySnapshot `json:"inventory"`
-	Resources    protocol.StateSnapshot     `json:"resources"`
+	NodeID         string                     `json:"node_id"`
+	AgentVersion   string                     `json:"agent_version"`
+	Capabilities   []string                   `json:"capabilities"`
+	SessionID      string                     `json:"session_id"`
+	State          liveness.NodeState         `json:"state"`
+	LastActivity   time.Time                  `json:"last_activity"`
+	DisconnectedAt time.Time                  `json:"disconnected_at,omitempty"`
+	Inventory      protocol.InventorySnapshot `json:"inventory"`
+	Resources      protocol.StateSnapshot     `json:"resources"`
 }
 
 // Registry protects the latest session per node. Stale connections cannot
@@ -66,6 +67,19 @@ func (registry *Registry) List() []NodeRecord {
 	registry.mutex.RUnlock()
 	sort.Slice(records, func(left, right int) bool { return records[left].NodeID < records[right].NodeID })
 	return records
+}
+
+func (registry *Registry) Disconnect(nodeID, sessionID string, at time.Time) bool {
+	registry.mutex.Lock()
+	defer registry.mutex.Unlock()
+	record, exists := registry.nodes[nodeID]
+	if !exists || record.SessionID != sessionID {
+		return false
+	}
+	record.State = liveness.NodeOffline
+	record.DisconnectedAt = at
+	registry.nodes[nodeID] = record
+	return true
 }
 
 func cloneRecord(record NodeRecord) NodeRecord {
