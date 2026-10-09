@@ -31,7 +31,6 @@ type ResourceConfig struct {
 	Adapter string   `yaml:"adapter"`
 	Target  string   `yaml:"target"`
 	Actions []string `yaml:"actions"`
-	State   string   `yaml:"state"`
 }
 
 func (config Config) NewDispatcher() (*command.Dispatcher, error) {
@@ -51,14 +50,15 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 		}
 		resource := resource
 		dispatcher.Register(resource.ID, func(executionContext context.Context, action string) protocol.CommandResultPayload {
+			defer config.requestRefresh()
 			if !contains(resource.Actions, action) {
 				return protocol.CommandResultPayload{Code: "ACTION_NOT_SUPPORTED", Message: "action is not enabled"}
 			}
 			switch resource.Adapter {
 			case "systemd":
-				return (adapter.Systemd{Unit: resource.Target}).Execute(executionContext, action)
+				return (adapter.Systemd{Unit: resource.Target, Runner: config.runner}).Execute(executionContext, action)
 			case "docker", "podman":
-				return (adapter.Container{Runtime: resource.Adapter, Name: resource.Target}).Execute(executionContext, action)
+				return (adapter.Container{Runtime: resource.Adapter, Name: resource.Target, Runner: config.runner}).Execute(executionContext, action)
 			default:
 				return protocol.CommandResultPayload{Code: "INVALID_CONFIGURATION", Message: "unsupported adapter"}
 			}
@@ -76,17 +76,20 @@ func contains(values []string, wanted string) bool {
 }
 
 type Config struct {
-	ControllerAddress string           `yaml:"controller_address"`
-	ServerName        string           `yaml:"server_name"`
-	CertificateFile   string           `yaml:"certificate_file"`
-	PrivateKeyFile    string           `yaml:"private_key_file"`
-	CAFile            string           `yaml:"ca_file"`
-	JournalFile       string           `yaml:"journal_file"`
-	JournalRetention  int              `yaml:"journal_retention"`
-	NodeID            string           `yaml:"node_id"`
-	AgentVersion      string           `yaml:"agent_version"`
-	Capabilities      []string         `yaml:"capabilities"`
-	Resources         []ResourceConfig `yaml:"resources"`
+	ControllerAddress   string           `yaml:"controller_address"`
+	ServerName          string           `yaml:"server_name"`
+	CertificateFile     string           `yaml:"certificate_file"`
+	PrivateKeyFile      string           `yaml:"private_key_file"`
+	CAFile              string           `yaml:"ca_file"`
+	JournalFile         string           `yaml:"journal_file"`
+	JournalRetention    int              `yaml:"journal_retention"`
+	NodeID              string           `yaml:"node_id"`
+	AgentVersion        string           `yaml:"agent_version"`
+	Capabilities        []string         `yaml:"capabilities"`
+	Resources           []ResourceConfig `yaml:"resources"`
+	ObservationInterval time.Duration    `yaml:"observation_interval"`
+	runner              adapter.CommandRunner
+	refresh             chan struct{}
 }
 
 func Load(path string) (Config, error) {
@@ -119,6 +122,9 @@ func (config Config) Validate() error {
 	}
 	if config.JournalRetention < 0 || config.JournalRetention > 1_000_000 {
 		return errors.New("journal_retention must be between 0 and 1000000")
+	}
+	if config.ObservationInterval < 0 || config.ObservationInterval > 5*time.Minute || (config.ObservationInterval > 0 && config.ObservationInterval < time.Second) {
+		return errors.New("observation_interval must be 1s..5m (zero uses 10s)")
 	}
 	for _, resource := range config.Resources {
 		if err := resource.validate(); err != nil {
@@ -167,7 +173,7 @@ func (config Config) synchronization() (session.Synchronization, error) {
 	state := protocol.StateSnapshot{InventoryRevision: 1}
 	for _, r := range config.Resources {
 		inventory.Resources = append(inventory.Resources, protocol.ResourceDescriptor{ID: r.ID, Type: r.Type, Actions: r.Actions})
-		state.Resources = append(state.Resources, protocol.ResourceState{ResourceID: r.ID, State: r.State})
+		state.Resources = append(state.Resources, protocol.ResourceState{ResourceID: r.ID, State: "unknown", Code: "NOT_OBSERVED"})
 	}
 	if err := inventory.Validate(); err != nil {
 		return session.Synchronization{}, err
@@ -181,6 +187,7 @@ func Run(ctx context.Context, config Config) error {
 	if err := config.Validate(); err != nil {
 		return err
 	}
+	config.refresh = make(chan struct{}, 1)
 	tlsConfig, err := transport.ClientTLSConfig(transport.TLSFiles{CertificateFile: config.CertificateFile, PrivateKeyFile: config.PrivateKeyFile, CAFile: config.CAFile, ServerName: config.ServerName})
 	if err != nil {
 		return err
@@ -235,6 +242,14 @@ func runSession(ctx context.Context, config Config, tlsConfig *tls.Config, synch
 		return false, err
 	}
 	writer := session.NewWriter(connection, 4)
+	observationContext, cancelObservations := context.WithCancel(ctx)
+	observationErrors := make(chan error, 1)
+	observationDone := make(chan struct{})
+	go func() {
+		defer close(observationDone)
+		observationErrors <- config.runObservations(observationContext, writer, welcome.SessionID, synchronization.Inventory.Revision)
+	}()
+	defer func() { cancelObservations(); _ = raw.Close(); <-observationDone }()
 	readyAt := time.Now()
 	stable := func() bool { return time.Since(readyAt) >= time.Minute }
 	commandErrors := make(chan error, 1)
@@ -253,6 +268,8 @@ func runSession(ctx context.Context, config Config, tlsConfig *tls.Config, synch
 			return stable(), nil
 		case err := <-commandErrors:
 			return stable(), fmt.Errorf("command loop: %w", err)
+		case err := <-observationErrors:
+			return stable(), fmt.Errorf("observation loop: %w", err)
 		case <-ticker.C:
 			sequence++
 			if err := writer.SendContext(ctx, protocol.MessageHeartbeat, protocol.HeartbeatPayload{Sequence: sequence}); err != nil {

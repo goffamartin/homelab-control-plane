@@ -147,7 +147,7 @@ func TestInitialSynchronizationAfterRegistration(t *testing.T) {
 			{ID: "minecraft", Type: "service", Actions: []string{"status", "restart"}},
 		}},
 		State: protocol.StateSnapshot{InventoryRevision: 3, Resources: []protocol.ResourceState{
-			{ResourceID: "minecraft", State: "running"},
+			{ResourceID: "minecraft", State: "running", ObservedAt: time.Now().UTC()},
 		}},
 	}
 	if err := SendInitialSynchronization(agentConnection, synchronization, time.Second); err != nil {

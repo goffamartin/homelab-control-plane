@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 )
 
 func TestInventoryAndStateSnapshotValidate(t *testing.T) {
@@ -15,7 +16,7 @@ func TestInventoryAndStateSnapshotValidate(t *testing.T) {
 	}
 	state := StateSnapshot{
 		InventoryRevision: 7,
-		Resources:         []ResourceState{{ResourceID: "minecraft", State: "running"}},
+		Resources:         []ResourceState{{ResourceID: "minecraft", State: "running", ObservedAt: time.Now().UTC()}},
 	}
 
 	if err := inventory.Validate(); err != nil {
@@ -70,7 +71,7 @@ func TestStateRejectsUnknownResource(t *testing.T) {
 	inventory := InventorySnapshot{Revision: 1}
 	state := StateSnapshot{
 		InventoryRevision: 1,
-		Resources:         []ResourceState{{ResourceID: "not-configured", State: "running"}},
+		Resources:         []ResourceState{{ResourceID: "not-configured", State: "running", ObservedAt: time.Now().UTC()}},
 	}
 
 	err := state.ValidateAgainst(inventory)

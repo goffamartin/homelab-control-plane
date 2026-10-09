@@ -20,23 +20,41 @@ type NodeRecord struct {
 	DisconnectedAt time.Time                  `json:"disconnected_at,omitempty"`
 	Inventory      protocol.InventorySnapshot `json:"inventory"`
 	Resources      protocol.StateSnapshot     `json:"resources"`
+	StateRevision  uint64                     `json:"state_revision"`
+	receivedAt     map[string]time.Time
 }
 
 // Registry protects the latest session per node. Stale connections cannot
 // overwrite state established by a newer reconnect.
 type Registry struct {
-	mutex sync.RWMutex
-	nodes map[string]NodeRecord
+	mutex       sync.RWMutex
+	nodes       map[string]NodeRecord
+	stateMaxAge time.Duration
+	now         func() time.Time
 }
 
-func NewRegistry() *Registry { return &Registry{nodes: make(map[string]NodeRecord)} }
+func NewRegistry() *Registry {
+	return &Registry{nodes: make(map[string]NodeRecord), stateMaxAge: time.Minute, now: time.Now}
+}
+
+func receivedObservations(snapshot protocol.StateSnapshot, at time.Time) map[string]time.Time {
+	result := make(map[string]time.Time, len(snapshot.Resources))
+	for _, state := range snapshot.Resources {
+		if !state.ObservedAt.IsZero() {
+			result[state.ResourceID] = at
+		}
+	}
+	return result
+}
 
 func (registry *Registry) Register(registration session.Registration, synchronization session.Synchronization, registeredAt time.Time) NodeRecord {
 	record := NodeRecord{NodeID: registration.NodeID, AgentVersion: registration.AgentVersion, Capabilities: cloneStrings(registration.Capabilities), SessionID: registration.SessionID, State: liveness.NodeOnline, LastActivity: registeredAt, Inventory: cloneInventory(synchronization.Inventory), Resources: cloneState(synchronization.State)}
+	record.receivedAt = receivedObservations(record.Resources, registeredAt)
 	registry.mutex.Lock()
 	registry.nodes[record.NodeID] = record
+	copy := registry.cloneRecord(record)
 	registry.mutex.Unlock()
-	return cloneRecord(record)
+	return copy
 }
 
 func (registry *Registry) UpdateLiveness(nodeID, sessionID string, state liveness.NodeState, lastActivity time.Time) bool {
@@ -54,15 +72,16 @@ func (registry *Registry) UpdateLiveness(nodeID, sessionID string, state livenes
 func (registry *Registry) Get(nodeID string) (NodeRecord, bool) {
 	registry.mutex.RLock()
 	record, exists := registry.nodes[nodeID]
+	copy := registry.cloneRecord(record)
 	registry.mutex.RUnlock()
-	return cloneRecord(record), exists
+	return copy, exists
 }
 
 func (registry *Registry) List() []NodeRecord {
 	registry.mutex.RLock()
 	records := make([]NodeRecord, 0, len(registry.nodes))
 	for _, record := range registry.nodes {
-		records = append(records, cloneRecord(record))
+		records = append(records, registry.cloneRecord(record))
 	}
 	registry.mutex.RUnlock()
 	sort.Slice(records, func(left, right int) bool { return records[left].NodeID < records[right].NodeID })
@@ -82,10 +101,16 @@ func (registry *Registry) Disconnect(nodeID, sessionID string, at time.Time) boo
 	return true
 }
 
-func cloneRecord(record NodeRecord) NodeRecord {
+func (registry *Registry) cloneRecord(record NodeRecord) NodeRecord {
 	record.Capabilities = cloneStrings(record.Capabilities)
 	record.Inventory = cloneInventory(record.Inventory)
 	record.Resources = cloneState(record.Resources)
+	for index := range record.Resources.Resources {
+		state := &record.Resources.Resources[index]
+		received := record.receivedAt[state.ResourceID]
+		state.Stale = record.State != liveness.NodeOnline || state.ObservedAt.IsZero() || received.IsZero() || !registry.now().Before(received.Add(registry.stateMaxAge))
+	}
+	record.receivedAt = nil
 	return record
 }
 func cloneInventory(inventory protocol.InventorySnapshot) protocol.InventorySnapshot {

@@ -21,6 +21,7 @@ The v1 implementation currently includes:
 - TLS 1.3 mutual authentication between controller and agent;
 - bounded binary framing and canonical CBOR protocol payloads;
 - inventory/state synchronization and heartbeat-based liveness;
+- live typed resource observations with session-scoped updates and freshness;
 - allow-listed `systemd`, Docker, and Podman resource actions;
 - controller-side command correlation and agent-side command-result deduplication;
 - ACK-aware bounded retries, a durable controller ledger and read-only recovery;
@@ -54,6 +55,14 @@ and any late result through authenticated `GET /v1/nodes/{node}/commands/{id}`.
 The ledger is bounded to 1024 operations / 8 MiB; definitive results have at least
 24-hour retention, and unresolved unknown history is never automatically evicted.
 Upgrade controller and agents together for the pre-release query/state extension.
+
+Agent YAML no longer accepts resource `state`; remove it and optionally set
+`observation_interval: 10s` (default). Runtime queries refresh at connect, after
+actions and in periodic bounded rounds. Node detail/status exposes `observed_at`,
+diagnostics and `stale`; offline data is never presented as fresh. Controller
+`--resource-state-max-age` defaults to 1m. Upgrade both binaries together for the
+pre-release typed-state/STATE_UPDATE contract. Docker live lifecycle smoke is
+verified; live Podman validation is still required.
 
 The controller and CLI read a shared local bearer token from `/etc/hlcp/api.token`
 by default. Override the file with `--api-token-file`. On Unix the token file must

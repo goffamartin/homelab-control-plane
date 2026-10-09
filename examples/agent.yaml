@@ -7,11 +7,11 @@ journal_file: /var/lib/hlcp/command-journal.json
 journal_retention: 1024
 node_id: debian-01
 agent_version: 0.1.0
-capabilities: [resource.control, systemd]
+capabilities: [resource.control, docker]
+observation_interval: 10s
 resources:
   - id: example-catalog
     type: container
     adapter: docker
     target: example-catalog
     actions: [status, restart]
-    state: unknown

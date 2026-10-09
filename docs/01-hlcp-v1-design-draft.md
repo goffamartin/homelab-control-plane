@@ -99,8 +99,8 @@ Structured payloads use stable field names in v1. New optional fields may be add
 | Observation | `EVENT`, `METRIC` | Optional asynchronous observations. |
 
 The current prototype implements `HELLO`, `WELCOME`, `HEARTBEAT`,
-`INVENTORY_SNAPSHOT`, `STATE_SNAPSHOT`, `COMMAND`, `COMMAND_ACK` and
-`COMMAND_RESULT`, `COMMAND_QUERY` and `COMMAND_STATE`. `STATE_UPDATE` is required by completed v1. `GOODBYE`, `ERROR`,
+`INVENTORY_SNAPSHOT`, `STATE_SNAPSHOT`, `STATE_UPDATE`, `COMMAND`, `COMMAND_ACK`,
+`COMMAND_RESULT`, `COMMAND_QUERY` and `COMMAND_STATE`. `GOODBYE`, `ERROR`,
 `PING`, `PONG`, `EVENT` and `METRIC` are reserved by the v1 type registry but are
 not yet supported behaviours; receipt is rejected until their contracts exist.
 
@@ -111,6 +111,23 @@ Unknown optional message types may be ignored only when their flag explicitly pe
 `INVENTORY_SNAPSHOT` is a complete replacement of the resource inventory for the session's node. Every resource contains only its general `id`, `type`, and allowed `actions`; adapter names and local implementation targets are not sent. The snapshot has a monotonically increasing agent-owned `revision`.
 
 `STATE_SNAPSHOT` contains the matching `inventory_revision` and the agent's current observed state for its declared resources. The controller rejects a state snapshot whose revision does not match the latest validated inventory. This prevents state from one resource configuration being interpreted under another configuration.
+
+F7 observations are typed running/stopped/unknown/error with observed_at, code and
+a bounded diagnostic (4096 bytes). YAML state is no longer accepted. Initial
+synchronization sends unknown/NOT_OBSERVED with a zero timestamp; it is always
+stale, never a restored assertion about the runtime. Four bounded read-only
+workers observe after connection, after actions (one coalesced refresh slot) and
+periodically. The default observation_interval is 10s; slow full rounds may take
+longer, so configure freshness for resource count and query latency.
+
+Each STATE_UPDATE carries session_id, inventory_revision, an increasing update
+revision and one resource observation. Only the active authenticated session and
+known inventory accept it; repeated/older revisions are ignored. Controller
+resource-state-max-age defaults to 1m and uses receipt time, not the agent clock.
+Offline/degraded or expired observations are stale without erasing their last
+known state. Node detail/status exposes these observations. Both binaries require
+a coordinated pre-release upgrade. Docker live lifecycle and external-stop smoke
+passed; live Podman verification remains an F7 acceptance item.
 
 ## 7. Command lifecycle and reliability semantics
 
