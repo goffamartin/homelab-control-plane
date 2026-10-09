@@ -11,14 +11,14 @@ import (
 )
 
 type NodeRecord struct {
-	NodeID       string
-	AgentVersion string
-	Capabilities []string
-	SessionID    string
-	State        liveness.NodeState
-	LastActivity time.Time
-	Inventory    protocol.InventorySnapshot
-	Resources    protocol.StateSnapshot
+	NodeID       string                     `json:"node_id"`
+	AgentVersion string                     `json:"agent_version"`
+	Capabilities []string                   `json:"capabilities"`
+	SessionID    string                     `json:"session_id"`
+	State        liveness.NodeState         `json:"state"`
+	LastActivity time.Time                  `json:"last_activity"`
+	Inventory    protocol.InventorySnapshot `json:"inventory"`
+	Resources    protocol.StateSnapshot     `json:"resources"`
 }
 
 // Registry protects the latest session per node. Stale connections cannot

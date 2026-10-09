@@ -35,6 +35,10 @@ func main() {
 	switch cli.Intent(request) {
 	case "nodes":
 		get(api + "/v1/nodes")
+	case "node", "node-status":
+		get(api + "/v1/nodes/" + url.PathEscape(request.Node))
+	case "node-actions":
+		get(api + "/v1/nodes/" + url.PathEscape(request.Node) + "/actions")
 	case "resources":
 		get(api + "/v1/nodes/" + url.PathEscape(request.Node) + "/resources")
 	case "actions":
@@ -117,6 +121,8 @@ func printHelp() {
 
 Progressive navigation:
   hlcp -n
+  hlcp -n example-node -a
+  hlcp -n example-node -a status
   hlcp -n example-node -r
   hlcp -n example-node -r example-catalog -a
   hlcp -n example-node -r example-catalog -a restart

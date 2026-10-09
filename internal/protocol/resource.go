@@ -25,9 +25,9 @@ var (
 // ResourceDescriptor describes a controller-visible resource. Adapter and
 // implementation target stay agent-local and are deliberately absent.
 type ResourceDescriptor struct {
-	ID      string   `cbor:"id"`
-	Type    string   `cbor:"type"`
-	Actions []string `cbor:"actions"`
+	ID      string   `cbor:"id" json:"id"`
+	Type    string   `cbor:"type" json:"type"`
+	Actions []string `cbor:"actions" json:"actions"`
 }
 
 func (resource ResourceDescriptor) validate() error {
@@ -54,8 +54,8 @@ func (resource ResourceDescriptor) validate() error {
 // InventorySnapshot replaces the controller's resource inventory for one node.
 // Revision increases whenever the agent's resource configuration changes.
 type InventorySnapshot struct {
-	Revision  uint64               `cbor:"revision"`
-	Resources []ResourceDescriptor `cbor:"resources"`
+	Revision  uint64               `cbor:"revision" json:"revision"`
+	Resources []ResourceDescriptor `cbor:"resources" json:"resources"`
 }
 
 func (snapshot InventorySnapshot) Validate() error {
@@ -80,8 +80,8 @@ func (snapshot InventorySnapshot) Validate() error {
 // intentionally extensible; examples include running, stopped, failed, and
 // unknown.
 type ResourceState struct {
-	ResourceID string `cbor:"resource_id"`
-	State      string `cbor:"state"`
+	ResourceID string `cbor:"resource_id" json:"resource_id"`
+	State      string `cbor:"state" json:"state"`
 }
 
 func (state ResourceState) validate() error {
@@ -94,8 +94,8 @@ func (state ResourceState) validate() error {
 // StateSnapshot replaces dynamic resource state for the stated inventory
 // revision. A controller must not combine it with an unrelated inventory.
 type StateSnapshot struct {
-	InventoryRevision uint64          `cbor:"inventory_revision"`
-	Resources         []ResourceState `cbor:"resources"`
+	InventoryRevision uint64          `cbor:"inventory_revision" json:"inventory_revision"`
+	Resources         []ResourceState `cbor:"resources" json:"resources"`
 }
 
 func (snapshot StateSnapshot) ValidateAgainst(inventory InventorySnapshot) error {

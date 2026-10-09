@@ -6,7 +6,14 @@ func TestParseProgressiveSelectors(t *testing.T) {
 	cases := []struct {
 		args []string
 		want string
-	}{{[]string{"-n"}, "nodes"}, {[]string{"--node", "example-node", "-r"}, "resources"}, {[]string{"-n", "example-node", "-r", "catalog", "-a"}, "actions"}, {[]string{"-n", "example-node", "-r", "catalog", "-a", "restart"}, "command"}}
+	}{
+		{[]string{"-n"}, "nodes"},
+		{[]string{"--node", "example-node", "-a"}, "node-actions"},
+		{[]string{"--node", "example-node", "-a", "status"}, "node-status"},
+		{[]string{"--node", "example-node", "-r"}, "resources"},
+		{[]string{"-n", "example-node", "-r", "catalog", "-a"}, "actions"},
+		{[]string{"-n", "example-node", "-r", "catalog", "-a", "restart"}, "command"},
+	}
 	for _, test := range cases {
 		request, err := Parse(test.args)
 		if err != nil || Intent(request) != test.want {

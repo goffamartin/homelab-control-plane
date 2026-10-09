@@ -25,6 +25,7 @@ The CLI navigates the discovered inventory progressively:
 
 ```text
 hlcp -n
+hlcp -n example-node -a status
 hlcp -n example-node -r
 hlcp -n example-node -r example-catalog -a
 hlcp -n example-node -r example-catalog -a restart
