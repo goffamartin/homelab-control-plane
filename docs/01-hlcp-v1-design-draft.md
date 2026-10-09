@@ -123,7 +123,7 @@ The controller retries the same `command_id` after an acknowledgement timeout. T
 
 This produces **at-least-once delivery attempt with at-most-once execution within the retained journal window**. It does not claim global exactly-once behaviour: an unrecoverable agent crash between external side effect and durable journal update remains a fundamental ambiguity. V1 therefore limits actions to operationally idempotent resource lifecycle actions and documents the remaining risk.
 
-`COMMAND` carries only `command_id`, `resource_id`, and `action`. `COMMAND_ACK` confirms acceptance (`accepted` or `in_progress`); `COMMAND_RESULT` carries the terminal success flag, stable error code, and diagnostic message. Neither payload contains a shell command, adapter target, or implementation-specific service name.
+`COMMAND` carries only `command_id`, `resource_id`, and `action`. `COMMAND_ACK` confirms acceptance (`accepted` or `in_progress`); `COMMAND_RESULT` carries the terminal success flag, stable error code, and diagnostic message. The controller resends an unresolved command with the same `command_id` every five seconds until its caller deadline. Neither payload contains a shell command, adapter target, or implementation-specific service name.
 
 The MVP uses a small agent-local JSON journal, atomically replaced after each
 state transition. Its path and retention limit are explicit agent settings.
