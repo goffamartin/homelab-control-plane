@@ -15,11 +15,13 @@ const (
 )
 
 var (
-	ErrTooManyResources     = errors.New("hlcp: too many resources")
-	ErrDuplicateResource    = errors.New("hlcp: duplicate resource ID")
-	ErrUnknownResource      = errors.New("hlcp: state references an unknown resource")
-	ErrInvalidResource      = errors.New("hlcp: invalid resource")
-	ErrInvalidResourceState = errors.New("hlcp: invalid resource state")
+	ErrTooManyResources         = errors.New("hlcp: too many resources")
+	ErrDuplicateResource        = errors.New("hlcp: duplicate resource ID")
+	ErrUnknownResource          = errors.New("hlcp: state references an unknown resource")
+	ErrInvalidResource          = errors.New("hlcp: invalid resource")
+	ErrInvalidResourceState     = errors.New("hlcp: invalid resource state")
+	ErrInvalidInventoryRevision = errors.New("hlcp: invalid inventory revision")
+	ErrIncompleteStateSnapshot  = errors.New("hlcp: incomplete state snapshot")
 )
 
 // ResourceDescriptor describes a controller-visible resource. Adapter and
@@ -59,6 +61,9 @@ type InventorySnapshot struct {
 }
 
 func (snapshot InventorySnapshot) Validate() error {
+	if snapshot.Revision == 0 {
+		return ErrInvalidInventoryRevision
+	}
 	if len(snapshot.Resources) > maxResourcesPerNode {
 		return ErrTooManyResources
 	}
@@ -126,6 +131,9 @@ func (snapshot StateSnapshot) ValidateAgainst(inventory InventorySnapshot) error
 			return fmt.Errorf("%w: %s", ErrDuplicateResource, state.ResourceID)
 		}
 		states[state.ResourceID] = struct{}{}
+	}
+	if len(states) != len(knownResources) {
+		return ErrIncompleteStateSnapshot
 	}
 	return nil
 }

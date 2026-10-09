@@ -40,11 +40,17 @@ func StartInbound(connection net.Conn) *Inbound {
 				var value protocol.CommandACKPayload
 				err = protocol.DecodePayload(frame.Payload, &value)
 				if err == nil {
+					err = value.Validate()
+				}
+				if err == nil {
 					inbound.Acks <- value
 				}
 			case protocol.MessageCommandResult:
 				var value protocol.CommandResultPayload
 				err = protocol.DecodePayload(frame.Payload, &value)
+				if err == nil {
+					err = value.Validate()
+				}
 				if err == nil {
 					inbound.Results <- value
 				}

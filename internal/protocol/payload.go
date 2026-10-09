@@ -14,6 +14,7 @@ const (
 	maxSessionIDLength    = 128
 	maxCapabilities       = 64
 	maxCapabilityLength   = 128
+	maxDiagnosticLength   = 4096
 )
 
 var (
@@ -24,6 +25,8 @@ var (
 	ErrInvalidHeartbeat         = errors.New("hlcp: invalid heartbeat configuration")
 	ErrInvalidHeartbeatSequence = errors.New("hlcp: invalid heartbeat sequence")
 	ErrInvalidCommand           = errors.New("hlcp: invalid command")
+	ErrInvalidCommandACK        = errors.New("hlcp: invalid command acknowledgement")
+	ErrInvalidCommandResult     = errors.New("hlcp: invalid command result")
 	ErrTooManyCapabilities      = errors.New("hlcp: too many capabilities")
 )
 
@@ -43,7 +46,7 @@ func init() {
 		DupMapKey:        cbor.DupMapKeyEnforcedAPF,
 		IndefLength:      cbor.IndefLengthForbidden,
 		MaxNestedLevels:  16,
-		MaxArrayElements: maxCapabilities,
+		MaxArrayElements: maxResourcesPerNode,
 		MaxMapPairs:      32,
 	}).DecMode()
 	if err != nil {
@@ -118,12 +121,34 @@ type CommandACKPayload struct {
 	Status    string `cbor:"status" json:"status"`
 }
 
+func (payload CommandACKPayload) Validate() error {
+	if !isIdentifier(payload.CommandID, 128) {
+		return ErrInvalidCommandACK
+	}
+	switch payload.Status {
+	case "accepted", "in_progress", "completed", "rejected":
+		return nil
+	default:
+		return ErrInvalidCommandACK
+	}
+}
+
 // CommandResultPayload is the immutable terminal result cached for duplicate delivery.
 type CommandResultPayload struct {
 	CommandID string `cbor:"command_id" json:"command_id"`
 	Success   bool   `cbor:"success" json:"success"`
 	Code      string `cbor:"code" json:"code"`
 	Message   string `cbor:"message" json:"message"`
+}
+
+func (payload CommandResultPayload) Validate() error {
+	if !isIdentifier(payload.CommandID, 128) || !isIdentifier(payload.Code, maxActionLength) || len(payload.Message) > maxDiagnosticLength {
+		return ErrInvalidCommandResult
+	}
+	if payload.Success != (payload.Code == "OK") {
+		return ErrInvalidCommandResult
+	}
+	return nil
 }
 
 // Validate checks the minimal heartbeat contract for v1.
@@ -169,5 +194,19 @@ func DecodePayload(encoded []byte, target any) error {
 }
 
 func isIdentifier(value string, maxLength int) bool {
-	return len(value) > 0 && len(value) <= maxLength && value == strings.TrimSpace(value)
+	if len(value) == 0 || len(value) > maxLength || value != strings.TrimSpace(value) {
+		return false
+	}
+	for _, character := range value {
+		if (character >= 'a' && character <= 'z') || (character >= 'A' && character <= 'Z') || (character >= '0' && character <= '9') {
+			continue
+		}
+		switch character {
+		case '.', '_', '-', ':':
+			continue
+		default:
+			return false
+		}
+	}
+	return true
 }
