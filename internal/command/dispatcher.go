@@ -146,6 +146,33 @@ func (dispatcher *Dispatcher) Start(job *Job) {
 	job.startOnce.Do(func() { close(job.start) })
 }
 
+// Query reads only. In particular, it does not call BeginQueued, Start or an
+// executor, even when the resource was removed or the journal has no entry.
+func (dispatcher *Dispatcher) Query(command protocol.CommandPayload) protocol.CommandStatePayload {
+	state := protocol.CommandStatePayload{CommandID: command.CommandID, State: "unknown"}
+	if command.Validate() != nil {
+		return state
+	}
+	entry, exists, err := dispatcher.journal.Lookup(command)
+	if err != nil {
+		return state
+	}
+	if !exists {
+		state.State = "not_found"
+		return state
+	}
+	if entry.Result != nil {
+		state.State = "completed"
+		state.Result = entry.Result
+		return state
+	}
+	state.State = entry.Phase
+	if state.State == "" {
+		state.State = "unknown"
+	}
+	return state
+}
+
 // AbortBeforeACK leaves a definitive non-executed result if ACK delivery failed.
 func (dispatcher *Dispatcher) AbortBeforeACK(job *Job) {
 	job.startOnce.Do(func() { job.skip = true; close(job.start) })

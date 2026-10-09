@@ -31,7 +31,12 @@ func main() {
 	ackTimeout := flag.Duration("command-ack-timeout", retryDefaults.ACKTimeout, "maximum time for each command ACK attempt")
 	resultTimeout := flag.Duration("command-result-timeout", retryDefaults.ResultTimeout, "maximum command execution/result wait")
 	maxAttempts := flag.Int("command-max-attempts", retryDefaults.MaxAttempts, "maximum delivery attempts before ACK")
+	ledgerFile := flag.String("ledger-file", "/var/lib/hlcp/controller-operations.json", "durable controller operation ledger")
 	flag.Parse()
+	if *ledgerFile == "" {
+		fmt.Fprintln(os.Stderr, "ledger-file is required")
+		os.Exit(2)
+	}
 	commandRetry := controller.RetryPolicy{ACKTimeout: *ackTimeout, ResultTimeout: *resultTimeout, MaxAttempts: *maxAttempts}
 	if err := commandRetry.Validate(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -55,7 +60,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "invalid TLS configuration: %v\n", err)
 		os.Exit(2)
 	}
-	server, err := controller.Listen(*listen, controller.Config{TLSConfig: tlsConfig, LivenessPolicy: liveness.Policy{HeartbeatInterval: *interval, DegradedAfter: uint8(*degraded), OfflineAfter: uint8(*offline)}, CommandRetry: commandRetry})
+	server, err := controller.Listen(*listen, controller.Config{TLSConfig: tlsConfig, LivenessPolicy: liveness.Policy{HeartbeatInterval: *interval, DegradedAfter: uint8(*degraded), OfflineAfter: uint8(*offline)}, CommandRetry: commandRetry, LedgerFile: *ledgerFile})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cannot start controller: %v\n", err)
 		os.Exit(1)

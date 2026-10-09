@@ -23,7 +23,7 @@ The v1 implementation currently includes:
 - inventory/state synchronization and heartbeat-based liveness;
 - allow-listed `systemd`, Docker, and Podman resource actions;
 - controller-side command correlation and agent-side command-result deduplication;
-- ACK-aware bounded controller retries (durable controller ledger is still planned);
+- ACK-aware bounded retries, a durable controller ledger and read-only recovery;
 - a loopback-only HTTP API consumed by the `hlcp` CLI.
 
 The CLI navigates the discovered inventory progressively:
@@ -39,7 +39,7 @@ hlcp -n debian-01 -r example-catalog -a restart
 Start the controller API on its default local address (`127.0.0.1:9444`) with:
 
 ```text
-hlcp-controller -listen :9443 -api-listen 127.0.0.1:9444 -api-token-file /etc/hlcp/api.token -cert controller.pem -key controller-key.pem -ca ca.pem
+hlcp-controller -listen :9443 -api-listen 127.0.0.1:9444 -api-token-file /etc/hlcp/api.token -ledger-file /var/lib/hlcp/controller-operations.json -cert controller.pem -key controller-key.pem -ca ca.pem
 ```
 
 `hlcp` targets that local address by default. Use `hlcp --help` for the explicit long-form selectors and `--api` override.
@@ -47,8 +47,13 @@ hlcp-controller -listen :9443 -api-listen 127.0.0.1:9444 -api-token-file /etc/hl
 Controller retry defaults are `--command-ack-timeout 5s`,
 `--command-result-timeout 30s` and `--command-max-attempts 6`. Acknowledged
 commands are not resent for execution; ACK/result timeout is an unresolved
-outcome, not proof of non-execution. Controller restart/reconnect reconciliation
-and retention of late results are the remaining F6 work.
+outcome, not proof of non-execution. `--ledger-file` is required and defaults to
+`/var/lib/hlcp/controller-operations.json`. A restart reconciles existing IDs using
+read-only journal queries, never automatic re-execution. Retrieve the operation
+and any late result through authenticated `GET /v1/nodes/{node}/commands/{id}`.
+The ledger is bounded to 1024 operations / 8 MiB; definitive results have at least
+24-hour retention, and unresolved unknown history is never automatically evicted.
+Upgrade controller and agents together for the pre-release query/state extension.
 
 The controller and CLI read a shared local bearer token from `/etc/hlcp/api.token`
 by default. Override the file with `--api-token-file`. On Unix the token file must

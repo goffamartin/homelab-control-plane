@@ -53,20 +53,6 @@ func (sessions *ActiveSessions) Remove(nodeID string, writer *session.Writer) {
 	}
 }
 
-func (sessions *ActiveSessions) Send(nodeID string, command protocol.CommandPayload) error {
-	if err := command.Validate(); err != nil {
-		return err
-	}
-	if err := sessions.tracker.TrackNode(nodeID, command.CommandID); err != nil {
-		return err
-	}
-	if err := sessions.send(context.Background(), nodeID, command); err != nil {
-		sessions.tracker.CancelNode(nodeID, command.CommandID)
-		return err
-	}
-	return nil
-}
-
 func (sessions *ActiveSessions) send(ctx context.Context, nodeID string, command protocol.CommandPayload) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -101,7 +87,7 @@ func (sessions *ActiveSessions) HandleResult(nodeID string, writer *session.Writ
 	return sessions.tracker.CompleteNode(nodeID, result)
 }
 
-func (sessions *ActiveSessions) Execute(ctx context.Context, nodeID string, command protocol.CommandPayload) (protocol.CommandResultPayload, error) {
+func (sessions *ActiveSessions) Execute(ctx context.Context, nodeID string, command protocol.CommandPayload) (result protocol.CommandResultPayload, returnedErr error) {
 	if err := ctx.Err(); err != nil {
 		return protocol.CommandResultPayload{}, err
 	}
@@ -111,10 +97,32 @@ func (sessions *ActiveSessions) Execute(ctx context.Context, nodeID string, comm
 	operationContext, stop := context.WithTimeout(ctx, sessions.policy.ResultTimeout)
 	defer stop()
 	deadline, _ := operationContext.Deadline()
-	if err := sessions.tracker.TrackCommand(nodeID, command, deadline); err != nil {
+	fresh, err := sessions.tracker.Admit(nodeID, command, deadline)
+	if err != nil {
 		return protocol.CommandResultPayload{}, err
 	}
-	defer sessions.tracker.CancelNode(nodeID, command.CommandID)
+	if !fresh {
+		return sessions.tracker.WaitNode(operationContext, nodeID, command.CommandID)
+	}
+	defer func() {
+		if returnedErr != nil {
+			if progress, exists := sessions.tracker.Progress(nodeID, command.CommandID); exists && progress.Attempts == 0 && progress.Result == nil {
+				if sessions.tracker.CompleteNode(nodeID, protocol.CommandResultPayload{CommandID: command.CommandID, Code: "EXECUTION_NOT_STARTED", Message: "operation ended before any delivery attempt"}) {
+					return
+				}
+			}
+			reason := "RESULT_TIMEOUT"
+			if errors.Is(returnedErr, ErrACKTimeout) {
+				reason = "ACK_TIMEOUT"
+			}
+			if errors.Is(returnedErr, context.Canceled) {
+				reason = "CANCELED"
+			}
+			if err := sessions.tracker.FinishWait(nodeID, command.CommandID, reason); err != nil {
+				returnedErr = err
+			}
+		}
+	}()
 	for {
 		if err := ctx.Err(); err != nil {
 			return protocol.CommandResultPayload{}, err
@@ -122,7 +130,6 @@ func (sessions *ActiveSessions) Execute(ctx context.Context, nodeID string, comm
 		progress, _ := sessions.tracker.Progress(nodeID, command.CommandID)
 		if progress.AckStatus != "" {
 			// Once acknowledged, never resend execution just to obtain a result.
-			// Read-only reconnect reconciliation is the next F6 ledger slice.
 			result, err := sessions.tracker.WaitNode(operationContext, nodeID, command.CommandID)
 			if err == nil {
 				return result, nil
@@ -136,7 +143,17 @@ func (sessions *ActiveSessions) Execute(ctx context.Context, nodeID string, comm
 			return protocol.CommandResultPayload{}, ErrACKTimeout
 		}
 		attemptContext, cancel := context.WithTimeout(operationContext, sessions.policy.ACKTimeout)
-		sessions.tracker.AttemptNode(nodeID, command.CommandID)
+		if err := sessions.tracker.AttemptNode(nodeID, command.CommandID); err != nil {
+			cancel()
+			if errors.Is(err, errCommandStateChanged) {
+				result, waitErr := sessions.tracker.WaitNode(operationContext, nodeID, command.CommandID)
+				if errors.Is(waitErr, context.DeadlineExceeded) && ctx.Err() == nil {
+					waitErr = ErrResultTimeout
+				}
+				return result, waitErr
+			}
+			return protocol.CommandResultPayload{}, err
+		}
 		_ = sessions.send(attemptContext, nodeID, command)
 		result, err := sessions.tracker.WaitNode(attemptContext, nodeID, command.CommandID)
 		cancel()

@@ -15,6 +15,18 @@ import (
 // HTTPHandler is intended only for the controller's local loopback API.
 func (server *Server) HTTPHandler(token string) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /v1/nodes/{node}/commands/{command}", func(writer http.ResponseWriter, request *http.Request) {
+		operation, exists, err := server.sessions.tracker.Operation(request.PathValue("node"), request.PathValue("command"))
+		if err != nil {
+			localapi.Error(writer, http.StatusServiceUnavailable, "LEDGER_FAILURE", err.Error())
+			return
+		}
+		if !exists {
+			localapi.Error(writer, http.StatusNotFound, "COMMAND_NOT_FOUND", "command not found")
+			return
+		}
+		writeJSON(writer, operation)
+	})
 	mux.HandleFunc("GET /v1/nodes", func(writer http.ResponseWriter, request *http.Request) { writeJSON(writer, server.registry.List()) })
 	mux.HandleFunc("GET /v1/nodes/{node}", func(writer http.ResponseWriter, request *http.Request) {
 		record, ok := server.registry.Get(request.PathValue("node"))
@@ -75,7 +87,20 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 			localapi.Error(writer, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 			return
 		}
-		if status, message := server.validateResourceCommand(request.PathValue("node"), command); status != 0 {
+		known := false
+		if server.sessions != nil {
+			operation, exists, err := server.sessions.tracker.Operation(request.PathValue("node"), command.CommandID)
+			if err != nil {
+				localapi.Error(writer, http.StatusServiceUnavailable, "LEDGER_FAILURE", err.Error())
+				return
+			}
+			known = exists
+			if exists && operation.Command != command {
+				localapi.Error(writer, http.StatusConflict, "COMMAND_CONFLICT", ErrCommandConflict.Error())
+				return
+			}
+		}
+		if status, message := server.validateResourceCommand(request.PathValue("node"), command); !known && status != 0 {
 			code := "RESOURCE_NOT_FOUND"
 			if message == "node not found" {
 				code = "NODE_NOT_FOUND"
@@ -100,6 +125,10 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 				status = http.StatusGatewayTimeout
 			case errors.Is(err, ErrCommandAlreadyTracked):
 				status = http.StatusConflict
+			case errors.Is(err, ErrCommandConflict):
+				status = http.StatusConflict
+			case errors.Is(err, ErrLedgerFailure), errors.Is(err, ErrLedgerFull):
+				status = http.StatusServiceUnavailable
 			case errors.Is(err, ErrCommandCapacity):
 				status = http.StatusTooManyRequests
 			case errors.Is(err, context.Canceled):
@@ -120,6 +149,15 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 			}
 			if errors.Is(err, ErrCommandCapacity) {
 				code = "COMMAND_CAPACITY"
+			}
+			if errors.Is(err, ErrCommandConflict) {
+				code = "COMMAND_CONFLICT"
+			}
+			if errors.Is(err, ErrLedgerFull) {
+				code = "LEDGER_FULL"
+			}
+			if errors.Is(err, ErrLedgerFailure) {
+				code = "LEDGER_FAILURE"
 			}
 			if status == 499 {
 				code = "CANCELED"

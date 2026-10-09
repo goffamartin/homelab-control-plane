@@ -22,6 +22,7 @@ type Config struct {
 	Logger           *slog.Logger
 	MaxConnections   int
 	CommandRetry     RetryPolicy
+	LedgerFile       string
 }
 type Server struct {
 	listener        net.Listener
@@ -64,6 +65,13 @@ func Listen(address string, config Config) (*Server, error) {
 		return nil, fmt.Errorf("listen on %s: %w", address, err)
 	}
 	tracker := NewCommandTracker()
+	if config.LedgerFile != "" {
+		tracker, err = OpenCommandTracker(config.LedgerFile)
+		if err != nil {
+			listener.Close()
+			return nil, err
+		}
+	}
 	sessions := NewActiveSessions(tracker)
 	sessions.policy = config.CommandRetry
 	return &Server{listener: listener, config: config, registry: sessions.registry, sessions: sessions, connections: make(map[net.Conn]struct{})}, nil
@@ -80,8 +88,12 @@ func (server *Server) Close() error {
 	}
 	server.connectionMutex.Unlock()
 	server.workers.Wait()
+	ledgerErr := server.sessions.tracker.Close()
 	if errors.Is(err, net.ErrClosed) {
-		return nil
+		return ledgerErr
+	}
+	if err == nil {
+		return ledgerErr
 	}
 	return err
 }
@@ -157,6 +169,9 @@ func (server *Server) handleConnection(parent context.Context, raw net.Conn) {
 	writer := session.NewWriter(connection, 4)
 	server.sessions.Publish(registration, synchronization, registeredAt, writer, cancel)
 	defer server.sessions.Remove(registration.NodeID, writer)
+	reconcileDone := make(chan struct{})
+	go func() { defer close(reconcileDone); server.sessions.Reconcile(ctx, registration.NodeID, writer) }()
+	defer func() { cancel(); <-reconcileDone }()
 	inbound := session.StartInbound(ctx, connection)
 	defer func() { cancel(); _ = raw.Close(); <-inbound.Done }()
 	server.config.Logger.Info("agent registered", "node", registration.NodeID, "session", registration.SessionID)
@@ -166,6 +181,8 @@ func (server *Server) handleConnection(parent context.Context, raw net.Conn) {
 		return server.sessions.HandleAck(registration.NodeID, writer, ack)
 	}, func(result protocol.CommandResultPayload) bool {
 		return server.sessions.HandleResult(registration.NodeID, writer, result)
+	}, func(state protocol.CommandStatePayload) bool {
+		return server.sessions.HandleCommandState(registration.NodeID, writer, state)
 	})
 	server.config.Logger.Info("agent session ended", "node", registration.NodeID, "session", registration.SessionID, "error", err)
 }

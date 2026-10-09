@@ -95,12 +95,12 @@ Structured payloads use stable field names in v1. New optional fields may be add
 | Session | `HELLO`, `WELCOME`, `GOODBYE`, `ERROR` | Version negotiation, identity, and session closure. |
 | Liveness | `HEARTBEAT`, `PING`, `PONG` | Liveness and clock/diagnostic probes. |
 | Synchronization | `INVENTORY_SNAPSHOT`, `STATE_SNAPSHOT`, `STATE_UPDATE` | Resource discovery and current state. |
-| Command | `COMMAND`, `COMMAND_ACK`, `COMMAND_RESULT` | Request, acceptance, and terminal result. |
+| Command | `COMMAND`, `COMMAND_ACK`, `COMMAND_RESULT`, `COMMAND_QUERY`, `COMMAND_STATE` | Admission/execution and read-only recovery. |
 | Observation | `EVENT`, `METRIC` | Optional asynchronous observations. |
 
 The current prototype implements `HELLO`, `WELCOME`, `HEARTBEAT`,
 `INVENTORY_SNAPSHOT`, `STATE_SNAPSHOT`, `COMMAND`, `COMMAND_ACK` and
-`COMMAND_RESULT`. `STATE_UPDATE` is required by completed v1. `GOODBYE`, `ERROR`,
+`COMMAND_RESULT`, `COMMAND_QUERY` and `COMMAND_STATE`. `STATE_UPDATE` is required by completed v1. `GOODBYE`, `ERROR`,
 `PING`, `PONG`, `EVENT` and `METRIC` are reserved by the v1 type registry but are
 not yet supported behaviours; receipt is rejected until their contracts exist.
 
@@ -138,9 +138,10 @@ reports `accepted`, `in_progress`, `completed` (cached) or `rejected`;
 diagnostic message. Neither payload contains a shell command, adapter target,
 or implementation-specific service name.
 
-The first F6 slice records command progress in memory, keyed by node and command
-ID: immutable payload, admission/deadline timestamps, ACK status and attempt
-count. It bounds active commands to 128. Default policy is a five-second ACK
+F6 durably records command progress, keyed by node and command ID: immutable
+payload, admission/deadline timestamps, ACK status, attempt count and terminal
+result. Admission and each attempt are persisted before sending; ACK/result
+updates are persisted before publishing them. It bounds active commands to 128. Default policy is a five-second ACK
 window including sending, at most six attempts and a 30-second overall result
 deadline. All delivery attempts (including disconnected/failed sends) consume
 the budget. Only a missing ACK permits retransmission of the same command ID;
@@ -151,15 +152,43 @@ Controller flags `--command-ack-timeout`, `--command-result-timeout` and
 `--command-max-attempts` configure the policy. Limits are 1 minute, 24 hours and
 100 attempts respectively; ACK timeout must not exceed the result deadline.
 Caller cancellation/deadline also bounds sending. HTTP reports `ACK_TIMEOUT` or
-`RESULT_TIMEOUT` (504), temporary already-tracked conflicts (409) and active
+`RESULT_TIMEOUT` (504), different-payload conflicts (409) and active
 capacity exhaustion (429). Timeout does not prove the action was not executed.
 
-This first slice is not yet a durable operation service: it removes tracking at
-the end of the caller wait, rejects concurrent same-ID submissions and does not
-query the journal on reconnect. Late results after client timeout are not yet
-retained. The remaining F6 ledger/reconciliation slice must fix these limitations
-before command lifecycle acceptance is complete; no automatic execution retry
-after an acknowledged reconnect is used as a substitute for a read-only query.
+The version-1 controller JSON ledger has a process lock and an 8 MiB byte limit,
+with at most 1024 retained operations. Definitive results are protected for at least
+24 hours from completion; unresolved operations and EXECUTION_UNKNOWN results
+are never automatically evicted. Safe expired history is reclaimed on new
+admission. Capacity exhaustion returns LEDGER_FULL (503); storage failure is
+fail-closed with LEDGER_FAILURE (503). The command-line controller requires
+--ledger-file (default /var/lib/hlcp/controller-operations.json); pathless trackers
+exist only for embedded test fixtures.
+
+HTTP same-ID/same-payload admission is idempotent; concurrent callers share the
+same result, and completed results remain available even if inventory was removed.
+A different payload is COMMAND_CONFLICT (409). Canceling the initial caller stops
+further delivery attempts and preserves the operation. An attempted delivery is
+uncertain until a durable result is known; zero attempted deliveries can produce
+EXECUTION_NOT_STARTED. Client timeout never deletes the record, and a late result
+is retained. Authenticated GET /v1/nodes/{node}/commands/{id} returns progress,
+the fixed deadline, ACK/attempt metadata and any terminal result without sending.
+
+After restart, unresolved records become unknown (expired if their deadline
+elapsed), and **only read-only reconciliation** is allowed. Reconnect also polls
+acknowledged/unresolved IDs through COMMAND_QUERY carrying the same fingerprint.
+The agent's COMMAND_STATE response is not_found, queued, running, unknown or
+completed with the cached result. Query never admits a missing command, starts a
+queued job or grants execution permission. Missing/unknown history does not cause
+replay; a fresh operator action needs a fresh ID. A late definitive result can
+resolve the same expired operation. One query loop per authenticated session
+sends at most 128 queries per round at the ACK timeout (minimum one second), and
+joins at session shutdown. Uncertain entries may fill capacity; do not delete
+journals or restore stale backups to work around replay protection.
+
+These query/state types extend pre-release draft v1. Upgrade agent and controller
+together; older binaries do not implement these message types. Linux is the
+reference power-loss durability platform for both stores; Windows supports
+locking and development validation.
 
 The MVP uses a node-bound version-3 agent-local JSON journal protected by an
 exclusive process lock. On Linux, persistence syncs the temporary file and the
@@ -224,8 +253,8 @@ actions currently have a 20-second local limit; subprocess pipe cleanup is bound
 by a further one second. On session shutdown the agent closes the socket and joins
 its command reader, allowing an admitted action to finish its bounded execution.
 Timeout of a Docker/Podman CLI does not prove the daemon did not perform the action;
-F5 preserves this uncertainty as `EXECUTION_UNKNOWN`; controller-side durable
-tracking and reconciliation remain the next F6 stage.
+F5 preserves this uncertainty as `EXECUTION_UNKNOWN`; F6 retains it durably and
+reconciles existing command IDs without authorizing a second execution.
 
 ## 10. Security model
 
