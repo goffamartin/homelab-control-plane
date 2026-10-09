@@ -36,7 +36,12 @@ type ResourceConfig struct {
 }
 
 func (config Config) NewDispatcher() (*command.Dispatcher, error) {
-	journal, err := command.OpenFileJournal(config.JournalFile, config.JournalRetention)
+	for _, resource := range config.Resources {
+		if err := resource.validate(); err != nil {
+			return nil, err
+		}
+	}
+	journal, err := command.OpenNodeJournal(config.JournalFile, config.JournalRetention, config.NodeID)
 	if err != nil {
 		return nil, err
 	}
@@ -191,6 +196,7 @@ func Run(ctx context.Context, config Config) error {
 	if err != nil {
 		return err
 	}
+	defer dispatcher.Close()
 	for attempt := 0; ; attempt++ {
 		stable, err := runSession(ctx, config, tlsConfig, sync, dispatcher)
 		if ctx.Err() != nil {

@@ -21,6 +21,8 @@ func NewDispatcher(journal Journal) *Dispatcher {
 	return &Dispatcher{executors: make(map[string]Executor), journal: journal}
 }
 
+func (dispatcher *Dispatcher) Close() error { return dispatcher.journal.Close() }
+
 // Register exposes exactly one configured resource. Callers cannot pass an
 // arbitrary implementation target through HLCP.
 func (dispatcher *Dispatcher) Register(resourceID string, executor Executor) {
@@ -41,6 +43,9 @@ func (dispatcher *Dispatcher) Execute(command protocol.CommandPayload) (protocol
 	if err != nil {
 		if errors.Is(err, ErrDuplicateConflict) {
 			return reject(command, "DUPLICATE_CONFLICT", err.Error())
+		}
+		if errors.Is(err, ErrJournalFull) {
+			return reject(command, "JOURNAL_FULL", err.Error())
 		}
 		return reject(command, "JOURNAL_FAILURE", err.Error())
 	}

@@ -35,5 +35,6 @@ func newTestDispatcher(t *testing.T) *Dispatcher {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { journal.Close() })
 	return NewDispatcher(journal)
 }

@@ -20,10 +20,14 @@ func TestFileJournalSurvivesRestart(t *testing.T) {
 	if err := journal.Complete(protocol.CommandResultPayload{CommandID: "cmd-1", Success: true, Code: "OK"}); err != nil {
 		t.Fatal(err)
 	}
+	if err := journal.Close(); err != nil {
+		t.Fatal(err)
+	}
 	restarted, err := OpenFileJournal(path, 16)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { restarted.Close() })
 	entry, fresh, err := restarted.Begin(command)
 	if err != nil || fresh || entry.Result == nil || !entry.Result.Success {
 		t.Fatalf("entry=%#v fresh=%v err=%v", entry, fresh, err)
@@ -40,10 +44,14 @@ func TestFileJournalDoesNotRepeatIncompleteCommandAfterRestart(t *testing.T) {
 	if _, fresh, err := journal.Begin(command); err != nil || !fresh {
 		t.Fatalf("begin fresh=%v err=%v", fresh, err)
 	}
+	if err := journal.Close(); err != nil {
+		t.Fatal(err)
+	}
 	restarted, err := OpenFileJournal(path, 16)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { restarted.Close() })
 	entry, fresh, err := restarted.Begin(command)
 	if err != nil || fresh || entry.Result == nil || entry.Result.Code != "EXECUTION_UNKNOWN" {
 		t.Fatalf("entry=%#v fresh=%v err=%v", entry, fresh, err)
