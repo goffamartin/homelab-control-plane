@@ -102,3 +102,24 @@ sudo systemctl daemon-reload
 
 Do not delete `/var/lib/hlcp/command-journal.json` during an incident unless
 you explicitly accept losing the command deduplication history.
+
+## Journal recovery and capacity
+
+The journal uses a persistent `.lock` file with an OS lock; do not unlink it while
+an agent is running. Closing or crashing the process releases the OS lock. Only
+one process can use the same journal at a time.
+
+An upgrade from the original journal format creates `command-journal.json.v1.bak`
+before writing the new node-bound version. Keep that backup for upgrade diagnosis.
+If migration fails and the backup already exists, stop the agent and inspect both
+files before deciding how to recover; the agent never overwrites the backup.
+The old binary does not understand version 2, so a binary rollback requires a
+compatible journal reader. Restoring the old backup blindly can forget actions
+performed after migration and is not a safe recovery procedure.
+
+`JOURNAL_FULL` means that capacity contains records still protected by the
+24-hour replay window or unresolved outcomes. Completed expired records are
+removed on later admission. Increase `journal_retention` within the byte limit
+or wait for completed entries to age out. Unknown results require an explicit
+operator reconciliation; they are not silently discarded. A storage error blocks
+further actions until the storage problem is resolved and the journal is reopened.

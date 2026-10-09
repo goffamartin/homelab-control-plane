@@ -133,8 +133,25 @@ This produces **at-least-once delivery attempt with at-most-once execution withi
 
 `COMMAND` carries only `command_id`, `resource_id`, and `action`. `COMMAND_ACK` confirms acceptance (`accepted` or `in_progress`); `COMMAND_RESULT` carries the terminal success flag, stable error code, and diagnostic message. The controller resends an unresolved command with the same `command_id` every five seconds until its caller deadline. Neither payload contains a shell command, adapter target, or implementation-specific service name.
 
-The MVP uses a small agent-local JSON journal, atomically replaced after each
-state transition. Its path and retention limit are explicit agent settings.
+The MVP uses a node-bound version-2 agent-local JSON journal protected by an
+exclusive process lock. On Linux, persistence syncs the temporary file and the
+directory after replacement. Newly created parent directories are synced too.
+Windows provides locking and development-test support; Linux is the reference
+platform for crash durability.
+
+The default journal capacity is 1024 entries and its byte limit is 8 MiB. Terminal
+results are protected for at least 24 hours from completion, regardless of command
+volume. Pending and unresolved unknown results are never automatically removed.
+When protected entries fill capacity, new admission fails with `JOURNAL_FULL`.
+Expired terminal entries may be purged on subsequent admission. A clock rollback
+keeps records protected longer. The configured count cannot be reduced below the
+retained entry count during startup.
+
+Missing journal files are initialized; existing empty, corrupt, unsupported or
+node-mismatched files are rejected. Legacy journals are migrated only after
+creating an exclusive `.v1.bak` backup and are protected from migration time.
+After any storage failure, the running journal rejects new mutations until
+recovery; a restart never silently erases history.
 When the agent finds a record that was persisted as running after a restart,
 it converts it to a terminal `EXECUTION_UNKNOWN` result rather than replaying
 the potentially non-idempotent external side effect.

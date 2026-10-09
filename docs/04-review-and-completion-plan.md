@@ -536,8 +536,9 @@ Stav realizace:
 | F1 | Dokončeno | Sjednocené wire limity, sémantická validace payloadů, striktní YAML a `--check-config` |
 | F2 | Dokončeno | Certifikátová URI SAN identita, povinné ALPN, negativní TLS testy; autorizované loopback API, omezený JSON a CLI token/redirect test |
 | F3 | Dokončeno | Atomická session/inventory, bounded I/O a spojení, ordered inbound/liveness, korelace node výsledků, řízený shutdown; regresní testy a Linux `go test -race` |
-| F4–F11 | Plánováno | Kritéria jednotlivých fází výše |
+| F4 | Dokončeno | Verzovaný node-bound journal, OS zámek, durable Linux replace, migrace se zálohou, 24h replay ochrana a limity; fault injection, dva procesy, abrupt exit a Linux race testy |
+| F5–F11 | Plánováno | Kritéria jednotlivých fází výše |
 
-Nejbližší implementační krok je F4; další rozšiřování feature setu počká
+Nejbližší implementační krok je F5; další rozšiřování feature setu počká
 na opravu základních vlastností. Není důvod přepisovat celý projekt: framing,
 základní TLS setup, datové modely a adapter boundary lze zachovat a postupně zpevnit.
