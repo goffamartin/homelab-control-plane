@@ -145,11 +145,31 @@ The negotiated configuration includes heartbeat interval `H` and missed-heartbea
 
 Initial experiment levels: `H = 1 s, 5 s, 10 s`, with a fixed baseline `N` documented in the experiment plan. The controller records transition time, observed missed count, and reason. A disconnected node is not automatically restarted or remediated by v1.
 
-The controller session loop uses its next liveness transition as the socket read deadline. A timeout therefore causes exactly one transition event (`ONLINE → DEGRADED` and later `DEGRADED → OFFLINE`) rather than continuous polling. A repeated or decreasing heartbeat sequence ends the session as a protocol error.
+The production session loop evaluates the next liveness transition with a timer
+and preserves message order through one bounded inbound queue. Any valid heartbeat
+or correlated command ACK/result updates last activity. A repeated or decreasing
+heartbeat sequence ends the session as a protocol error. The default warning
+threshold is two missed intervals and the offline threshold is three; transitions
+and timestamps are published independently.
+
+Replacing a node session atomically publishes its inventory and writer and closes
+the previous owner. Disconnect time does not overwrite the last observed activity.
+Writes have a five-second maximum including queue wait, with at most 16 admitted
+writers. A failed partial write closes the stream. The controller admits at most
+128 simultaneous connections by default, including handshakes.
 
 ## 9. Reconnect and synchronization
 
 After a network failure, the agent reconnects using bounded exponential backoff with jitter. It performs a new `HELLO/WELCOME` exchange and sends full snapshots. Pending commands are reconciled by their `command_id`: the controller may resend unresolved commands; the agent returns the journal state or cached result. Old session IDs never authorize a new session.
+
+Reconnect delay starts near one second and is capped at 30 seconds including
+jitter. The delay resets only after at least one minute of synchronized session
+operation. TCP connect and TLS handshake each have a ten-second limit. Runtime
+actions currently have a 20-second local limit; subprocess pipe cleanup is bounded
+by a further one second. On session shutdown the agent closes the socket and joins
+its command reader, allowing an admitted action to finish its bounded execution.
+Timeout of a Docker/Podman CLI does not prove the daemon did not perform the action;
+the explicit command uncertainty semantics are completed in F5/F6.
 
 ## 10. Security model
 

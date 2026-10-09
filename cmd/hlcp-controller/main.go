@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"hlcp/internal/controller"
@@ -24,7 +25,7 @@ func main() {
 	privateKey := flag.String("key", "", "controller private key PEM")
 	ca := flag.String("ca", "", "trusted agent CA bundle PEM")
 	interval := flag.Duration("heartbeat-interval", 5*time.Second, "agent heartbeat interval")
-	degraded := flag.Uint("degraded-after", 1, "missed intervals before degraded")
+	degraded := flag.Uint("degraded-after", 2, "missed intervals before degraded")
 	offline := flag.Uint("offline-after", 3, "missed intervals before offline")
 	flag.Parse()
 	if err := localapi.ValidateAddress(*apiListen); err != nil {
@@ -51,7 +52,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer server.Close()
-	context, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	apiListener, err := net.Listen("tcp", *apiListen)
 	if err != nil {
@@ -60,17 +61,46 @@ func main() {
 	}
 	defer apiListener.Close()
 	api := &http.Server{Addr: *apiListen, Handler: server.HTTPHandler(apiToken), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 35 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192}
-	go func() { <-context.Done(); _ = api.Shutdown(context) }()
-	go func() {
-		if err := api.Serve(apiListener); err != nil && err != http.ErrServerClosed {
-			fmt.Fprintf(os.Stderr, "controller API failed: %v\n", err)
-			stop()
-		}
-	}()
 	fmt.Printf("HLCP controller listening on %s (%s)\n", server.Address(), transport.ALPN)
 	fmt.Printf("HLCP local API listening on %s\n", *apiListen)
-	if err := server.Serve(context); err != nil {
+	if err := serveProcesses(ctx, server, api, apiListener); err != nil {
 		fmt.Fprintf(os.Stderr, "controller failed: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func serveProcesses(parent context.Context, server *controller.Server, api *http.Server, listener net.Listener) error {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
+	done := make(chan error, 2)
+	go func() { done <- server.Serve(ctx) }()
+	go func() { done <- api.Serve(listener) }()
+	var failure error
+	completed := 0
+	select {
+	case <-parent.Done():
+	case err := <-done:
+		completed++
+		if parent.Err() == nil {
+			failure = err
+			if failure == nil || errors.Is(failure, http.ErrServerClosed) {
+				failure = errors.New("controller service stopped unexpectedly")
+			}
+		}
+	}
+	cancel()
+	_ = server.Close()
+	shutdownContext, stop := context.WithTimeout(context.Background(), 5*time.Second)
+	defer stop()
+	if err := api.Shutdown(shutdownContext); err != nil {
+		_ = api.Close()
+		if failure == nil {
+			failure = err
+		}
+	}
+	for completed < 2 {
+		<-done
+		completed++
+	}
+	return failure
 }
