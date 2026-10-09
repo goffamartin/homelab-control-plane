@@ -12,6 +12,30 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 
 ## Status
 
-The design is intentionally in **draft**. Open decisions are collected in the protocol design so that they are settled before implementation hardens them into an accidental contract.
+The v1 implementation currently includes:
 
-The implementation uses Go. The first source slice establishes the versioned, bounded wire frame independently of payload encoding; CBOR remains an explicit design decision before structured messages are added.
+- TLS 1.3 mutual authentication between controller and agent;
+- bounded binary framing and canonical CBOR protocol payloads;
+- inventory/state synchronization and heartbeat-based liveness;
+- allow-listed `systemd`, Docker, and Podman resource actions;
+- controller-side command correlation and agent-side command-result deduplication;
+- a loopback-only HTTP API consumed by the `hlcp` CLI.
+
+The CLI navigates the discovered inventory progressively:
+
+```text
+hlcp -n
+hlcp -n debian-01 -r
+hlcp -n debian-01 -r example-catalog -a
+hlcp -n debian-01 -r example-catalog -a restart
+```
+
+Start the controller API on its default local address (`127.0.0.1:9444`) with:
+
+```text
+hlcp-controller -listen :9443 -api-listen 127.0.0.1:9444 -cert controller.pem -key controller-key.pem -ca ca.pem
+```
+
+`hlcp` targets that local address by default. Use `hlcp --help` for the explicit long-form selectors and `--api` override.
+
+The design document remains the source of truth for unfinished production hardening and evaluation scenarios.
