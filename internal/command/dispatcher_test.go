@@ -1,13 +1,14 @@
 package command
 
 import (
+	"context"
 	"hlcp/internal/protocol"
 	"testing"
 )
 
 func TestDispatcherCachesDuplicateCommand(t *testing.T) {
 	dispatcher, calls := newTestDispatcher(t), 0
-	dispatcher.Register("minecraft", func(action string) protocol.CommandResultPayload {
+	dispatcher.Register("minecraft", func(_ context.Context, action string) protocol.CommandResultPayload {
 		calls++
 		return protocol.CommandResultPayload{Success: action == "restart", Code: "OK"}
 	})
@@ -35,6 +36,7 @@ func newTestDispatcher(t *testing.T) *Dispatcher {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { journal.Close() })
-	return NewDispatcher(journal)
+	dispatcher := NewDispatcher(journal)
+	t.Cleanup(func() { dispatcher.Close() })
+	return dispatcher
 }
