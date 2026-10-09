@@ -11,10 +11,12 @@ import (
 	"hlcp/internal/protocol"
 	"hlcp/internal/session"
 	"hlcp/internal/transport"
+	"io"
 	"log/slog"
 	"math/rand"
 	"net"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -88,7 +90,16 @@ func Load(path string) (Config, error) {
 		return Config{}, err
 	}
 	var config Config
-	if err := yaml.Unmarshal(data, &config); err != nil {
+	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
+	decoder.KnownFields(true)
+	if err := decoder.Decode(&config); err != nil {
+		return Config{}, err
+	}
+	var trailing any
+	if err := decoder.Decode(&trailing); !errors.Is(err, io.EOF) {
+		if err == nil {
+			return Config{}, errors.New("agent configuration must contain exactly one YAML document")
+		}
 		return Config{}, err
 	}
 	return config, config.Validate()
@@ -101,8 +112,47 @@ func (config Config) Validate() error {
 	if err := hello.Validate(); err != nil {
 		return err
 	}
+	if config.JournalRetention < 0 || config.JournalRetention > 1_000_000 {
+		return errors.New("journal_retention must be between 0 and 1000000")
+	}
+	for _, resource := range config.Resources {
+		if err := resource.validate(); err != nil {
+			return err
+		}
+	}
 	_, err := config.synchronization()
 	return err
+}
+
+func (resource ResourceConfig) validate() error {
+	if resource.Target == "" || resource.Target != strings.TrimSpace(resource.Target) || strings.HasPrefix(resource.Target, "-") {
+		return fmt.Errorf("resource %q: target is invalid", resource.ID)
+	}
+	for _, character := range resource.Target {
+		if character < 0x21 || character > 0x7e {
+			return fmt.Errorf("resource %q: target contains unsupported characters", resource.ID)
+		}
+	}
+	switch resource.Adapter {
+	case "docker", "podman":
+		if resource.Type != "container" {
+			return fmt.Errorf("resource %q: %s adapter requires type container", resource.ID, resource.Adapter)
+		}
+	case "systemd":
+		if resource.Type != "service" {
+			return fmt.Errorf("resource %q: systemd adapter requires type service", resource.ID)
+		}
+	default:
+		return fmt.Errorf("resource %q: unsupported adapter %q", resource.ID, resource.Adapter)
+	}
+	for _, action := range resource.Actions {
+		switch action {
+		case "status", "start", "stop", "restart":
+		default:
+			return fmt.Errorf("resource %q: unsupported action %q", resource.ID, action)
+		}
+	}
+	return nil
 }
 func (config Config) hello() protocol.HelloPayload {
 	return protocol.HelloPayload{ProtocolVersions: []uint8{protocol.ProtocolVersion}, NodeID: config.NodeID, AgentVersion: config.AgentVersion, Capabilities: config.Capabilities}
