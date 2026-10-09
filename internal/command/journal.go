@@ -16,7 +16,7 @@ import (
 
 const (
 	defaultJournalLimit = 1024
-	journalVersion      = 2
+	journalVersion      = 3
 	defaultJournalBytes = 8 << 20
 	defaultReplayWindow = 24 * time.Hour
 )
@@ -29,11 +29,15 @@ var (
 
 type Journal interface {
 	Begin(protocol.CommandPayload) (Entry, bool, error)
+	BeginQueued(protocol.CommandPayload) (Entry, bool, error)
+	Lookup(protocol.CommandPayload) (Entry, bool, error)
+	MarkRunning(string) error
 	Complete(protocol.CommandResultPayload) error
 	Close() error
 }
 
 type Entry struct {
+	Phase       string                         `json:"phase,omitempty"`
 	Command     protocol.CommandPayload        `json:"command"`
 	Result      *protocol.CommandResultPayload `json:"result,omitempty"`
 	AdmittedAt  time.Time                      `json:"admitted_at"`
@@ -126,7 +130,8 @@ func OpenNodeJournal(path string, limit int, nodeID string) (_ *FileJournal, ret
 		return nil, errors.New("command journal must contain exactly one document")
 	}
 	legacy := document.Version == 0
-	if !legacy && document.Version != journalVersion {
+	previous := document.Version == 2
+	if !legacy && !previous && document.Version != journalVersion {
 		return nil, errors.New("unsupported command journal version")
 	}
 	if !legacy && document.NodeID != nodeID {
@@ -136,8 +141,11 @@ func OpenNodeJournal(path string, limit int, nodeID string) (_ *FileJournal, ret
 		return nil, errors.New("invalid journal entries or capacity smaller than retained history")
 	}
 	now := journal.now().UTC()
-	changed := legacy
+	changed := legacy || previous
 	for _, entry := range document.Entries {
+		if entry.Phase != "" && entry.Phase != "queued" && entry.Phase != "running" {
+			return nil, errors.New("invalid journal execution phase")
+		}
 		if err := entry.Command.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid journal command: %w", err)
 		}
@@ -162,7 +170,11 @@ func OpenNodeJournal(path string, limit int, nodeID string) (_ *FileJournal, ret
 			return nil, errors.New("invalid command journal timestamps")
 		}
 		if entry.Result == nil {
-			result := protocol.CommandResultPayload{CommandID: id, Code: "EXECUTION_UNKNOWN", Message: "agent restarted before the command result was recorded"}
+			code, message := "EXECUTION_UNKNOWN", "agent restarted before the command result was recorded"
+			if entry.Phase == "queued" {
+				code, message = "EXECUTION_NOT_STARTED", "agent restarted before execution started"
+			}
+			result := protocol.CommandResultPayload{CommandID: id, Code: code, Message: message}
 			entry.Result = &result
 			entry.CompletedAt = now
 			if now.Before(entry.AdmittedAt) {
@@ -175,6 +187,11 @@ func OpenNodeJournal(path string, limit int, nodeID string) (_ *FileJournal, ret
 	}
 	if legacy {
 		if err := backupLegacy(absolute+".v1.bak", data); err != nil {
+			return nil, err
+		}
+	}
+	if previous {
+		if err := backupLegacy(absolute+".v2.bak", data); err != nil {
 			return nil, err
 		}
 	}
@@ -230,6 +247,46 @@ func (journal *FileJournal) availableLocked() error {
 }
 
 func (journal *FileJournal) Begin(command protocol.CommandPayload) (Entry, bool, error) {
+	return journal.begin(command, "running")
+}
+
+func (journal *FileJournal) BeginQueued(command protocol.CommandPayload) (Entry, bool, error) {
+	return journal.begin(command, "queued")
+}
+
+func (journal *FileJournal) Lookup(command protocol.CommandPayload) (Entry, bool, error) {
+	journal.mutex.Lock()
+	defer journal.mutex.Unlock()
+	if err := journal.availableLocked(); err != nil {
+		return Entry{}, false, err
+	}
+	entry, exists := journal.entries[command.CommandID]
+	if exists && (entry.Command.ResourceID != command.ResourceID || entry.Command.Action != command.Action) {
+		return Entry{}, false, ErrDuplicateConflict
+	}
+	return cloneEntry(entry), exists, nil
+}
+
+func (journal *FileJournal) MarkRunning(commandID string) error {
+	journal.mutex.Lock()
+	defer journal.mutex.Unlock()
+	if err := journal.availableLocked(); err != nil {
+		return err
+	}
+	entry, exists := journal.entries[commandID]
+	if !exists || entry.Result != nil || entry.Phase != "queued" {
+		return errors.New("command is not queued")
+	}
+	entry.Phase = "running"
+	journal.entries[commandID] = entry
+	if err := journal.persistLocked(); err != nil {
+		journal.failed = err
+		return err
+	}
+	return nil
+}
+
+func (journal *FileJournal) begin(command protocol.CommandPayload, phase string) (Entry, bool, error) {
 	journal.mutex.Lock()
 	defer journal.mutex.Unlock()
 	if err := journal.availableLocked(); err != nil {
@@ -253,7 +310,7 @@ func (journal *FileJournal) Begin(command protocol.CommandPayload) (Entry, bool,
 		journal.entries, journal.order = previousEntries, previousOrder
 		return Entry{}, false, ErrJournalFull
 	}
-	entry := Entry{Command: command, AdmittedAt: journal.now().UTC()}
+	entry := Entry{Command: command, Phase: phase, AdmittedAt: journal.now().UTC()}
 	journal.entries[command.CommandID] = entry
 	journal.order = append(journal.order, command.CommandID)
 	if err := journal.persistLocked(); err != nil {

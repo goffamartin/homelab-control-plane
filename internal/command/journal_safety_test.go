@@ -1,6 +1,7 @@
 package command
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -80,14 +81,15 @@ func TestJournalReleasesLockAfterAbruptProcessExit(t *testing.T) {
 func TestDispatcherStopsExecutionsAfterJournalFailure(t *testing.T) {
 	journal := openTestJournal(t, filepath.Join(t.TempDir(), "journal.json"), 16)
 	dispatcher := NewDispatcher(journal)
+	t.Cleanup(func() { dispatcher.Close() })
 	calls := 0
-	dispatcher.Register("catalog", func(string) protocol.CommandResultPayload {
+	dispatcher.Register("catalog", func(context.Context, string) protocol.CommandResultPayload {
 		calls++
 		journal.fault = func(string) error { return errors.New("disk failure") }
 		return protocol.CommandResultPayload{Success: true, Code: "OK"}
 	})
 	_, result := dispatcher.Execute(payload("c"))
-	if result.Code != "JOURNAL_FAILURE" {
+	if result.Code != "EXECUTION_UNKNOWN" {
 		t.Fatalf("result=%+v", result)
 	}
 	journal.fault = nil
@@ -137,7 +139,7 @@ func TestLegacyMigrationPreservesBackupAndProtectsEntries(t *testing.T) {
 	}
 	data, _ := os.ReadFile(path)
 	var document journalDocument
-	if err := json.Unmarshal(data, &document); err != nil || document.Version != 2 || document.NodeID != "debian-01" {
+	if err := json.Unmarshal(data, &document); err != nil || document.Version != journalVersion || document.NodeID != "debian-01" {
 		t.Fatalf("migration: %+v %v", document, err)
 	}
 }

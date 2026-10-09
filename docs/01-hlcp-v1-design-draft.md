@@ -124,8 +124,9 @@ Controller                         Agent
 
 The controller retries the same `command_id` after an acknowledgement timeout. The agent retains a bounded command journal keyed by `command_id`:
 
-- a new command is recorded before execution;
-- a duplicate while running receives `COMMAND_ACK` with `in_progress`;
+- a new command is durably recorded as queued, ACK is written, then one worker
+  durably records running before invoking the adapter;
+- a duplicate while queued/running receives only `COMMAND_ACK` with `in_progress`;
 - a duplicate after completion receives the cached terminal result;
 - a command outside the registered resource/action allow-list is rejected without execution.
 
@@ -133,11 +134,21 @@ This produces **at-least-once delivery attempt with at-most-once execution withi
 
 `COMMAND` carries only `command_id`, `resource_id`, and `action`. `COMMAND_ACK` confirms acceptance (`accepted` or `in_progress`); `COMMAND_RESULT` carries the terminal success flag, stable error code, and diagnostic message. The controller resends an unresolved command with the same `command_id` every five seconds until its caller deadline. Neither payload contains a shell command, adapter target, or implementation-specific service name.
 
-The MVP uses a node-bound version-2 agent-local JSON journal protected by an
+The MVP uses a node-bound version-3 agent-local JSON journal protected by an
 exclusive process lock. On Linux, persistence syncs the temporary file and the
 directory after replacement. Newly created parent directories are synced too.
 Windows provides locking and development-test support; Linux is the reference
 platform for crash durability.
+
+F5 migrates version-2 journals with a `.v2.bak` snapshot; legacy migration keeps
+its `.v1.bak`. Do not downgrade against a version-3 journal or restore an old
+backup after executing commands: that would lose replay protection. Older pending
+entries without an execution phase recover as unknown. New queued entries recover
+as `EXECUTION_NOT_STARTED`, while running entries recover as `EXECUTION_UNKNOWN`.
+One worker accepts at most 16 jobs; excess admission returns `QUEUE_FULL` without
+execution. Reader and heartbeats continue during actions. An action survives
+session reconnect; shutdown cancels and joins execution. Adapter subprocesses have
+a 20-second context, one-second pipe cleanup limit and 4096-byte output cap.
 
 The default journal capacity is 1024 entries and its byte limit is 8 MiB. Terminal
 results are protected for at least 24 hours from completion, regardless of command
@@ -186,7 +197,8 @@ actions currently have a 20-second local limit; subprocess pipe cleanup is bound
 by a further one second. On session shutdown the agent closes the socket and joins
 its command reader, allowing an admitted action to finish its bounded execution.
 Timeout of a Docker/Podman CLI does not prove the daemon did not perform the action;
-the explicit command uncertainty semantics are completed in F5/F6.
+F5 preserves this uncertainty as `EXECUTION_UNKNOWN`; controller-side durable
+tracking and reconciliation remain the next F6 stage.
 
 ## 10. Security model
 

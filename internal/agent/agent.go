@@ -23,7 +23,6 @@ import (
 const (
 	initialReconnectDelay = time.Second
 	maximumReconnectDelay = 30 * time.Second
-	defaultActionTimeout  = 20 * time.Second
 )
 
 type ResourceConfig struct {
@@ -51,9 +50,7 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 			return nil, fmt.Errorf("resource %q: target is required", resource.ID)
 		}
 		resource := resource
-		dispatcher.Register(resource.ID, func(action string) protocol.CommandResultPayload {
-			executionContext, cancel := context.WithTimeout(context.Background(), defaultActionTimeout)
-			defer cancel()
+		dispatcher.Register(resource.ID, func(executionContext context.Context, action string) protocol.CommandResultPayload {
 			if !contains(resource.Actions, action) {
 				return protocol.CommandResultPayload{Code: "ACTION_NOT_SUPPORTED", Message: "action is not enabled"}
 			}
@@ -65,7 +62,7 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 			default:
 				return protocol.CommandResultPayload{Code: "INVALID_CONFIGURATION", Message: "unsupported adapter"}
 			}
-		})
+		}, resource.Actions...)
 	}
 	return dispatcher, nil
 }
@@ -244,7 +241,7 @@ func runSession(ctx context.Context, config Config, tlsConfig *tls.Config, synch
 	commandDone := make(chan struct{})
 	go func() {
 		defer close(commandDone)
-		commandErrors <- session.RunAgentCommandLoop(connection, writer, dispatcher)
+		commandErrors <- session.RunAgentCommandLoop(ctx, connection, writer, dispatcher)
 	}()
 	defer func() { _ = raw.Close(); <-commandDone }()
 	ticker := time.NewTicker(time.Duration(welcome.HeartbeatIntervalMillis) * time.Millisecond)

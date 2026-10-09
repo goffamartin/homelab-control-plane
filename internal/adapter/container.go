@@ -31,7 +31,10 @@ func (adapter Container) Execute(ctx context.Context, action string) protocol.Co
 	}
 	output, err := adapter.Runner.Run(ctx, adapter.Runtime, args...)
 	if err != nil {
-		return failure("EXECUTION_FAILED", strings.TrimSpace(output))
+		return executionFailure(ctx, err, output, action)
+	}
+	if len(output) > 4096 {
+		output = output[:4096]
 	}
 	return protocol.CommandResultPayload{Success: true, Code: "OK", Message: strings.TrimSpace(output)}
 }
