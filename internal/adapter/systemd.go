@@ -5,6 +5,7 @@ import (
 	"context"
 	"os/exec"
 	"strings"
+	"time"
 
 	"hlcp/internal/protocol"
 )
@@ -15,7 +16,9 @@ type CommandRunner interface {
 type systemRunner struct{}
 
 func (systemRunner) Run(ctx context.Context, name string, args ...string) (string, error) {
-	output, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
+	command := exec.CommandContext(ctx, name, args...)
+	command.WaitDelay = time.Second
+	output, err := command.CombinedOutput()
 	return string(output), err
 }
 

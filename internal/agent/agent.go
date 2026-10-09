@@ -23,6 +23,7 @@ import (
 const (
 	initialReconnectDelay = time.Second
 	maximumReconnectDelay = 30 * time.Second
+	defaultActionTimeout  = 20 * time.Second
 )
 
 type ResourceConfig struct {
@@ -46,14 +47,16 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 		}
 		resource := resource
 		dispatcher.Register(resource.ID, func(action string) protocol.CommandResultPayload {
+			executionContext, cancel := context.WithTimeout(context.Background(), defaultActionTimeout)
+			defer cancel()
 			if !contains(resource.Actions, action) {
 				return protocol.CommandResultPayload{Code: "ACTION_NOT_SUPPORTED", Message: "action is not enabled"}
 			}
 			switch resource.Adapter {
 			case "systemd":
-				return (adapter.Systemd{Unit: resource.Target}).Execute(context.Background(), action)
+				return (adapter.Systemd{Unit: resource.Target}).Execute(executionContext, action)
 			case "docker", "podman":
-				return (adapter.Container{Runtime: resource.Adapter, Name: resource.Target}).Execute(context.Background(), action)
+				return (adapter.Container{Runtime: resource.Adapter, Name: resource.Target}).Execute(executionContext, action)
 			default:
 				return protocol.CommandResultPayload{Code: "INVALID_CONFIGURATION", Message: "unsupported adapter"}
 			}
@@ -173,6 +176,9 @@ func (config Config) synchronization() (session.Synchronization, error) {
 	return session.Synchronization{Inventory: inventory, State: state}, nil
 }
 func Run(ctx context.Context, config Config) error {
+	if err := config.Validate(); err != nil {
+		return err
+	}
 	tlsConfig, err := transport.ClientTLSConfig(transport.TLSFiles{CertificateFile: config.CertificateFile, PrivateKeyFile: config.PrivateKeyFile, CAFile: config.CAFile, ServerName: config.ServerName})
 	if err != nil {
 		return err
@@ -186,11 +192,11 @@ func Run(ctx context.Context, config Config) error {
 		return err
 	}
 	for attempt := 0; ; attempt++ {
-		established, err := runSession(ctx, config, tlsConfig, sync, dispatcher)
+		stable, err := runSession(ctx, config, tlsConfig, sync, dispatcher)
 		if ctx.Err() != nil {
 			return nil
 		}
-		if established {
+		if stable {
 			attempt = 0
 		}
 		delay := reconnectDelay(attempt, rand.Float64())
@@ -202,14 +208,19 @@ func Run(ctx context.Context, config Config) error {
 }
 
 func runSession(ctx context.Context, config Config, tlsConfig *tls.Config, synchronization session.Synchronization, dispatcher *command.Dispatcher) (bool, error) {
-	dialer := net.Dialer{}
+	dialer := net.Dialer{Timeout: 10 * time.Second}
 	raw, err := dialer.DialContext(ctx, "tcp", config.ControllerAddress)
 	if err != nil {
 		return false, err
 	}
 	defer raw.Close()
+	stop := context.AfterFunc(ctx, func() { _ = raw.Close() })
+	defer stop()
 	connection := tls.Client(raw, tlsConfig)
-	if err := connection.HandshakeContext(ctx); err != nil {
+	handshakeContext, cancelHandshake := context.WithTimeout(ctx, 10*time.Second)
+	err = connection.HandshakeContext(handshakeContext)
+	cancelHandshake()
+	if err != nil {
 		return false, err
 	}
 	defer connection.Close()
@@ -221,21 +232,28 @@ func runSession(ctx context.Context, config Config, tlsConfig *tls.Config, synch
 		return false, err
 	}
 	writer := session.NewWriter(connection, 4)
+	readyAt := time.Now()
+	stable := func() bool { return time.Since(readyAt) >= time.Minute }
 	commandErrors := make(chan error, 1)
-	go func() { commandErrors <- session.RunAgentCommandLoop(connection, writer, dispatcher) }()
+	commandDone := make(chan struct{})
+	go func() {
+		defer close(commandDone)
+		commandErrors <- session.RunAgentCommandLoop(connection, writer, dispatcher)
+	}()
+	defer func() { _ = raw.Close(); <-commandDone }()
 	ticker := time.NewTicker(time.Duration(welcome.HeartbeatIntervalMillis) * time.Millisecond)
 	defer ticker.Stop()
 	var sequence uint64
 	for {
 		select {
 		case <-ctx.Done():
-			return true, nil
+			return stable(), nil
 		case err := <-commandErrors:
-			return true, fmt.Errorf("command loop: %w", err)
+			return stable(), fmt.Errorf("command loop: %w", err)
 		case <-ticker.C:
 			sequence++
-			if err := writer.Send(protocol.MessageHeartbeat, protocol.HeartbeatPayload{Sequence: sequence}); err != nil {
-				return true, fmt.Errorf("send heartbeat: %w", err)
+			if err := writer.SendContext(ctx, protocol.MessageHeartbeat, protocol.HeartbeatPayload{Sequence: sequence}); err != nil {
+				return stable(), fmt.Errorf("send heartbeat: %w", err)
 			}
 		}
 	}
@@ -255,7 +273,11 @@ func reconnectDelay(attempt int, random float64) time.Duration {
 	if random > 1 {
 		random = 1
 	}
-	return time.Duration(float64(delay) * (0.8 + 0.4*random))
+	jittered := time.Duration(float64(delay) * (0.8 + 0.4*random))
+	if jittered > maximumReconnectDelay {
+		return maximumReconnectDelay
+	}
+	return jittered
 }
 
 func waitForReconnect(ctx context.Context, delay time.Duration) bool {
