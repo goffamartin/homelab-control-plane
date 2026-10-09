@@ -8,6 +8,7 @@ import (
 	"hlcp/internal/liveness"
 	"hlcp/internal/protocol"
 	"hlcp/internal/session"
+	"hlcp/internal/transport"
 	"log/slog"
 	"net"
 	"sync"
@@ -78,7 +79,17 @@ func (server *Server) handleConnection(raw net.Conn) {
 		return
 	}
 	_ = connection.SetDeadline(time.Time{})
-	registration, err := session.Accept(connection, session.ControllerConfig{HeartbeatInterval: server.config.LivenessPolicy.HeartbeatInterval, MissedHeartbeatThreshold: server.config.LivenessPolicy.OfflineAfter, HandshakeTimeout: server.config.HandshakeTimeout})
+	state := connection.ConnectionState()
+	if state.NegotiatedProtocol != transport.ALPN || len(state.VerifiedChains) == 0 {
+		server.config.Logger.Warn("agent TLS peer is not verified for HLCP")
+		return
+	}
+	nodeID, err := transport.AgentNodeID(state.VerifiedChains[0][0])
+	if err != nil {
+		server.config.Logger.Warn("agent certificate identity failed", "error", err)
+		return
+	}
+	registration, err := session.Accept(connection, session.ControllerConfig{ExpectedNodeID: nodeID, HeartbeatInterval: server.config.LivenessPolicy.HeartbeatInterval, MissedHeartbeatThreshold: server.config.LivenessPolicy.OfflineAfter, HandshakeTimeout: server.config.HandshakeTimeout})
 	if err != nil {
 		server.config.Logger.Warn("agent registration failed", "error", err)
 		return

@@ -10,8 +10,10 @@ import (
 	"encoding/pem"
 	"math/big"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 )
@@ -119,6 +121,13 @@ func createLeaf(t *testing.T, ca *x509.Certificate, caKey *ecdsa.PrivateKey, com
 		NotAfter:     time.Now().Add(time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature,
 		ExtKeyUsage:  usages,
+	}
+	if slices.Contains(usages, x509.ExtKeyUsageClientAuth) {
+		identity, err := url.Parse("urn:hlcp:node:debian-01")
+		if err != nil {
+			t.Fatal(err)
+		}
+		template.URIs = []*url.URL{identity}
 	}
 	encoded, err := x509.CreateCertificate(rand.Reader, template, ca, &key.PublicKey, caKey)
 	if err != nil {

@@ -95,6 +95,25 @@ func TestAcceptRejectsNonHelloMessage(t *testing.T) {
 	}
 }
 
+func TestAcceptRejectsNodeImpersonationBeforeWelcome(t *testing.T) {
+	server, peer := net.Pipe()
+	defer server.Close()
+	defer peer.Close()
+	done := make(chan error, 1)
+	go func() {
+		_, err := Accept(server, ControllerConfig{ExpectedNodeID: "debian-01"})
+		server.Close()
+		done <- err
+	}()
+	_, err := Start(peer, protocol.HelloPayload{ProtocolVersions: []uint8{1}, NodeID: "other-node", AgentVersion: "0.1.0"}, time.Second)
+	if err == nil {
+		t.Fatal("impersonation received WELCOME")
+	}
+	if err := <-done; err == nil {
+		t.Fatal("controller accepted impersonation")
+	}
+}
+
 func TestInitialSynchronizationAfterRegistration(t *testing.T) {
 	controllerConnection, agentConnection := net.Pipe()
 	defer controllerConnection.Close()

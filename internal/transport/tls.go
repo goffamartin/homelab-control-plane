@@ -36,11 +36,12 @@ func ServerTLSConfig(files TLSFiles) (*tls.Config, error) {
 	}
 
 	return &tls.Config{
-		MinVersion:   tls.VersionTLS13,
-		Certificates: []tls.Certificate{certificate},
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		ClientCAs:    clientCAs,
-		NextProtos:   []string{ALPN},
+		MinVersion:       tls.VersionTLS13,
+		Certificates:     []tls.Certificate{certificate},
+		ClientAuth:       tls.RequireAndVerifyClientCert,
+		ClientCAs:        clientCAs,
+		NextProtos:       []string{ALPN},
+		VerifyConnection: verifyAgent,
 	}, nil
 }
 
@@ -60,11 +61,12 @@ func ClientTLSConfig(files TLSFiles) (*tls.Config, error) {
 	}
 
 	return &tls.Config{
-		MinVersion:   tls.VersionTLS13,
-		Certificates: []tls.Certificate{certificate},
-		RootCAs:      rootCAs,
-		ServerName:   files.ServerName,
-		NextProtos:   []string{ALPN},
+		MinVersion:       tls.VersionTLS13,
+		Certificates:     []tls.Certificate{certificate},
+		RootCAs:          rootCAs,
+		ServerName:       files.ServerName,
+		NextProtos:       []string{ALPN},
+		VerifyConnection: verifyController,
 	}, nil
 }
 
