@@ -31,6 +31,10 @@ func RunInboundLoop(inbound *Inbound, tracker *liveness.Tracker, onState func(St
 				onState(StateChange{State: snapshot.State, LastActivity: snapshot.LastActivity})
 			}
 			reset()
+		case _, ok := <-inbound.Acks:
+			if !ok {
+				return <-inbound.Errors
+			}
 		case result, ok := <-inbound.Results:
 			if !ok {
 				return <-inbound.Errors
