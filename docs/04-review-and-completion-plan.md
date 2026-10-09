@@ -534,8 +534,9 @@ Stav realizace:
 |---|---|---|
 | F0 | Dokončeno | Accepted ADR 0001–0004, `05-v1-acceptance.md` a sjednocené projektové dokumenty |
 | F1 | Dokončeno | Sjednocené wire limity, sémantická validace payloadů, striktní YAML a `--check-config` |
-| F2–F11 | Plánováno | Kritéria jednotlivých fází výše |
+| F2 | Dokončeno | Certifikátová URI SAN identita, povinné ALPN, negativní TLS testy; autorizované loopback API, omezený JSON a CLI token/redirect test |
+| F3–F11 | Plánováno | Kritéria jednotlivých fází výše |
 
-Nejbližší implementační krok je F2; další rozšiřování feature setu počká
+Nejbližší implementační krok je F3; další rozšiřování feature setu počká
 na opravu základních vlastností. Není důvod přepisovat celý projekt: framing,
 základní TLS setup, datové modely a adapter boundary lze zachovat a postupně zpevnit.

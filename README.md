@@ -38,9 +38,20 @@ hlcp -n debian-01 -r example-catalog -a restart
 Start the controller API on its default local address (`127.0.0.1:9444`) with:
 
 ```text
-hlcp-controller -listen :9443 -api-listen 127.0.0.1:9444 -cert controller.pem -key controller-key.pem -ca ca.pem
+hlcp-controller -listen :9443 -api-listen 127.0.0.1:9444 -api-token-file /etc/hlcp/api.token -cert controller.pem -key controller-key.pem -ca ca.pem
 ```
 
 `hlcp` targets that local address by default. Use `hlcp --help` for the explicit long-form selectors and `--api` override.
+
+The controller and CLI read a shared local bearer token from `/etc/hlcp/api.token`
+by default. Override the file with `--api-token-file`. On Unix the token file must
+have private permissions (0600). Use a randomly generated token of at least 32
+characters; never commit it. Browser-origin requests and non-loopback API binds
+are rejected.
+
+Agent certificates require an explicit client-auth EKU and exactly one HLCP URI
+SAN, for example `urn:hlcp:node:debian-01`, matching the YAML `node_id`. The
+controller certificate requires server-auth EKU and the configured server name.
+Both peers must negotiate `hlcp/1` ALPN.
 
 The design document remains the source of truth for unfinished production hardening and evaluation scenarios.

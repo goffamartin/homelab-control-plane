@@ -4,26 +4,29 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"hlcp/internal/localapi"
 	"hlcp/internal/protocol"
+	"io"
+	"mime"
 	"net/http"
 	"time"
 )
 
 // HTTPHandler is intended only for the controller's local loopback API.
-func (server *Server) HTTPHandler() http.Handler {
+func (server *Server) HTTPHandler(token string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /v1/nodes", func(writer http.ResponseWriter, request *http.Request) { writeJSON(writer, server.registry.List()) })
 	mux.HandleFunc("GET /v1/nodes/{node}", func(writer http.ResponseWriter, request *http.Request) {
 		record, ok := server.registry.Get(request.PathValue("node"))
 		if !ok {
-			http.Error(writer, "node not found", http.StatusNotFound)
+			localapi.Error(writer, http.StatusNotFound, "NODE_NOT_FOUND", "node not found")
 			return
 		}
 		writeJSON(writer, record)
 	})
 	mux.HandleFunc("GET /v1/nodes/{node}/actions", func(writer http.ResponseWriter, request *http.Request) {
 		if _, ok := server.registry.Get(request.PathValue("node")); !ok {
-			http.Error(writer, "node not found", http.StatusNotFound)
+			localapi.Error(writer, http.StatusNotFound, "NODE_NOT_FOUND", "node not found")
 			return
 		}
 		writeJSON(writer, []string{"status"})
@@ -31,7 +34,7 @@ func (server *Server) HTTPHandler() http.Handler {
 	mux.HandleFunc("GET /v1/nodes/{node}/resources", func(writer http.ResponseWriter, request *http.Request) {
 		record, ok := server.registry.Get(request.PathValue("node"))
 		if !ok {
-			http.Error(writer, "node not found", http.StatusNotFound)
+			localapi.Error(writer, http.StatusNotFound, "NODE_NOT_FOUND", "node not found")
 			return
 		}
 		writeJSON(writer, record.Inventory.Resources)
@@ -39,7 +42,7 @@ func (server *Server) HTTPHandler() http.Handler {
 	mux.HandleFunc("GET /v1/nodes/{node}/resources/{resource}/actions", func(writer http.ResponseWriter, request *http.Request) {
 		record, ok := server.registry.Get(request.PathValue("node"))
 		if !ok {
-			http.Error(writer, "node not found", http.StatusNotFound)
+			localapi.Error(writer, http.StatusNotFound, "NODE_NOT_FOUND", "node not found")
 			return
 		}
 		for _, resource := range record.Inventory.Resources {
@@ -48,20 +51,39 @@ func (server *Server) HTTPHandler() http.Handler {
 				return
 			}
 		}
-		http.Error(writer, "resource not found", http.StatusNotFound)
+		localapi.Error(writer, http.StatusNotFound, "RESOURCE_NOT_FOUND", "resource not found")
 	})
 	mux.HandleFunc("POST /v1/nodes/{node}/commands", func(writer http.ResponseWriter, request *http.Request) {
+		mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+		if err != nil || mediaType != "application/json" {
+			localapi.Error(writer, http.StatusUnsupportedMediaType, "INVALID_CONTENT_TYPE", "application/json is required")
+			return
+		}
+		request.Body = http.MaxBytesReader(writer, request.Body, 8192)
 		var command protocol.CommandPayload
-		if err := json.NewDecoder(request.Body).Decode(&command); err != nil {
-			http.Error(writer, "invalid command", http.StatusBadRequest)
+		decoder := json.NewDecoder(request.Body)
+		decoder.DisallowUnknownFields()
+		if err := decoder.Decode(&command); err != nil {
+			localapi.Error(writer, http.StatusBadRequest, "INVALID_REQUEST", "invalid or oversized command")
+			return
+		}
+		if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+			localapi.Error(writer, http.StatusBadRequest, "INVALID_REQUEST", "exactly one JSON command is required")
 			return
 		}
 		if err := command.Validate(); err != nil {
-			http.Error(writer, err.Error(), http.StatusBadRequest)
+			localapi.Error(writer, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 			return
 		}
 		if status, message := server.validateResourceCommand(request.PathValue("node"), command); status != 0 {
-			http.Error(writer, message, status)
+			code := "RESOURCE_NOT_FOUND"
+			if message == "node not found" {
+				code = "NODE_NOT_FOUND"
+			}
+			if status == http.StatusUnprocessableEntity {
+				code = "ACTION_NOT_SUPPORTED"
+			}
+			localapi.Error(writer, status, code, message)
 			return
 		}
 		requestContext, cancel := contextWithTimeout(request, 30*time.Second)
@@ -77,12 +99,19 @@ func (server *Server) HTTPHandler() http.Handler {
 			case errors.Is(err, context.Canceled):
 				status = 499 // Client Closed Request (non-standard but widely understood).
 			}
-			http.Error(writer, err.Error(), status)
+			code := "EXECUTION_ERROR"
+			if status == http.StatusGatewayTimeout {
+				code = "TIMEOUT"
+			}
+			if status == 499 {
+				code = "CANCELED"
+			}
+			localapi.Error(writer, status, code, err.Error())
 			return
 		}
 		writeJSON(writer, result)
 	})
-	return mux
+	return localapi.Protect(token, mux)
 }
 
 func (server *Server) validateResourceCommand(nodeID string, command protocol.CommandPayload) (int, string) {

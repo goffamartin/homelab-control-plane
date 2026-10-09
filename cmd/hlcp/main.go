@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"hlcp/internal/cli"
+	"hlcp/internal/localapi"
 	"io"
 	"net/http"
 	"net/url"
@@ -16,6 +17,8 @@ import (
 )
 
 const defaultAPI = "http://127.0.0.1:9444"
+
+var apiTokenFile = localapi.DefaultTokenFile
 
 func main() {
 	request, err := cli.Parse(os.Args[1:])
@@ -31,6 +34,12 @@ func main() {
 	api := strings.TrimRight(request.API, "/")
 	if api == "" {
 		api = defaultAPI
+	}
+	if err := localapi.ValidateURL(api); err != nil {
+		fail(err)
+	}
+	if request.APITokenFile != "" {
+		apiTokenFile = request.APITokenFile
 	}
 	switch cli.Intent(request) {
 	case "nodes":
@@ -56,7 +65,7 @@ func main() {
 }
 
 func get(url string) {
-	response, err := client().Get(url)
+	response, err := authenticatedRequest(http.MethodGet, url, nil)
 	if err != nil {
 		fail(err)
 	}
@@ -69,7 +78,7 @@ func post(url string, value any) {
 	if err != nil {
 		fail(err)
 	}
-	response, err := client().Post(url, "application/json", bytes.NewReader(body))
+	response, err := authenticatedRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		fail(err)
 	}
@@ -77,7 +86,22 @@ func post(url string, value any) {
 	outputResponse(response)
 }
 
-func client() *http.Client { return &http.Client{Timeout: 35 * time.Second} }
+func authenticatedRequest(method, address string, body io.Reader) (*http.Response, error) {
+	token, err := localapi.LoadToken(apiTokenFile)
+	if err != nil {
+		return nil, err
+	}
+	request, err := http.NewRequest(method, address, body)
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Authorization", "Bearer "+token)
+	if body != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
+	client := &http.Client{Timeout: 35 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return fmt.Errorf("local API redirects are not supported") }}
+	return client.Do(request)
+}
 
 func outputResponse(response *http.Response) {
 	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
@@ -138,5 +162,6 @@ Options:
   --dry-run           validate without sending a command
   --json              machine-readable output
   --api <url>         controller loopback API (default: ` + defaultAPI + `)
+  --api-token-file    private bearer token file (default: /etc/hlcp/api.token)
 `)
 }

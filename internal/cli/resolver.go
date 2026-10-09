@@ -26,6 +26,7 @@ type Request struct {
 	DryRun            bool
 	Output            string
 	API               string
+	APITokenFile      string
 }
 type Resolved struct {
 	Node     string                   `json:"node"`

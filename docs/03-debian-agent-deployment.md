@@ -35,7 +35,12 @@ adapter targets remain agent-local. Set `journal_file` to
 `/var/lib/hlcp/command-journal.json`.
 
 Place the agent certificate, private key and CA bundle in `/etc/hlcp`. The
-private key must be readable only by root and the `hlcp` group:
+agent certificate must include a client-auth EKU and URI SAN
+`urn:hlcp:node:debian-01` matching this agent's `node_id`; certificates without
+that identity are rejected. The controller certificate must include server-auth
+EKU and the configured server DNS/IP SAN.
+
+The private key must be readable only by root and the `hlcp` group:
 
 ```text
 sudo install -d -o root -g hlcp -m 0750 /etc/hlcp
@@ -67,6 +72,12 @@ agent TCP listener.
 ## 4. Smoke check and rollback
 
 On the controller host, confirm registration and inspect configured resources:
+
+Prepare a random local API bearer token outside this repository and install it
+on the controller host with mode 0600, owned by the controller service account.
+The CLI user needs read access through a private local copy or the same account.
+Pass `--api-token-file <private-path>` to controller and CLI if the default
+`/etc/hlcp/api.token` is not suitable. This token is unrelated to agent certificates.
 
 ```text
 hlcp -n
