@@ -533,8 +533,9 @@ Stav realizace:
 | Fáze | Stav | Důkaz |
 |---|---|---|
 | F0 | Dokončeno | Accepted ADR 0001–0004, `05-v1-acceptance.md` a sjednocené projektové dokumenty |
-| F1–F11 | Plánováno | Kritéria jednotlivých fází výše |
+| F1 | Dokončeno | Sjednocené wire limity, sémantická validace payloadů, striktní YAML a `--check-config` |
+| F2–F11 | Plánováno | Kritéria jednotlivých fází výše |
 
-Nejbližší implementační krok je F1; další rozšiřování feature setu počká
+Nejbližší implementační krok je F2; další rozšiřování feature setu počká
 na opravu základních vlastností. Není důvod přepisovat celý projekt: framing,
 základní TLS setup, datové modely a adapter boundary lze zachovat a postupně zpevnit.

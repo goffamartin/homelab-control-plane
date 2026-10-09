@@ -43,6 +43,7 @@ sudo install -o root -g hlcp -m 0640 agent.key /etc/hlcp/agent.key
 sudo install -o root -g hlcp -m 0644 agent.crt /etc/hlcp/agent.crt
 sudo install -o root -g hlcp -m 0644 ca.crt /etc/hlcp/ca.crt
 sudo install -o root -g hlcp -m 0640 agent.yaml /etc/hlcp/agent.yaml
+sudo -u hlcp /usr/local/bin/hlcp-agent -config /etc/hlcp/agent.yaml -check-config
 ```
 
 Do not commit any of these files. The sample paths already match this layout.
