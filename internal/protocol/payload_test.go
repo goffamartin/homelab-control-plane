@@ -85,3 +85,22 @@ func TestCommandPayloadRoundTrip(t *testing.T) {
 		t.Fatalf("decoded = %#v, want %#v", decoded, original)
 	}
 }
+
+func TestCommandRejectsUnsafeIdentifier(t *testing.T) {
+	payload := CommandPayload{CommandID: "cmd/../../other", ResourceID: "catalog", Action: "restart"}
+	if err := payload.Validate(); !errors.Is(err, ErrInvalidCommand) {
+		t.Fatalf("Validate() error = %v, want ErrInvalidCommand", err)
+	}
+}
+
+func TestCommandAcknowledgementAndResultValidation(t *testing.T) {
+	if err := (CommandACKPayload{CommandID: "cmd-1", Status: "accepted"}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if err := (CommandACKPayload{CommandID: "cmd-1", Status: "maybe"}).Validate(); !errors.Is(err, ErrInvalidCommandACK) {
+		t.Fatalf("ACK validation error = %v", err)
+	}
+	if err := (CommandResultPayload{CommandID: "cmd-1", Success: true, Code: "EXECUTION_FAILED"}).Validate(); !errors.Is(err, ErrInvalidCommandResult) {
+		t.Fatalf("result validation error = %v", err)
+	}
+}

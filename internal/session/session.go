@@ -21,6 +21,7 @@ var (
 	ErrExpectedInventorySnapshot = errors.New("hlcp session: expected INVENTORY_SNAPSHOT")
 	ErrExpectedStateSnapshot     = errors.New("hlcp session: expected STATE_SNAPSHOT")
 	ErrNoCommonVersion           = errors.New("hlcp session: no common protocol version")
+	ErrInvalidControllerConfig   = errors.New("hlcp session: invalid controller configuration")
 )
 
 // Registration is the controller-side result of a validated HELLO/WELCOME
@@ -53,6 +54,9 @@ type ControllerConfig struct {
 // mutually authenticated TLS connection.
 func Accept(connection net.Conn, config ControllerConfig) (Registration, error) {
 	config = config.withDefaults()
+	if err := config.validate(); err != nil {
+		return Registration{}, err
+	}
 	if err := connection.SetDeadline(time.Now().Add(config.HandshakeTimeout)); err != nil {
 		return Registration{}, fmt.Errorf("set handshake deadline: %w", err)
 	}
@@ -267,11 +271,28 @@ func (config ControllerConfig) withDefaults() ControllerConfig {
 	return config
 }
 
+func (config ControllerConfig) validate() error {
+	milliseconds := config.HeartbeatInterval / time.Millisecond
+	if config.HeartbeatInterval < time.Millisecond || config.HeartbeatInterval%time.Millisecond != 0 || milliseconds > time.Duration(^uint32(0)) {
+		return fmt.Errorf("%w: heartbeat interval must be an exact millisecond representable as uint32", ErrInvalidControllerConfig)
+	}
+	if config.MissedHeartbeatThreshold == 0 || config.HandshakeTimeout <= 0 || len(config.SupportedVersions) == 0 || config.NewSessionID == nil {
+		return ErrInvalidControllerConfig
+	}
+	return nil
+}
+
 func negotiateVersion(agentVersions, controllerVersions []uint8) (uint8, error) {
-	for agentIndex := len(agentVersions) - 1; agentIndex >= 0; agentIndex-- {
-		if slices.Contains(controllerVersions, agentVersions[agentIndex]) {
-			return agentVersions[agentIndex], nil
+	var selected uint8
+	found := false
+	for _, version := range agentVersions {
+		if slices.Contains(controllerVersions, version) && (!found || version > selected) {
+			selected = version
+			found = true
 		}
+	}
+	if found {
+		return selected, nil
 	}
 	return 0, ErrNoCommonVersion
 }

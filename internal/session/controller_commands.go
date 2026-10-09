@@ -30,6 +30,9 @@ func ReceiveCommandOutcome(connection net.Conn, commandID string) (protocol.Comm
 	if err := protocol.DecodePayload(ackFrame.Payload, &ack); err != nil {
 		return ack, protocol.CommandResultPayload{}, err
 	}
+	if err := ack.Validate(); err != nil {
+		return ack, protocol.CommandResultPayload{}, err
+	}
 	resultFrame, err := protocol.Decode(connection)
 	if err != nil {
 		return ack, protocol.CommandResultPayload{}, err
@@ -39,6 +42,9 @@ func ReceiveCommandOutcome(connection net.Conn, commandID string) (protocol.Comm
 	}
 	var result protocol.CommandResultPayload
 	if err := protocol.DecodePayload(resultFrame.Payload, &result); err != nil {
+		return ack, result, err
+	}
+	if err := result.Validate(); err != nil {
 		return ack, result, err
 	}
 	if ack.CommandID != commandID || result.CommandID != commandID {

@@ -55,6 +55,23 @@ func TestStartAndAcceptRegisterAgent(t *testing.T) {
 	}
 }
 
+func TestNegotiateVersionChoosesHighestCommonVersion(t *testing.T) {
+	version, err := negotiateVersion([]uint8{3, 1, 2}, []uint8{1, 2})
+	if err != nil || version != 2 {
+		t.Fatalf("negotiateVersion() = %d, %v; want 2", version, err)
+	}
+}
+
+func TestControllerConfigRejectsUnrepresentableHeartbeatInterval(t *testing.T) {
+	controllerConnection, peerConnection := net.Pipe()
+	defer controllerConnection.Close()
+	defer peerConnection.Close()
+	_, err := Accept(controllerConnection, ControllerConfig{HeartbeatInterval: time.Microsecond})
+	if !errors.Is(err, ErrInvalidControllerConfig) {
+		t.Fatalf("Accept() error = %v, want ErrInvalidControllerConfig", err)
+	}
+}
+
 func TestAcceptRejectsNonHelloMessage(t *testing.T) {
 	controllerConnection, peerConnection := net.Pipe()
 	defer controllerConnection.Close()
