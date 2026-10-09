@@ -25,6 +25,7 @@ The CLI navigates the discovered inventory progressively:
 
 ```text
 hlcp -n
+hlcp -n debian-01 -a status
 hlcp -n debian-01 -r
 hlcp -n debian-01 -r example-catalog -a
 hlcp -n debian-01 -r example-catalog -a restart

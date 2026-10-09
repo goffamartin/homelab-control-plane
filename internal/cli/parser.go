@@ -75,6 +75,12 @@ func Intent(request Request) string {
 	if request.ResourceSpecified && request.Resource == "" {
 		return "resources"
 	}
+	if request.Resource == "" && request.ActionSpecified && request.Action == "" {
+		return "node-actions"
+	}
+	if request.Resource == "" && request.Action == "status" {
+		return "node-status"
+	}
 	if request.Resource == "" {
 		return "node"
 	}

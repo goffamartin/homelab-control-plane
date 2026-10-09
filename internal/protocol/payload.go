@@ -54,10 +54,10 @@ func init() {
 // HelloPayload starts a session and states the agent's supported protocol
 // versions and capabilities. NodeID is stable across reconnects.
 type HelloPayload struct {
-	ProtocolVersions []uint8  `cbor:"protocol_versions"`
-	NodeID           string   `cbor:"node_id"`
-	AgentVersion     string   `cbor:"agent_version"`
-	Capabilities     []string `cbor:"capabilities"`
+	ProtocolVersions []uint8  `cbor:"protocol_versions" json:"protocol_versions"`
+	NodeID           string   `cbor:"node_id" json:"node_id"`
+	AgentVersion     string   `cbor:"agent_version" json:"agent_version"`
+	Capabilities     []string `cbor:"capabilities" json:"capabilities"`
 }
 
 // Validate checks the limits that make HELLO safe to retain and display.
@@ -85,24 +85,24 @@ func (payload HelloPayload) Validate() error {
 // WelcomePayload confirms the selected protocol version and controller liveness
 // policy for one newly established session.
 type WelcomePayload struct {
-	ProtocolVersion          uint8  `cbor:"protocol_version"`
-	SessionID                string `cbor:"session_id"`
-	HeartbeatIntervalMillis  uint32 `cbor:"heartbeat_interval_ms"`
-	MissedHeartbeatThreshold uint8  `cbor:"missed_heartbeat_threshold"`
+	ProtocolVersion          uint8  `cbor:"protocol_version" json:"protocol_version"`
+	SessionID                string `cbor:"session_id" json:"session_id"`
+	HeartbeatIntervalMillis  uint32 `cbor:"heartbeat_interval_ms" json:"heartbeat_interval_ms"`
+	MissedHeartbeatThreshold uint8  `cbor:"missed_heartbeat_threshold" json:"missed_heartbeat_threshold"`
 }
 
 // HeartbeatPayload carries an agent-local increasing sequence number. It does
 // not use wall-clock time because controller and agent clocks need not agree.
 type HeartbeatPayload struct {
-	Sequence uint64 `cbor:"sequence"`
+	Sequence uint64 `cbor:"sequence" json:"sequence"`
 }
 
 // CommandPayload names an allow-listed resource action. It deliberately has no
 // shell command or adapter target.
 type CommandPayload struct {
-	CommandID  string `cbor:"command_id"`
-	ResourceID string `cbor:"resource_id"`
-	Action     string `cbor:"action"`
+	CommandID  string `cbor:"command_id" json:"command_id"`
+	ResourceID string `cbor:"resource_id" json:"resource_id"`
+	Action     string `cbor:"action" json:"action"`
 }
 
 func (payload CommandPayload) Validate() error {
@@ -114,16 +114,16 @@ func (payload CommandPayload) Validate() error {
 
 // CommandACKPayload proves that the agent accepted this command for processing.
 type CommandACKPayload struct {
-	CommandID string `cbor:"command_id"`
-	Status    string `cbor:"status"`
+	CommandID string `cbor:"command_id" json:"command_id"`
+	Status    string `cbor:"status" json:"status"`
 }
 
 // CommandResultPayload is the immutable terminal result cached for duplicate delivery.
 type CommandResultPayload struct {
-	CommandID string `cbor:"command_id"`
-	Success   bool   `cbor:"success"`
-	Code      string `cbor:"code"`
-	Message   string `cbor:"message"`
+	CommandID string `cbor:"command_id" json:"command_id"`
+	Success   bool   `cbor:"success" json:"success"`
+	Code      string `cbor:"code" json:"code"`
+	Message   string `cbor:"message" json:"message"`
 }
 
 // Validate checks the minimal heartbeat contract for v1.

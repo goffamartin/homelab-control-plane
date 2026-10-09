@@ -11,7 +11,7 @@ import (
 
 func TestHTTPHandlerListsResourcesAndActions(t *testing.T) {
 	server := &Server{registry: NewRegistry()}
-	server.registry.nodes["debian-01"] = NodeRecord{Inventory: protocol.InventorySnapshot{Resources: []protocol.ResourceDescriptor{
+	server.registry.nodes["debian-01"] = NodeRecord{NodeID: "debian-01", Inventory: protocol.InventorySnapshot{Resources: []protocol.ResourceDescriptor{
 		{ID: "example-catalog", Type: "container", Actions: []string{"status", "restart"}},
 	}}}
 
@@ -20,6 +20,8 @@ func TestHTTPHandlerListsResourcesAndActions(t *testing.T) {
 		wantStatus int
 		wantBody   string
 	}{
+		{path: "/v1/nodes/debian-01", wantStatus: http.StatusOK, wantBody: `"debian-01"`},
+		{path: "/v1/nodes/debian-01/actions", wantStatus: http.StatusOK, wantBody: `"status"`},
 		{path: "/v1/nodes/debian-01/resources", wantStatus: http.StatusOK, wantBody: `"example-catalog"`},
 		{path: "/v1/nodes/debian-01/resources/example-catalog/actions", wantStatus: http.StatusOK, wantBody: `"restart"`},
 		{path: "/v1/nodes/debian-01/resources/missing/actions", wantStatus: http.StatusNotFound, wantBody: "resource not found"},
@@ -34,5 +36,33 @@ func TestHTTPHandlerListsResourcesAndActions(t *testing.T) {
 				t.Fatalf("body = %q, expected %q", body, test.wantBody)
 			}
 		})
+	}
+}
+
+func TestHTTPHandlerRejectsUnknownResourceCommand(t *testing.T) {
+	server := &Server{registry: NewRegistry()}
+	server.registry.nodes["debian-01"] = NodeRecord{NodeID: "debian-01", Inventory: protocol.InventorySnapshot{Resources: []protocol.ResourceDescriptor{
+		{ID: "example-catalog", Type: "container", Actions: []string{"status", "restart"}},
+	}}}
+
+	request := httptest.NewRequest(http.MethodPost, "/v1/nodes/debian-01/commands", strings.NewReader(`{"command_id":"cmd-1","resource_id":"missing","action":"restart"}`))
+	response := httptest.NewRecorder()
+	server.HTTPHandler().ServeHTTP(response, request)
+	if response.Code != http.StatusNotFound || !strings.Contains(response.Body.String(), "resource not found") {
+		t.Fatalf("status=%d body=%q", response.Code, response.Body.String())
+	}
+}
+
+func TestHTTPHandlerRejectsUnsupportedResourceAction(t *testing.T) {
+	server := &Server{registry: NewRegistry()}
+	server.registry.nodes["debian-01"] = NodeRecord{NodeID: "debian-01", Inventory: protocol.InventorySnapshot{Resources: []protocol.ResourceDescriptor{
+		{ID: "example-catalog", Type: "container", Actions: []string{"status", "restart"}},
+	}}}
+
+	request := httptest.NewRequest(http.MethodPost, "/v1/nodes/debian-01/commands", strings.NewReader(`{"command_id":"cmd-1","resource_id":"example-catalog","action":"remove"}`))
+	response := httptest.NewRecorder()
+	server.HTTPHandler().ServeHTTP(response, request)
+	if response.Code != http.StatusUnprocessableEntity || !strings.Contains(response.Body.String(), "action is not supported") {
+		t.Fatalf("status=%d body=%q", response.Code, response.Body.String())
 	}
 }
