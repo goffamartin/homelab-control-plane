@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"context"
 	"errors"
 	"hlcp/internal/protocol"
 	"hlcp/internal/session"
@@ -41,10 +42,22 @@ func (sessions *ActiveSessions) Send(nodeID string, command protocol.CommandPayl
 		return err
 	}
 	if err := session.SendCommand(writer, command); err != nil {
+		sessions.tracker.Cancel(command.CommandID)
 		return err
 	}
 	return nil
 }
 func (sessions *ActiveSessions) HandleResult(result protocol.CommandResultPayload) bool {
 	return sessions.tracker.Complete(result)
+}
+
+func (sessions *ActiveSessions) Execute(ctx context.Context, nodeID string, command protocol.CommandPayload) (protocol.CommandResultPayload, error) {
+	if err := sessions.Send(nodeID, command); err != nil {
+		return protocol.CommandResultPayload{}, err
+	}
+	result, err := sessions.tracker.Wait(ctx, command.CommandID)
+	if err != nil {
+		sessions.tracker.Cancel(command.CommandID)
+	}
+	return result, err
 }

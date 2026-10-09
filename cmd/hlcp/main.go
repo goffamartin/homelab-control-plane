@@ -1,10 +1,21 @@
 package main
 
 import (
+	"bytes"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"hlcp/internal/cli"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"strings"
+	"time"
 )
+
+const defaultAPI = "http://127.0.0.1:9444"
 
 func main() {
 	request, err := cli.Parse(os.Args[1:])
@@ -17,7 +28,88 @@ func main() {
 		printHelp()
 		return
 	}
-	fmt.Printf("hlcp: %s requires a controller connection; use --help for navigation.\n", cli.Intent(request))
+	api := strings.TrimRight(request.API, "/")
+	if api == "" {
+		api = defaultAPI
+	}
+	switch cli.Intent(request) {
+	case "nodes":
+		get(api + "/v1/nodes")
+	case "resources":
+		get(api + "/v1/nodes/" + url.PathEscape(request.Node) + "/resources")
+	case "actions":
+		get(api + "/v1/nodes/" + url.PathEscape(request.Node) + "/resources/" + url.PathEscape(request.Resource) + "/actions")
+	case "command":
+		command := map[string]string{"command_id": randomID(), "resource_id": request.Resource, "action": request.Action}
+		if request.DryRun {
+			output(command)
+			return
+		}
+		post(api+"/v1/nodes/"+url.PathEscape(request.Node)+"/commands", command)
+	default:
+		fmt.Printf("hlcp: %s\n", cli.Intent(request))
+	}
+}
+
+func get(url string) {
+	response, err := client().Get(url)
+	if err != nil {
+		fail(err)
+	}
+	defer response.Body.Close()
+	outputResponse(response)
+}
+
+func post(url string, value any) {
+	body, err := json.Marshal(value)
+	if err != nil {
+		fail(err)
+	}
+	response, err := client().Post(url, "application/json", bytes.NewReader(body))
+	if err != nil {
+		fail(err)
+	}
+	defer response.Body.Close()
+	outputResponse(response)
+}
+
+func client() *http.Client { return &http.Client{Timeout: 35 * time.Second} }
+
+func outputResponse(response *http.Response) {
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		messageBytes, _ := io.ReadAll(response.Body)
+		message := strings.TrimSpace(string(messageBytes))
+		if message == "" {
+			message = response.Status
+		}
+		fail(fmt.Errorf("controller API: %s", message))
+	}
+	var value any
+	if err := json.NewDecoder(response.Body).Decode(&value); err != nil {
+		fail(err)
+	}
+	output(value)
+}
+
+func output(value any) {
+	encoded, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		fail(err)
+	}
+	fmt.Println(string(encoded))
+}
+
+func randomID() string {
+	identifier := make([]byte, 16)
+	if _, err := rand.Read(identifier); err != nil {
+		fail(err)
+	}
+	return hex.EncodeToString(identifier)
+}
+
+func fail(err error) {
+	fmt.Fprintln(os.Stderr, err)
+	os.Exit(1)
 }
 
 func printHelp() {
@@ -39,5 +131,6 @@ Options:
   -h, --help          show this help
   --dry-run           validate without sending a command
   --json              machine-readable output
+  --api <url>         controller loopback API (default: ` + defaultAPI + `)
 `)
 }

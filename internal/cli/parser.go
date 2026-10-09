@@ -43,6 +43,12 @@ func Parse(args []string) (Request, error) {
 			request.Output = "json"
 		case "--dry-run":
 			request.DryRun = true
+		case "--api":
+			if index+1 >= len(args) {
+				return Request{}, fmt.Errorf("--api requires a value")
+			}
+			index++
+			request.API = args[index]
 		default:
 			return Request{}, fmt.Errorf("unknown argument %q", argument)
 		}

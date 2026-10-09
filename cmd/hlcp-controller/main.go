@@ -7,6 +7,7 @@ import (
 	"hlcp/internal/controller"
 	"hlcp/internal/liveness"
 	"hlcp/internal/transport"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,6 +16,7 @@ import (
 
 func main() {
 	listen := flag.String("listen", ":9443", "agent TCP address")
+	apiListen := flag.String("api-listen", "127.0.0.1:9444", "local controller API address")
 	certificate := flag.String("cert", "", "controller certificate PEM")
 	privateKey := flag.String("key", "", "controller private key PEM")
 	ca := flag.String("ca", "", "trusted agent CA bundle PEM")
@@ -39,7 +41,16 @@ func main() {
 	defer server.Close()
 	context, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	api := &http.Server{Addr: *apiListen, Handler: server.HTTPHandler()}
+	go func() { <-context.Done(); _ = api.Shutdown(context) }()
+	go func() {
+		if err := api.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			fmt.Fprintf(os.Stderr, "controller API failed: %v\n", err)
+			stop()
+		}
+	}()
 	fmt.Printf("HLCP controller listening on %s (%s)\n", server.Address(), transport.ALPN)
+	fmt.Printf("HLCP local API listening on %s\n", *apiListen)
 	if err := server.Serve(context); err != nil {
 		fmt.Fprintf(os.Stderr, "controller failed: %v\n", err)
 		os.Exit(1)

@@ -25,6 +25,7 @@ type Request struct {
 	Help              bool
 	DryRun            bool
 	Output            string
+	API               string
 }
 type Resolved struct {
 	Node     string                   `json:"node"`
