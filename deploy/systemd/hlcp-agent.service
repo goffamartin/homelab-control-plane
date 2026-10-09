@@ -1,0 +1,26 @@
+[Unit]
+Description=HomeLab Control Plane agent
+Documentation=https://github.com/goffamartin/homelab-control-plane
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=hlcp
+Group=hlcp
+SupplementaryGroups=docker
+ExecStart=/usr/local/bin/hlcp-agent -config /etc/hlcp/agent.yaml
+Restart=always
+RestartSec=5s
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/hlcp
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+UMask=0027
+
+[Install]
+WantedBy=multi-user.target
