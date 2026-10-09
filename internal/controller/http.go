@@ -86,7 +86,7 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 			localapi.Error(writer, status, code, message)
 			return
 		}
-		requestContext, cancel := contextWithTimeout(request, 30*time.Second)
+		requestContext, cancel := contextWithTimeout(request, server.sessions.policy.ResultTimeout+time.Second)
 		defer cancel()
 		result, err := server.sessions.Execute(requestContext, request.PathValue("node"), command)
 		if err != nil {
@@ -96,12 +96,30 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 				status = http.StatusServiceUnavailable
 			case errors.Is(err, context.DeadlineExceeded):
 				status = http.StatusGatewayTimeout
+			case errors.Is(err, ErrACKTimeout), errors.Is(err, ErrResultTimeout):
+				status = http.StatusGatewayTimeout
+			case errors.Is(err, ErrCommandAlreadyTracked):
+				status = http.StatusConflict
+			case errors.Is(err, ErrCommandCapacity):
+				status = http.StatusTooManyRequests
 			case errors.Is(err, context.Canceled):
 				status = 499 // Client Closed Request (non-standard but widely understood).
 			}
 			code := "EXECUTION_ERROR"
 			if status == http.StatusGatewayTimeout {
 				code = "TIMEOUT"
+			}
+			if errors.Is(err, ErrACKTimeout) {
+				code = "ACK_TIMEOUT"
+			}
+			if errors.Is(err, ErrResultTimeout) {
+				code = "RESULT_TIMEOUT"
+			}
+			if errors.Is(err, ErrCommandAlreadyTracked) {
+				code = "COMMAND_ALREADY_TRACKED"
+			}
+			if errors.Is(err, ErrCommandCapacity) {
+				code = "COMMAND_CAPACITY"
 			}
 			if status == 499 {
 				code = "CANCELED"

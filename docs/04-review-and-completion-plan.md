@@ -538,8 +538,9 @@ Stav realizace:
 | F3 | Dokončeno | Atomická session/inventory, bounded I/O a spojení, ordered inbound/liveness, korelace node výsledků, řízený shutdown; regresní testy a Linux `go test -race` |
 | F4 | Dokončeno | Verzovaný node-bound journal, OS zámek, durable Linux replace, migrace se zálohou, 24h replay ochrana a limity; fault injection, dva procesy, abrupt exit a Linux race testy |
 | F5 | Dokončeno | Durable queued → ACK → running → terminal, bounded single worker, reconnect deduplikace, rušení a omezený výstup; Windows test/vet a Linux race |
-| F6–F11 | Plánováno | Kritéria jednotlivých fází výše |
+| F6 | Rozpracováno | První blok: node-scoped ACK/progress, omezené pokusy a oddělené ACK/result timeouty; Windows test/vet a Linux race. Zbývá durable ledger, HTTP idempotence, pozdní výsledky a read-only reconciliation |
+| F7–F11 | Plánováno | Kritéria jednotlivých fází výše |
 
-Nejbližší implementační krok je F6 (controller ledger a reconciliation); další rozšiřování feature setu počká
+Nejbližší implementační krok je druhý blok F6 (controller ledger a reconciliation); další rozšiřování feature setu počká
 na opravu základních vlastností. Není důvod přepisovat celý projekt: framing,
 základní TLS setup, datové modely a adapter boundary lze zachovat a postupně zpevnit.

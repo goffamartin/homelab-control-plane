@@ -21,6 +21,7 @@ type Config struct {
 	HandshakeTimeout time.Duration
 	Logger           *slog.Logger
 	MaxConnections   int
+	CommandRetry     RetryPolicy
 }
 type Server struct {
 	listener        net.Listener
@@ -38,6 +39,12 @@ func Listen(address string, config Config) (*Server, error) {
 		return nil, errors.New("hlcp controller: TLS configuration is required")
 	}
 	if err := config.LivenessPolicy.Validate(); err != nil {
+		return nil, err
+	}
+	if config.CommandRetry == (RetryPolicy{}) {
+		config.CommandRetry = DefaultRetryPolicy()
+	}
+	if err := config.CommandRetry.Validate(); err != nil {
 		return nil, err
 	}
 	if config.HandshakeTimeout <= 0 {
@@ -58,6 +65,7 @@ func Listen(address string, config Config) (*Server, error) {
 	}
 	tracker := NewCommandTracker()
 	sessions := NewActiveSessions(tracker)
+	sessions.policy = config.CommandRetry
 	return &Server{listener: listener, config: config, registry: sessions.registry, sessions: sessions, connections: make(map[net.Conn]struct{})}, nil
 }
 func (server *Server) Address() net.Addr         { return server.listener.Addr() }

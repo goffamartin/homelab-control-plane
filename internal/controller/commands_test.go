@@ -12,7 +12,7 @@ func TestCommandTrackerCorrelatesResult(t *testing.T) {
 	if err := tracker.Track("cmd-1"); err != nil {
 		t.Fatal(err)
 	}
-	go tracker.Complete(protocol.CommandResultPayload{CommandID: "cmd-1", Success: true})
+	go tracker.Complete(protocol.CommandResultPayload{CommandID: "cmd-1", Success: true, Code: "OK"})
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 	result, err := tracker.Wait(ctx, "cmd-1")

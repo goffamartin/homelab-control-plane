@@ -132,7 +132,34 @@ The controller retries the same `command_id` after an acknowledgement timeout. T
 
 This produces **at-least-once delivery attempt with at-most-once execution within the retained journal window**. It does not claim global exactly-once behaviour: an unrecoverable agent crash between external side effect and durable journal update remains a fundamental ambiguity. V1 therefore limits actions to operationally idempotent resource lifecycle actions and documents the remaining risk.
 
-`COMMAND` carries only `command_id`, `resource_id`, and `action`. `COMMAND_ACK` confirms acceptance (`accepted` or `in_progress`); `COMMAND_RESULT` carries the terminal success flag, stable error code, and diagnostic message. The controller resends an unresolved command with the same `command_id` every five seconds until its caller deadline. Neither payload contains a shell command, adapter target, or implementation-specific service name.
+`COMMAND` carries only `command_id`, `resource_id`, and `action`. `COMMAND_ACK`
+reports `accepted`, `in_progress`, `completed` (cached) or `rejected`;
+`COMMAND_RESULT` carries the terminal success flag, stable error code, and
+diagnostic message. Neither payload contains a shell command, adapter target,
+or implementation-specific service name.
+
+The first F6 slice records command progress in memory, keyed by node and command
+ID: immutable payload, admission/deadline timestamps, ACK status and attempt
+count. It bounds active commands to 128. Default policy is a five-second ACK
+window including sending, at most six attempts and a 30-second overall result
+deadline. All delivery attempts (including disconnected/failed sends) consume
+the budget. Only a missing ACK permits retransmission of the same command ID;
+any valid ACK stops execution retries, including permanent rejection. A result
+can arrive without an ACK and completes the wait directly.
+
+Controller flags `--command-ack-timeout`, `--command-result-timeout` and
+`--command-max-attempts` configure the policy. Limits are 1 minute, 24 hours and
+100 attempts respectively; ACK timeout must not exceed the result deadline.
+Caller cancellation/deadline also bounds sending. HTTP reports `ACK_TIMEOUT` or
+`RESULT_TIMEOUT` (504), temporary already-tracked conflicts (409) and active
+capacity exhaustion (429). Timeout does not prove the action was not executed.
+
+This first slice is not yet a durable operation service: it removes tracking at
+the end of the caller wait, rejects concurrent same-ID submissions and does not
+query the journal on reconnect. Late results after client timeout are not yet
+retained. The remaining F6 ledger/reconciliation slice must fix these limitations
+before command lifecycle acceptance is complete; no automatic execution retry
+after an acknowledged reconnect is used as a substitute for a read-only query.
 
 The MVP uses a node-bound version-3 agent-local JSON journal protected by an
 exclusive process lock. On Linux, persistence syncs the temporary file and the

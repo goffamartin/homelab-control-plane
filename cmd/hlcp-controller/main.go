@@ -27,7 +27,16 @@ func main() {
 	interval := flag.Duration("heartbeat-interval", 5*time.Second, "agent heartbeat interval")
 	degraded := flag.Uint("degraded-after", 2, "missed intervals before degraded")
 	offline := flag.Uint("offline-after", 3, "missed intervals before offline")
+	retryDefaults := controller.DefaultRetryPolicy()
+	ackTimeout := flag.Duration("command-ack-timeout", retryDefaults.ACKTimeout, "maximum time for each command ACK attempt")
+	resultTimeout := flag.Duration("command-result-timeout", retryDefaults.ResultTimeout, "maximum command execution/result wait")
+	maxAttempts := flag.Int("command-max-attempts", retryDefaults.MaxAttempts, "maximum delivery attempts before ACK")
 	flag.Parse()
+	commandRetry := controller.RetryPolicy{ACKTimeout: *ackTimeout, ResultTimeout: *resultTimeout, MaxAttempts: *maxAttempts}
+	if err := commandRetry.Validate(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
 	if err := localapi.ValidateAddress(*apiListen); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
@@ -46,7 +55,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "invalid TLS configuration: %v\n", err)
 		os.Exit(2)
 	}
-	server, err := controller.Listen(*listen, controller.Config{TLSConfig: tlsConfig, LivenessPolicy: liveness.Policy{HeartbeatInterval: *interval, DegradedAfter: uint8(*degraded), OfflineAfter: uint8(*offline)}})
+	server, err := controller.Listen(*listen, controller.Config{TLSConfig: tlsConfig, LivenessPolicy: liveness.Policy{HeartbeatInterval: *interval, DegradedAfter: uint8(*degraded), OfflineAfter: uint8(*offline)}, CommandRetry: commandRetry})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cannot start controller: %v\n", err)
 		os.Exit(1)
@@ -60,7 +69,7 @@ func main() {
 		os.Exit(1)
 	}
 	defer apiListener.Close()
-	api := &http.Server{Addr: *apiListen, Handler: server.HTTPHandler(apiToken), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 35 * time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192}
+	api := &http.Server{Addr: *apiListen, Handler: server.HTTPHandler(apiToken), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: *resultTimeout + 5*time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192}
 	fmt.Printf("HLCP controller listening on %s (%s)\n", server.Address(), transport.ALPN)
 	fmt.Printf("HLCP local API listening on %s\n", *apiListen)
 	if err := serveProcesses(ctx, server, api, apiListener); err != nil {
