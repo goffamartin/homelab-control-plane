@@ -1,64 +1,82 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"hlcp/internal/protocol"
 	"net"
+	"time"
 )
 
-// Inbound owns the sole reader for a controller-side session.
-type Inbound struct {
-	Heartbeats chan protocol.HeartbeatPayload
-	Acks       chan protocol.CommandACKPayload
-	Results    chan protocol.CommandResultPayload
-	Errors     chan error
+type InboundEvent struct {
+	Heartbeat  *protocol.HeartbeatPayload
+	Ack        *protocol.CommandACKPayload
+	Result     *protocol.CommandResultPayload
+	ReceivedAt time.Time
 }
 
-func StartInbound(connection net.Conn) *Inbound {
-	inbound := &Inbound{Heartbeats: make(chan protocol.HeartbeatPayload, 16), Acks: make(chan protocol.CommandACKPayload, 16), Results: make(chan protocol.CommandResultPayload, 16), Errors: make(chan error, 1)}
+// Inbound preserves wire ordering and owns the only reader. Cancellation closes
+// the socket and interrupts even a full dispatch queue.
+type Inbound struct {
+	Events chan InboundEvent
+	Errors chan error
+	Done   chan struct{}
+}
+
+func StartInbound(ctx context.Context, connection net.Conn) *Inbound {
+	inbound := &Inbound{Events: make(chan InboundEvent, 16), Errors: make(chan error, 1), Done: make(chan struct{})}
 	go func() {
-		defer close(inbound.Heartbeats)
-		defer close(inbound.Acks)
-		defer close(inbound.Results)
+		stop := context.AfterFunc(ctx, func() { _ = connection.Close() })
+		defer stop()
+		defer close(inbound.Done)
+		defer close(inbound.Events)
+		var sequence uint64
 		for {
 			frame, err := protocol.Decode(connection)
 			if err != nil {
 				inbound.Errors <- err
 				return
 			}
+			event := InboundEvent{ReceivedAt: time.Now()}
 			switch frame.Header.Type {
 			case protocol.MessageHeartbeat:
-				var value protocol.HeartbeatPayload
-				err = protocol.DecodePayload(frame.Payload, &value)
+				value := new(protocol.HeartbeatPayload)
+				err = protocol.DecodePayload(frame.Payload, value)
 				if err == nil {
 					err = value.Validate()
 				}
+				if err == nil && value.Sequence <= sequence {
+					err = ErrNonIncreasingHeartbeat
+				}
 				if err == nil {
-					inbound.Heartbeats <- value
+					sequence = value.Sequence
+					event.Heartbeat = value
 				}
 			case protocol.MessageCommandACK:
-				var value protocol.CommandACKPayload
-				err = protocol.DecodePayload(frame.Payload, &value)
+				value := new(protocol.CommandACKPayload)
+				err = protocol.DecodePayload(frame.Payload, value)
 				if err == nil {
 					err = value.Validate()
 				}
-				if err == nil {
-					inbound.Acks <- value
-				}
+				event.Ack = value
 			case protocol.MessageCommandResult:
-				var value protocol.CommandResultPayload
-				err = protocol.DecodePayload(frame.Payload, &value)
+				value := new(protocol.CommandResultPayload)
+				err = protocol.DecodePayload(frame.Payload, value)
 				if err == nil {
 					err = value.Validate()
 				}
-				if err == nil {
-					inbound.Results <- value
-				}
+				event.Result = value
 			default:
 				err = fmt.Errorf("unexpected inbound message type %d", frame.Header.Type)
 			}
 			if err != nil {
 				inbound.Errors <- err
+				return
+			}
+			select {
+			case inbound.Events <- event:
+			case <-ctx.Done():
+				inbound.Errors <- ctx.Err()
 				return
 			}
 		}

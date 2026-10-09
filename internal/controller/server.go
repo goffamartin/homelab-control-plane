@@ -20,12 +20,17 @@ type Config struct {
 	LivenessPolicy   liveness.Policy
 	HandshakeTimeout time.Duration
 	Logger           *slog.Logger
+	MaxConnections   int
 }
 type Server struct {
-	listener net.Listener
-	config   Config
-	registry *Registry
-	sessions *ActiveSessions
+	listener        net.Listener
+	config          Config
+	registry        *Registry
+	sessions        *ActiveSessions
+	connectionMutex sync.Mutex
+	connections     map[net.Conn]struct{}
+	closed          bool
+	workers         sync.WaitGroup
 }
 
 func Listen(address string, config Config) (*Server, error) {
@@ -41,21 +46,42 @@ func Listen(address string, config Config) (*Server, error) {
 	if config.Logger == nil {
 		config.Logger = slog.Default()
 	}
+	if config.MaxConnections < 0 {
+		return nil, errors.New("max connections must not be negative")
+	}
+	if config.MaxConnections == 0 {
+		config.MaxConnections = 128
+	}
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		return nil, fmt.Errorf("listen on %s: %w", address, err)
 	}
 	tracker := NewCommandTracker()
-	return &Server{listener: listener, config: config, registry: NewRegistry(), sessions: NewActiveSessions(tracker)}, nil
+	sessions := NewActiveSessions(tracker)
+	return &Server{listener: listener, config: config, registry: sessions.registry, sessions: sessions, connections: make(map[net.Conn]struct{})}, nil
 }
 func (server *Server) Address() net.Addr         { return server.listener.Addr() }
 func (server *Server) Registry() *Registry       { return server.registry }
 func (server *Server) Sessions() *ActiveSessions { return server.sessions }
-func (server *Server) Close() error              { return server.listener.Close() }
+func (server *Server) Close() error {
+	server.connectionMutex.Lock()
+	server.closed = true
+	err := server.listener.Close()
+	for connection := range server.connections {
+		_ = connection.Close()
+	}
+	server.connectionMutex.Unlock()
+	server.workers.Wait()
+	if errors.Is(err, net.ErrClosed) {
+		return nil
+	}
+	return err
+}
 
 func (server *Server) Serve(ctx context.Context) error {
-	var closeOnce sync.Once
-	go func() { <-ctx.Done(); closeOnce.Do(func() { _ = server.Close() }) }()
+	stop := context.AfterFunc(ctx, func() { _ = server.Close() })
+	defer stop()
+	defer server.Close()
 	for {
 		rawConnection, err := server.listener.Accept()
 		if err != nil {
@@ -64,11 +90,30 @@ func (server *Server) Serve(ctx context.Context) error {
 			}
 			return fmt.Errorf("accept agent connection: %w", err)
 		}
-		go server.handleConnection(rawConnection)
+		server.connectionMutex.Lock()
+		if server.closed || len(server.connections) >= server.config.MaxConnections {
+			server.connectionMutex.Unlock()
+			_ = rawConnection.Close()
+			continue
+		}
+		server.connections[rawConnection] = struct{}{}
+		server.workers.Add(1)
+		server.connectionMutex.Unlock()
+		go func() {
+			defer server.workers.Done()
+			defer func() {
+				server.connectionMutex.Lock()
+				delete(server.connections, rawConnection)
+				server.connectionMutex.Unlock()
+			}()
+			server.handleConnection(ctx, rawConnection)
+		}()
 	}
 }
 
-func (server *Server) handleConnection(raw net.Conn) {
+func (server *Server) handleConnection(parent context.Context, raw net.Conn) {
+	ctx, cancel := context.WithCancel(parent)
+	defer cancel()
 	defer raw.Close()
 	connection := tls.Server(raw, server.config.TLSConfig)
 	if err := connection.SetDeadline(time.Now().Add(server.config.HandshakeTimeout)); err != nil {
@@ -100,16 +145,19 @@ func (server *Server) handleConnection(raw net.Conn) {
 		return
 	}
 	registeredAt := time.Now()
-	server.registry.Register(registration, synchronization, registeredAt)
 	tracker, _ := liveness.NewTracker(server.config.LivenessPolicy, registeredAt)
 	writer := session.NewWriter(connection, 4)
-	server.sessions.Register(registration.NodeID, writer)
+	server.sessions.Publish(registration, synchronization, registeredAt, writer, cancel)
 	defer server.sessions.Remove(registration.NodeID, writer)
-	inbound := session.StartInbound(connection)
+	inbound := session.StartInbound(ctx, connection)
+	defer func() { cancel(); _ = raw.Close(); <-inbound.Done }()
 	server.config.Logger.Info("agent registered", "node", registration.NodeID, "session", registration.SessionID)
-	err = session.RunInboundLoop(inbound, tracker, func(change session.StateChange) {
+	err = session.RunInboundLoop(ctx, inbound, tracker, func(change session.StateChange) {
 		server.registry.UpdateLiveness(registration.NodeID, registration.SessionID, change.State, change.LastActivity)
-	}, func(result protocol.CommandResultPayload) { server.sessions.HandleResult(result) })
-	server.registry.UpdateLiveness(registration.NodeID, registration.SessionID, liveness.NodeOffline, time.Now())
+	}, func(ack protocol.CommandACKPayload) bool {
+		return server.sessions.HandleAck(registration.NodeID, writer, ack)
+	}, func(result protocol.CommandResultPayload) bool {
+		return server.sessions.HandleResult(registration.NodeID, writer, result)
+	})
 	server.config.Logger.Info("agent session ended", "node", registration.NodeID, "session", registration.SessionID, "error", err)
 }

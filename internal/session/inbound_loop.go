@@ -1,15 +1,22 @@
 package session
 
 import (
+	"context"
 	"hlcp/internal/liveness"
 	"hlcp/internal/protocol"
 	"time"
 )
 
-// RunInboundLoop derives liveness and forwards command results from the sole reader.
-func RunInboundLoop(inbound *Inbound, tracker *liveness.Tracker, onState func(StateChange), onResult func(protocol.CommandResultPayload)) error {
+// RunInboundLoop records only activity belonging to this session and a known
+// command. onState publishes last_seen for every valid event.
+func RunInboundLoop(ctx context.Context, inbound *Inbound, tracker *liveness.Tracker, onState func(StateChange), onAck func(protocol.CommandACKPayload) bool, onResult func(protocol.CommandResultPayload) bool) error {
 	timer := time.NewTimer(time.Until(tracker.NextEvaluationAt()))
 	defer timer.Stop()
+	publish := func(snapshot liveness.Snapshot) {
+		if onState != nil {
+			onState(StateChange{State: snapshot.State, LastActivity: snapshot.LastActivity})
+		}
+	}
 	reset := func() {
 		if !timer.Stop() {
 			select {
@@ -21,33 +28,27 @@ func RunInboundLoop(inbound *Inbound, tracker *liveness.Tracker, onState func(St
 	}
 	for {
 		select {
-		case heartbeat, ok := <-inbound.Heartbeats:
+		case <-ctx.Done():
+			return ctx.Err()
+		case event, ok := <-inbound.Events:
 			if !ok {
 				return <-inbound.Errors
 			}
-			_ = heartbeat
-			snapshot := tracker.RecordActivity(time.Now())
-			if snapshot.Changed && onState != nil {
-				onState(StateChange{State: snapshot.State, LastActivity: snapshot.LastActivity})
+			valid := event.Heartbeat != nil
+			if event.Ack != nil && onAck != nil {
+				valid = onAck(*event.Ack)
 			}
-			reset()
-		case _, ok := <-inbound.Acks:
-			if !ok {
-				return <-inbound.Errors
+			if event.Result != nil && onResult != nil {
+				valid = onResult(*event.Result)
 			}
-		case result, ok := <-inbound.Results:
-			if !ok {
-				return <-inbound.Errors
+			if valid {
+				publish(tracker.RecordActivity(event.ReceivedAt))
+				reset()
 			}
-			if onResult != nil {
-				onResult(result)
-			}
-		case err := <-inbound.Errors:
-			return err
 		case <-timer.C:
 			snapshot := tracker.Evaluate(time.Now())
-			if snapshot.Changed && onState != nil {
-				onState(StateChange{State: snapshot.State, LastActivity: snapshot.LastActivity})
+			if snapshot.Changed {
+				publish(snapshot)
 			}
 			if snapshot.State == liveness.NodeOffline {
 				return ErrNodeOffline
