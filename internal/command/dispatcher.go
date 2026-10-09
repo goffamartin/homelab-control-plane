@@ -1,8 +1,9 @@
-// Package command executes only registered resource actions and caches results
-// by command ID to make retries safe within the agent process lifetime.
+// Package command executes registered resource actions with durable
+// command-ID deduplication.
 package command
 
 import (
+	"errors"
 	"sync"
 
 	"hlcp/internal/protocol"
@@ -13,11 +14,11 @@ type Executor func(action string) protocol.CommandResultPayload
 type Dispatcher struct {
 	mutex     sync.Mutex
 	executors map[string]Executor
-	results   map[string]protocol.CommandResultPayload
+	journal   Journal
 }
 
-func NewDispatcher() *Dispatcher {
-	return &Dispatcher{executors: make(map[string]Executor), results: make(map[string]protocol.CommandResultPayload)}
+func NewDispatcher(journal Journal) *Dispatcher {
+	return &Dispatcher{executors: make(map[string]Executor), journal: journal}
 }
 
 // Register exposes exactly one configured resource. Callers cannot pass an
@@ -32,16 +33,28 @@ func (dispatcher *Dispatcher) Execute(command protocol.CommandPayload) (protocol
 	}
 	dispatcher.mutex.Lock()
 	defer dispatcher.mutex.Unlock()
-	if cached, found := dispatcher.results[command.CommandID]; found {
-		return protocol.CommandACKPayload{CommandID: command.CommandID, Status: "completed"}, cached
-	}
 	executor, found := dispatcher.executors[command.ResourceID]
 	if !found {
 		return reject(command, "TARGET_NOT_FOUND", "resource is not registered")
 	}
+	entry, fresh, err := dispatcher.journal.Begin(command)
+	if err != nil {
+		if errors.Is(err, ErrDuplicateConflict) {
+			return reject(command, "DUPLICATE_CONFLICT", err.Error())
+		}
+		return reject(command, "JOURNAL_FAILURE", err.Error())
+	}
+	if !fresh {
+		if entry.Result != nil {
+			return protocol.CommandACKPayload{CommandID: command.CommandID, Status: "completed"}, *entry.Result
+		}
+		return protocol.CommandACKPayload{CommandID: command.CommandID, Status: "in_progress"}, protocol.CommandResultPayload{CommandID: command.CommandID, Code: "IN_PROGRESS", Message: "command is already running"}
+	}
 	result := executor(command.Action)
 	result.CommandID = command.CommandID
-	dispatcher.results[command.CommandID] = result
+	if err := dispatcher.journal.Complete(result); err != nil {
+		return protocol.CommandACKPayload{CommandID: command.CommandID, Status: "accepted"}, protocol.CommandResultPayload{CommandID: command.CommandID, Code: "JOURNAL_FAILURE", Message: err.Error()}
+	}
 	return protocol.CommandACKPayload{CommandID: command.CommandID, Status: "accepted"}, result
 }
 

@@ -3,6 +3,8 @@ server_name: controller.home.goffa.cz
 certificate_file: /etc/hlcp/agent.crt
 private_key_file: /etc/hlcp/agent.key
 ca_file: /etc/hlcp/ca.crt
+journal_file: /var/lib/hlcp/command-journal.json
+journal_retention: 1024
 node_id: debian-01
 agent_version: 0.1.0
 capabilities: [resource.control, systemd]
