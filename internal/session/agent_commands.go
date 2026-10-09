@@ -24,12 +24,21 @@ func RunAgentCommandLoop(parent context.Context, connection net.Conn, writer *Wr
 		if err != nil {
 			return err
 		}
-		if frame.Header.Type != protocol.MessageCommand {
+		if frame.Header.Type != protocol.MessageCommand && frame.Header.Type != protocol.MessageCommandQuery {
 			return fmt.Errorf("unexpected agent message type %d", frame.Header.Type)
 		}
 		var payload protocol.CommandPayload
 		if err := protocol.DecodePayload(frame.Payload, &payload); err != nil {
 			return err
+		}
+		if err := payload.Validate(); err != nil {
+			return err
+		}
+		if frame.Header.Type == protocol.MessageCommandQuery {
+			if err := writer.SendContext(ctx, protocol.MessageCommandState, dispatcher.Query(payload)); err != nil {
+				return err
+			}
+			continue
 		}
 		admission := dispatcher.Admit(payload)
 		reserved := false

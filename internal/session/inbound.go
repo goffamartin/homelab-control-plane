@@ -9,10 +9,11 @@ import (
 )
 
 type InboundEvent struct {
-	Heartbeat  *protocol.HeartbeatPayload
-	Ack        *protocol.CommandACKPayload
-	Result     *protocol.CommandResultPayload
-	ReceivedAt time.Time
+	Heartbeat    *protocol.HeartbeatPayload
+	Ack          *protocol.CommandACKPayload
+	Result       *protocol.CommandResultPayload
+	CommandState *protocol.CommandStatePayload
+	ReceivedAt   time.Time
 }
 
 // Inbound preserves wire ordering and owns the only reader. Cancellation closes
@@ -66,6 +67,13 @@ func StartInbound(ctx context.Context, connection net.Conn) *Inbound {
 					err = value.Validate()
 				}
 				event.Result = value
+			case protocol.MessageCommandState:
+				value := new(protocol.CommandStatePayload)
+				err = protocol.DecodePayload(frame.Payload, value)
+				if err == nil {
+					err = value.Validate()
+				}
+				event.CommandState = value
 			default:
 				err = fmt.Errorf("unexpected inbound message type %d", frame.Header.Type)
 			}

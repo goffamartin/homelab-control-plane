@@ -9,7 +9,7 @@ import (
 
 // RunInboundLoop records only activity belonging to this session and a known
 // command. onState publishes last_seen for every valid event.
-func RunInboundLoop(ctx context.Context, inbound *Inbound, tracker *liveness.Tracker, onState func(StateChange), onAck func(protocol.CommandACKPayload) bool, onResult func(protocol.CommandResultPayload) bool) error {
+func RunInboundLoop(ctx context.Context, inbound *Inbound, tracker *liveness.Tracker, onState func(StateChange), onAck func(protocol.CommandACKPayload) bool, onResult func(protocol.CommandResultPayload) bool, onCommandState ...func(protocol.CommandStatePayload) bool) error {
 	timer := time.NewTimer(time.Until(tracker.NextEvaluationAt()))
 	defer timer.Stop()
 	publish := func(snapshot liveness.Snapshot) {
@@ -40,6 +40,9 @@ func RunInboundLoop(ctx context.Context, inbound *Inbound, tracker *liveness.Tra
 			}
 			if event.Result != nil && onResult != nil {
 				valid = onResult(*event.Result)
+			}
+			if event.CommandState != nil && len(onCommandState) > 0 && onCommandState[0] != nil {
+				valid = onCommandState[0](*event.CommandState)
 			}
 			if valid {
 				publish(tracker.RecordActivity(event.ReceivedAt))
