@@ -77,7 +77,7 @@ func TestReconciliationWireResponseIsPersistedWithoutExecution(t *testing.T) {
 	livenessTracker, _ := liveness.NewTracker(liveness.Policy{HeartbeatInterval: time.Second, DegradedAfter: 2, OfflineAfter: 3}, time.Now())
 	inboundDone := make(chan error, 1)
 	go func() {
-		inboundDone <- session.RunInboundLoop(ctx, inbound, livenessTracker, nil, func(ack protocol.CommandACKPayload) bool { return sessions.HandleAck("n", writer, ack) }, func(result protocol.CommandResultPayload) bool { return sessions.HandleResult("n", writer, result) }, func(state protocol.CommandStatePayload) bool { return sessions.HandleCommandState("n", writer, state) })
+		inboundDone <- session.RunInboundLoop(ctx, inbound, livenessTracker, nil, func(ack protocol.CommandACKPayload) bool { return sessions.HandleAck("n", writer, ack) }, func(result protocol.CommandResultPayload) bool { return sessions.HandleResult("n", writer, result) }, session.InboundHandlers{CommandState: func(state protocol.CommandStatePayload) bool { return sessions.HandleCommandState("n", writer, state) }})
 	}()
 	reconcileDone := make(chan struct{})
 	go func() { defer close(reconcileDone); sessions.Reconcile(ctx, "n", writer) }()

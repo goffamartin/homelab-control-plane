@@ -23,13 +23,26 @@ resources:
     adapter: docker
     target: example-catalog
     actions: [status, restart]
-    state: unknown
 `
 
 func TestLoadRejectsUnknownConfigurationField(t *testing.T) {
 	path := writeConfig(t, validConfigYAML+"unexpected: true\n")
 	if _, err := Load(path); err == nil {
 		t.Fatal("Load() error = nil, want unknown field error")
+	}
+}
+
+func TestObservationConfigurationDoesNotDeclareState(t *testing.T) {
+	if _, err := Load(writeConfig(t, validConfigYAML+"    state: running\n")); err == nil {
+		t.Fatal("legacy YAML state accepted")
+	}
+	for _, interval := range []string{"-1s", "500ms", "6m"} {
+		if _, err := Load(writeConfig(t, validConfigYAML+"observation_interval: "+interval+"\n")); err == nil {
+			t.Fatalf("interval=%s accepted", interval)
+		}
+	}
+	if _, err := Load(writeConfig(t, validConfigYAML+"observation_interval: 10s\n")); err != nil {
+		t.Fatal(err)
 	}
 }
 

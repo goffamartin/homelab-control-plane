@@ -7,9 +7,15 @@ import (
 	"time"
 )
 
-// RunInboundLoop records only activity belonging to this session and a known
-// command. onState publishes last_seen for every valid event.
-func RunInboundLoop(ctx context.Context, inbound *Inbound, tracker *liveness.Tracker, onState func(StateChange), onAck func(protocol.CommandACKPayload) bool, onResult func(protocol.CommandResultPayload) bool, onCommandState ...func(protocol.CommandStatePayload) bool) error {
+// InboundHandlers handles optional command queries and live resource updates.
+type InboundHandlers struct {
+	CommandState func(protocol.CommandStatePayload) bool
+	StateUpdate  func(protocol.StateUpdate) bool
+}
+
+// RunInboundLoop records only correlated activity belonging to this session.
+// onState publishes last_seen for every valid event.
+func RunInboundLoop(ctx context.Context, inbound *Inbound, tracker *liveness.Tracker, onState func(StateChange), onAck func(protocol.CommandACKPayload) bool, onResult func(protocol.CommandResultPayload) bool, handlers ...InboundHandlers) error {
 	timer := time.NewTimer(time.Until(tracker.NextEvaluationAt()))
 	defer timer.Stop()
 	publish := func(snapshot liveness.Snapshot) {
@@ -41,8 +47,11 @@ func RunInboundLoop(ctx context.Context, inbound *Inbound, tracker *liveness.Tra
 			if event.Result != nil && onResult != nil {
 				valid = onResult(*event.Result)
 			}
-			if event.CommandState != nil && len(onCommandState) > 0 && onCommandState[0] != nil {
-				valid = onCommandState[0](*event.CommandState)
+			if event.CommandState != nil && len(handlers) > 0 && handlers[0].CommandState != nil {
+				valid = handlers[0].CommandState(*event.CommandState)
+			}
+			if event.StateUpdate != nil && len(handlers) > 0 && handlers[0].StateUpdate != nil {
+				valid = handlers[0].StateUpdate(*event.StateUpdate)
 			}
 			if valid {
 				publish(tracker.RecordActivity(event.ReceivedAt))

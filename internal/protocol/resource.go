@@ -3,6 +3,7 @@ package protocol
 import (
 	"errors"
 	"fmt"
+	"time"
 )
 
 const (
@@ -82,18 +83,49 @@ func (snapshot InventorySnapshot) Validate() error {
 }
 
 // ResourceState is a current agent observation, not a desired state. State is
-// intentionally extensible; examples include running, stopped, failed, and
-// unknown.
+// limited to running/stopped/unknown/error. Stale is a controller-only projection.
 type ResourceState struct {
-	ResourceID string `cbor:"resource_id" json:"resource_id"`
-	State      string `cbor:"state" json:"state"`
+	ResourceID string    `cbor:"resource_id" json:"resource_id"`
+	State      string    `cbor:"state" json:"state"`
+	ObservedAt time.Time `cbor:"observed_at" json:"observed_at"`
+	Code       string    `cbor:"code,omitempty" json:"code,omitempty"`
+	Message    string    `cbor:"message,omitempty" json:"message,omitempty"`
+	Stale      bool      `cbor:"-" json:"stale"`
 }
 
 func (state ResourceState) validate() error {
 	if !isIdentifier(state.ResourceID, maxResourceIDLength) || !isIdentifier(state.State, maxStateLength) {
 		return ErrInvalidResourceState
 	}
+	switch state.State {
+	case "running", "stopped", "unknown", "error":
+	default:
+		return ErrInvalidResourceState
+	}
+	if state.Code != "" && !isIdentifier(state.Code, maxActionLength) || len(state.Message) > maxDiagnosticLength {
+		return ErrInvalidResourceState
+	}
+	if state.ObservedAt.IsZero() && (state.State != "unknown" || state.Code != "NOT_OBSERVED") {
+		return ErrInvalidResourceState
+	}
+	if state.ObservedAt.Year() < 1 || state.ObservedAt.Year() > 9999 {
+		return ErrInvalidResourceState
+	}
 	return nil
+}
+
+type StateUpdate struct {
+	SessionID         string        `cbor:"session_id" json:"session_id"`
+	InventoryRevision uint64        `cbor:"inventory_revision" json:"inventory_revision"`
+	Revision          uint64        `cbor:"revision" json:"revision"`
+	Resource          ResourceState `cbor:"resource" json:"resource"`
+}
+
+func (update StateUpdate) Validate() error {
+	if !isIdentifier(update.SessionID, maxSessionIDLength) || update.InventoryRevision == 0 || update.Revision == 0 {
+		return ErrInvalidResourceState
+	}
+	return update.Resource.validate()
 }
 
 // StateSnapshot replaces dynamic resource state for the stated inventory

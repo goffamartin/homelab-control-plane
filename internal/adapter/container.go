@@ -14,6 +14,9 @@ type Container struct {
 }
 
 func (adapter Container) Execute(ctx context.Context, action string) protocol.CommandResultPayload {
+	if action == "status" {
+		return statusResult(adapter.Observe(ctx))
+	}
 	if adapter.Name == "" || (adapter.Runtime != "docker" && adapter.Runtime != "podman") {
 		return failure("INVALID_CONFIGURATION", "container runtime and name are required")
 	}
@@ -22,8 +25,6 @@ func (adapter Container) Execute(ctx context.Context, action string) protocol.Co
 	}
 	var args []string
 	switch action {
-	case "status":
-		args = []string{"inspect", "--format", "{{.State.Status}}", adapter.Name}
 	case "start", "stop", "restart":
 		args = []string{action, adapter.Name}
 	default:

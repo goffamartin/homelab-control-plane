@@ -32,7 +32,12 @@ func main() {
 	resultTimeout := flag.Duration("command-result-timeout", retryDefaults.ResultTimeout, "maximum command execution/result wait")
 	maxAttempts := flag.Int("command-max-attempts", retryDefaults.MaxAttempts, "maximum delivery attempts before ACK")
 	ledgerFile := flag.String("ledger-file", "/var/lib/hlcp/controller-operations.json", "durable controller operation ledger")
+	stateMaxAge := flag.Duration("resource-state-max-age", time.Minute, "maximum age of a received resource observation")
 	flag.Parse()
+	if *stateMaxAge < time.Second || *stateMaxAge > 24*time.Hour {
+		fmt.Fprintln(os.Stderr, "resource-state-max-age must be 1s..24h")
+		os.Exit(2)
+	}
 	if *ledgerFile == "" {
 		fmt.Fprintln(os.Stderr, "ledger-file is required")
 		os.Exit(2)
@@ -60,7 +65,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "invalid TLS configuration: %v\n", err)
 		os.Exit(2)
 	}
-	server, err := controller.Listen(*listen, controller.Config{TLSConfig: tlsConfig, LivenessPolicy: liveness.Policy{HeartbeatInterval: *interval, DegradedAfter: uint8(*degraded), OfflineAfter: uint8(*offline)}, CommandRetry: commandRetry, LedgerFile: *ledgerFile})
+	server, err := controller.Listen(*listen, controller.Config{TLSConfig: tlsConfig, LivenessPolicy: liveness.Policy{HeartbeatInterval: *interval, DegradedAfter: uint8(*degraded), OfflineAfter: uint8(*offline)}, CommandRetry: commandRetry, LedgerFile: *ledgerFile, ResourceStateMaxAge: *stateMaxAge})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cannot start controller: %v\n", err)
 		os.Exit(1)

@@ -30,6 +30,7 @@ func NewActiveSessions(tracker *CommandTracker) *ActiveSessions {
 
 func (sessions *ActiveSessions) Publish(registration session.Registration, synchronization session.Synchronization, at time.Time, writer *session.Writer, cancel context.CancelFunc) {
 	record := NodeRecord{NodeID: registration.NodeID, AgentVersion: registration.AgentVersion, Capabilities: cloneStrings(registration.Capabilities), SessionID: registration.SessionID, State: "online", LastActivity: at, Inventory: cloneInventory(synchronization.Inventory), Resources: cloneState(synchronization.State)}
+	record.receivedAt = receivedObservations(record.Resources, at)
 	sessions.registry.mutex.Lock()
 	previous, exists := sessions.active[registration.NodeID]
 	sessions.active[registration.NodeID] = activeSession{writer: writer, sessionID: registration.SessionID, cancel: cancel}

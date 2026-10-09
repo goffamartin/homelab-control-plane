@@ -13,6 +13,7 @@ type InboundEvent struct {
 	Ack          *protocol.CommandACKPayload
 	Result       *protocol.CommandResultPayload
 	CommandState *protocol.CommandStatePayload
+	StateUpdate  *protocol.StateUpdate
 	ReceivedAt   time.Time
 }
 
@@ -67,6 +68,13 @@ func StartInbound(ctx context.Context, connection net.Conn) *Inbound {
 					err = value.Validate()
 				}
 				event.Result = value
+			case protocol.MessageStateUpdate:
+				value := new(protocol.StateUpdate)
+				err = protocol.DecodePayload(frame.Payload, value)
+				if err == nil {
+					err = value.Validate()
+				}
+				event.StateUpdate = value
 			case protocol.MessageCommandState:
 				value := new(protocol.CommandStatePayload)
 				err = protocol.DecodePayload(frame.Payload, value)

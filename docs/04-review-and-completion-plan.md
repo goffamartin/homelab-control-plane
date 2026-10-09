@@ -539,8 +539,10 @@ Stav realizace:
 | F4 | Dokončeno | Verzovaný node-bound journal, OS zámek, durable Linux replace, migrace se zálohou, 24h replay ochrana a limity; fault injection, dva procesy, abrupt exit a Linux race testy |
 | F5 | Dokončeno | Durable queued → ACK → running → terminal, bounded single worker, reconnect deduplikace, rušení a omezený výstup; Windows test/vet a Linux race |
 | F6 | Dokončeno | Verzovaný bounded controller ledger se zámkem, durable admission/ACK/result, HTTP idempotence a pozdní výsledky; query-only reconnect/restart i po expiraci. Fault injection, abrupt exit, wire recovery, Windows test/vet a Linux race |
-| F7–F11 | Plánováno | Kritéria jednotlivých fází výše |
+| F7 | Rozpracováno | Typed runtime observation, connect/post-action/periodic refresh, session/revision validace a freshness; Windows test/vet, Linux race, fake Docker/Podman a živý Docker lifecycle/externí stop. Zbývá živé ověření Podman, který v této stanici není dostupný |
+| F8–F11 | Plánováno | Kritéria jednotlivých fází výše |
 
-Nejbližší implementační krok je F7 (skutečné pozorování Docker/Podman resources).
+F7 má implementovaný observation/synchronization blok; zbývá živý Podman smoke
+na dostupném Podman hostu. F8 se bude věnovat finálnímu API/CLI kontraktu.
 Není důvod přepisovat celý projekt: framing,
 základní TLS setup, datové modely a adapter boundary lze zachovat a postupně zpevnit.

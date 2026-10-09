@@ -51,6 +51,9 @@ type Systemd struct {
 }
 
 func (adapter Systemd) Execute(ctx context.Context, action string) protocol.CommandResultPayload {
+	if action == "status" {
+		return statusResult(adapter.Observe(ctx))
+	}
 	if adapter.Unit == "" {
 		return failure("INVALID_CONFIGURATION", "systemd unit is required")
 	}
@@ -59,8 +62,6 @@ func (adapter Systemd) Execute(ctx context.Context, action string) protocol.Comm
 	}
 	var args []string
 	switch action {
-	case "status":
-		args = []string{"is-active", "--quiet", adapter.Unit}
 	case "start", "stop", "restart":
 		args = []string{action, adapter.Unit}
 	default:
@@ -92,6 +93,10 @@ func executionFailure(ctx context.Context, err error, output, action string) pro
 	}
 	if errors.Is(err, exec.ErrNotFound) {
 		return failure("RUNTIME_UNAVAILABLE", message)
+	}
+	state := observationFailure(ctx, err, output)
+	if state.Code != "OBSERVATION_FAILED" {
+		return failure(state.Code, state.Message)
 	}
 	return failure("EXECUTION_FAILED", message)
 }
