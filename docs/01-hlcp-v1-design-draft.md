@@ -1,6 +1,8 @@
 # HLCP v1 design draft
 
-**Status:** Draft — decisions marked “open” require confirmation before the wire contract is frozen.
+**Status:** Implementation draft. Core v1 decisions are frozen in `docs/adr`;
+wire details can change until the first tagged v1 release, but only through a
+coordinated protocol, test and documentation change.
 
 ## 1. Terminology
 
@@ -33,10 +35,10 @@ Each agent has a stable `node_id` set in configuration. It registers its capabil
 ```yaml
 node_id: debian-01
 resources:
-  - id: minecraft
-    type: service
-    adapter: systemd
-    target: minecraft.service
+  - id: example-catalog
+    type: container
+    adapter: docker
+    target: example-catalog
     actions: [status, start, stop, restart]
 ```
 
@@ -95,6 +97,12 @@ Structured payloads use stable field names in v1. New optional fields may be add
 | Synchronization | `INVENTORY_SNAPSHOT`, `STATE_SNAPSHOT`, `STATE_UPDATE` | Resource discovery and current state. |
 | Command | `COMMAND`, `COMMAND_ACK`, `COMMAND_RESULT` | Request, acceptance, and terminal result. |
 | Observation | `EVENT`, `METRIC` | Optional asynchronous observations. |
+
+The current prototype implements `HELLO`, `WELCOME`, `HEARTBEAT`,
+`INVENTORY_SNAPSHOT`, `STATE_SNAPSHOT`, `COMMAND`, `COMMAND_ACK` and
+`COMMAND_RESULT`. `STATE_UPDATE` is required by completed v1. `GOODBYE`, `ERROR`,
+`PING`, `PONG`, `EVENT` and `METRIC` are reserved by the v1 type registry but are
+not yet supported behaviours; receipt is rejected until their contracts exist.
 
 Unknown optional message types may be ignored only when their flag explicitly permits it. Unknown mandatory types produce `ERROR(PROTOCOL_ERROR)` and session closure.
 
@@ -168,6 +176,11 @@ Version 1 fixes the header format and core message semantics. Payloads may recei
 
 ## 13. MVP boundary
 
-Required: controller, agent, CLI, TLS transport, registration, heartbeats, complete inventory/state sync, command ACK/result tracking, reconnect, durable deduplication journal, and one systemd adapter.
+Required: controller, agent, CLI, TLS transport, identity-bound registration,
+heartbeats, complete inventory/state sync and updates, command ACK/result
+tracking, reconnect, durable deduplication journal, and Docker plus rootless
+Podman standalone-container adapters.
 
-Deferred: Docker adapter, metrics collection, rich events, web UI, multi-controller high availability, remote configuration changes, and any generic execution capability.
+Optional in v1: systemd adapter. Deferred: Docker Compose stacks, Kubernetes,
+metrics collection, rich events, web UI, multi-controller high availability,
+remote configuration changes, scheduling and any generic execution capability.

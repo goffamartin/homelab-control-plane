@@ -528,7 +528,13 @@ Hotovo: druhý člověk zopakuje scénář a závěry jsou doložené měřením
 | Provozně ověřené v1 | F10 | Debian instalace/reboot/upgrade a sledovatelný provoz. |
 | Dokončený semestrální projekt | F11 | Reprodukovatelná měření, report a prezentace. |
 
-Všechny fáze jsou při vytvoření tohoto dokumentu **navržené, nezahájené**.
-Nejbližší implementační krok je F0 a F1; další rozšiřování feature setu počká
+Stav realizace:
+
+| Fáze | Stav | Důkaz |
+|---|---|---|
+| F0 | Dokončeno | Accepted ADR 0001–0004, `05-v1-acceptance.md` a sjednocené projektové dokumenty |
+| F1–F11 | Plánováno | Kritéria jednotlivých fází výše |
+
+Nejbližší implementační krok je F1; další rozšiřování feature setu počká
 na opravu základních vlastností. Není důvod přepisovat celý projekt: framing,
 základní TLS setup, datové modely a adapter boundary lze zachovat a postupně zpevnit.
