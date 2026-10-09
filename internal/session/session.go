@@ -43,6 +43,7 @@ type Synchronization struct {
 
 // ControllerConfig selects the policy returned to a newly connected agent.
 type ControllerConfig struct {
+	ExpectedNodeID           string
 	SupportedVersions        []uint8
 	HeartbeatInterval        time.Duration
 	MissedHeartbeatThreshold uint8
@@ -76,6 +77,9 @@ func Accept(connection net.Conn, config ControllerConfig) (Registration, error) 
 	}
 	if err := hello.Validate(); err != nil {
 		return Registration{}, fmt.Errorf("validate HELLO payload: %w", err)
+	}
+	if config.ExpectedNodeID != "" && hello.NodeID != config.ExpectedNodeID {
+		return Registration{}, errors.New("hlcp session: HELLO node ID does not match certificate identity")
 	}
 
 	version, err := negotiateVersion(hello.ProtocolVersions, config.SupportedVersions)
