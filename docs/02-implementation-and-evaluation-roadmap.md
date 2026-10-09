@@ -34,6 +34,11 @@ Implement the allow-listed systemd adapter, command dispatch, ACK/result workflo
 
 **Exit criterion:** a repeated command ID causes one execution and returns the same terminal result after reconnect.
 
+**Current progress:** the agent uses a bounded, durable local command journal.
+It records an accepted command before execution and returns the stored terminal
+result for a duplicate command ID after agent restart. An incomplete record
+recovered after restart is reported as `EXECUTION_UNKNOWN` and is never replayed.
+
 ## Stage 5 — HomeLab deployment
 
 Package the agent as a single binary, configuration file, and systemd unit. Deploy the controller and an agent to isolated HomeLab nodes through WireGuard-only management access. Keep credentials and certificate private keys outside version control.

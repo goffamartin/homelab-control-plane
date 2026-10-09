@@ -125,7 +125,11 @@ This produces **at-least-once delivery attempt with at-most-once execution withi
 
 `COMMAND` carries only `command_id`, `resource_id`, and `action`. `COMMAND_ACK` confirms acceptance (`accepted` or `in_progress`); `COMMAND_RESULT` carries the terminal success flag, stable error code, and diagnostic message. Neither payload contains a shell command, adapter target, or implementation-specific service name.
 
-**Open:** select the journal persistence strategy for the MVP. Recommended: a small local durable store on the agent, with an explicit retention period; an in-memory journal is unsuitable for reboot/reconnect testing.
+The MVP uses a small agent-local JSON journal, atomically replaced after each
+state transition. Its path and retention limit are explicit agent settings.
+When the agent finds a record that was persisted as running after a restart,
+it converts it to a terminal `EXECUTION_UNKNOWN` result rather than replaying
+the potentially non-idempotent external side effect.
 
 ## 8. Heartbeat and failure detection
 

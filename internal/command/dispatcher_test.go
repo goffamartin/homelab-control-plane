@@ -6,7 +6,7 @@ import (
 )
 
 func TestDispatcherCachesDuplicateCommand(t *testing.T) {
-	dispatcher, calls := NewDispatcher(), 0
+	dispatcher, calls := newTestDispatcher(t), 0
 	dispatcher.Register("minecraft", func(action string) protocol.CommandResultPayload {
 		calls++
 		return protocol.CommandResultPayload{Success: action == "restart", Code: "OK"}
@@ -23,8 +23,17 @@ func TestDispatcherCachesDuplicateCommand(t *testing.T) {
 }
 
 func TestDispatcherRejectsUnknownResource(t *testing.T) {
-	ack, result := NewDispatcher().Execute(protocol.CommandPayload{CommandID: "cmd-1", ResourceID: "unknown", Action: "restart"})
+	ack, result := newTestDispatcher(t).Execute(protocol.CommandPayload{CommandID: "cmd-1", ResourceID: "unknown", Action: "restart"})
 	if ack.Status != "rejected" || result.Code != "TARGET_NOT_FOUND" {
 		t.Fatalf("result = %#v / %#v", ack, result)
 	}
+}
+
+func newTestDispatcher(t *testing.T) *Dispatcher {
+	t.Helper()
+	journal, err := OpenFileJournal(t.TempDir()+"/journal.json", 16)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return NewDispatcher(journal)
 }

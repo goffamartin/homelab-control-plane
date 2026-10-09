@@ -26,7 +26,11 @@ type ResourceConfig struct {
 }
 
 func (config Config) NewDispatcher() (*command.Dispatcher, error) {
-	dispatcher := command.NewDispatcher()
+	journal, err := command.OpenFileJournal(config.JournalFile, config.JournalRetention)
+	if err != nil {
+		return nil, err
+	}
+	dispatcher := command.NewDispatcher(journal)
 	for _, resource := range config.Resources {
 		if resource.Target == "" {
 			return nil, fmt.Errorf("resource %q: target is required", resource.ID)
@@ -63,6 +67,8 @@ type Config struct {
 	CertificateFile   string           `yaml:"certificate_file"`
 	PrivateKeyFile    string           `yaml:"private_key_file"`
 	CAFile            string           `yaml:"ca_file"`
+	JournalFile       string           `yaml:"journal_file"`
+	JournalRetention  int              `yaml:"journal_retention"`
 	NodeID            string           `yaml:"node_id"`
 	AgentVersion      string           `yaml:"agent_version"`
 	Capabilities      []string         `yaml:"capabilities"`
@@ -81,8 +87,8 @@ func Load(path string) (Config, error) {
 	return config, config.Validate()
 }
 func (config Config) Validate() error {
-	if config.ControllerAddress == "" || config.ServerName == "" || config.CertificateFile == "" || config.PrivateKeyFile == "" || config.CAFile == "" {
-		return errors.New("agent TLS/controller configuration is required")
+	if config.ControllerAddress == "" || config.ServerName == "" || config.CertificateFile == "" || config.PrivateKeyFile == "" || config.CAFile == "" || config.JournalFile == "" {
+		return errors.New("agent TLS/controller and command journal configuration is required")
 	}
 	hello := protocol.HelloPayload{ProtocolVersions: []uint8{protocol.ProtocolVersion}, NodeID: config.NodeID, AgentVersion: config.AgentVersion, Capabilities: config.Capabilities}
 	if err := hello.Validate(); err != nil {
