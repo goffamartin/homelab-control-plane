@@ -9,6 +9,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Project vision and scope](docs/00-project-vision.md)
 - [HLCP v1 design draft](docs/01-hlcp-v1-design-draft.md)
 - [Implementation and evaluation roadmap](docs/02-implementation-and-evaluation-roadmap.md)
+- [Debian agent deployment](docs/03-debian-agent-deployment.md)
 
 ## Status
 

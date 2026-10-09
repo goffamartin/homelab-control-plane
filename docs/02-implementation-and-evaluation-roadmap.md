@@ -45,6 +45,10 @@ Package the agent as a single binary, configuration file, and systemd unit. Depl
 
 **Exit criterion:** documented installation works on the intended Debian VM and can control one non-critical test service.
 
+**Current progress:** a least-privilege systemd unit, persistent journal
+directory policy, and a manual Debian installation/smoke-check procedure are
+versioned. Actual HomeLab deployment remains a separate, operator-authorized step.
+
 ## Stage 6 — Experiment harness
 
 Create repeatable scenarios using Linux `tc netem`. Capture raw experiment data and the exact controller/agent configuration used in every run.
