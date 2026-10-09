@@ -49,6 +49,12 @@ func Parse(args []string) (Request, error) {
 			}
 			index++
 			request.API = args[index]
+		case "--api-token-file":
+			if index+1 >= len(args) || len(args[index+1]) == 0 || args[index+1][0] == '-' {
+				return Request{}, fmt.Errorf("--api-token-file requires a value")
+			}
+			index++
+			request.APITokenFile = args[index]
 		default:
 			return Request{}, fmt.Errorf("unknown argument %q", argument)
 		}
