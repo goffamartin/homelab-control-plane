@@ -290,9 +290,16 @@ not an authorization token surviving future inventory/session changes.
 `GET /v1/nodes/{node}/resources/{resource}` returns ID/type/actions and the latest
 typed observation (including stale). Node-only status is cached/read-only and may
 be read offline; unsupported node actions are rejected. CLI dry-run contacts the
-controller rather than printing an unvalidated local payload. Text rendering,
-complete selector conflict validation, exit-code classification and command-ID
-lookup syntax are the remaining F8 slice, not yet claimed complete.
+controller rather than printing an unvalidated local payload. F8 CLI now rejects
+duplicate/conflicting selectors and missing parents, renders text tables by
+default and preserves API JSON with `--json`. Long singular selectors require
+values; short selectors keep their optional progressive discovery values.
+`--command-id <id>` selects a stable execution ID and `--result <id>` performs
+read-only controller lookup for a selected node. IDs/lookup hints are emitted to
+stderr before execution; stdout contains only the response. Exit codes are 0
+success, 2 invalid/rejected request, 3 definitive failure, 4 connection/API error,
+5 timeout or unresolved operation. Pending, unknown and expired lookups do not
+claim success. Recovery means inspecting the original ID, not creating a new one.
 
 ### Trust boundaries
 
