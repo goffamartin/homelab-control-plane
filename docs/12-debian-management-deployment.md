@@ -1,6 +1,9 @@
 # Debian management deployment — F10D
 
 Prepared 2026-10-12. This is an operator runbook, not an automatic installer.
+For controller installation prefer the new [.deb package procedure](13-debian-controller-package.md).
+The manual binary/unit commands below remain a fallback, not steps to combine
+with a packaged install. Package executable paths are /usr/bin, not /usr/local/bin.
 F10D packages and tests profiles locally; actual installation, reboot, upgrade,
 certificate rotation and rootless Podman evidence remain F10E gates.
 MCP has no binary or runnable service yet; its separate unprivileged profile
