@@ -130,6 +130,9 @@ func (config Config) Validate() error {
 		if err := resource.validate(); err != nil {
 			return err
 		}
+		if !contains(config.Capabilities, "resource.control") || !contains(config.Capabilities, resource.Adapter) {
+			return fmt.Errorf("resource %q: capabilities must include resource.control and %s", resource.ID, resource.Adapter)
+		}
 	}
 	_, err := config.synchronization()
 	return err

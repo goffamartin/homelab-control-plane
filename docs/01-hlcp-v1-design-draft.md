@@ -275,6 +275,27 @@ reconciles existing command IDs without authorizing a second execution.
 
 ## 10. Security model
 
+### Admission resolution and CLI (F8)
+
+F8's first API/CLI slice moves admission resolution entirely onto the controller.
+Both resource execution and read-only `POST /v1/nodes/{node}/resolve` share one
+resolver: syntax, known-operation fingerprint, node/resource/action discovery,
+online state, `resource.control` and a compatible advertised provider. Agent
+configuration must declare each configured adapter capability. Existing same-ID
+operations are looked up before current inventory checks; neither dry-run nor
+idempotent resolution restarts execution. Resolution does not admit a journal
+entry, transmit COMMAND or reserve execution capacity. It is a current snapshot,
+not an authorization token surviving future inventory/session changes.
+
+`GET /v1/nodes/{node}/resources/{resource}` returns ID/type/actions and the latest
+typed observation (including stale). Node-only status is cached/read-only and may
+be read offline; unsupported node actions are rejected. CLI dry-run contacts the
+controller rather than printing an unvalidated local payload. Text rendering,
+complete selector conflict validation, exit-code classification and command-ID
+lookup syntax are the remaining F8 slice, not yet claimed complete.
+
+### Trust boundaries
+
 - TLS protects confidentiality and integrity in transit.
 - mTLS binds a connection to a controller and an agent identity.
 - Controller authorization is capability- and resource/action-based; an agent executes no arbitrary command string.

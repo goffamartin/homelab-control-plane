@@ -88,6 +88,9 @@ func Intent(request Request) string {
 		return "node-status"
 	}
 	if request.Resource == "" {
+		if request.Action != "" {
+			return "node-command"
+		}
 		return "node"
 	}
 	if request.ActionSpecified && request.Action == "" {

@@ -80,7 +80,7 @@ func TestHTTPRejectsAlreadyTrackedAndCapacity(t *testing.T) {
 		t.Run(map[bool]string{false: "tracked", true: "full"}[full], func(t *testing.T) {
 			sessions := NewActiveSessions(NewCommandTracker())
 			server := &Server{sessions: sessions, registry: sessions.registry}
-			sessions.Publish(session.Registration{NodeID: "n"}, session.Synchronization{Inventory: protocol.InventorySnapshot{Resources: []protocol.ResourceDescriptor{{ID: "catalog", Type: "container", Actions: []string{"restart"}}}}}, time.Now(), nil, func() {})
+			sessions.Publish(session.Registration{NodeID: "n", Capabilities: []string{"resource.control", "docker"}}, session.Synchronization{Inventory: protocol.InventorySnapshot{Resources: []protocol.ResourceDescriptor{{ID: "catalog", Type: "container", Actions: []string{"restart"}}}}}, time.Now(), nil, func() {})
 			if full {
 				for i := 0; i < maxActiveCommands; i++ {
 					if err := sessions.tracker.TrackNode("other", fmt.Sprintf("c-%d", i)); err != nil {

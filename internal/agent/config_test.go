@@ -46,6 +46,15 @@ func TestObservationConfigurationDoesNotDeclareState(t *testing.T) {
 	}
 }
 
+func TestConfigRequiresDeclaredResourceCapabilities(t *testing.T) {
+	for _, capabilities := range []string{"[]", "[docker]", "[resource.control]"} {
+		config := strings.Replace(validConfigYAML, "[resource.control, docker]", capabilities, 1)
+		if _, err := Load(writeConfig(t, config)); err == nil {
+			t.Fatalf("accepted capabilities %s", capabilities)
+		}
+	}
+}
+
 func TestLoadRejectsMultipleYAMLDocuments(t *testing.T) {
 	path := writeConfig(t, validConfigYAML+"---\nnode_id: other\n")
 	if _, err := Load(path); err == nil {
