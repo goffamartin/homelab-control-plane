@@ -154,18 +154,25 @@ func TestAgentFullQueueStillAcknowledgesDuplicatesAndRejectsExcess(t *testing.T)
 			t.Fatalf("ack=%+v", ack)
 		}
 	}
-	if ack := send("c-0"); ack.Status != "in_progress" {
-		t.Fatalf("duplicate ACK=%+v", ack)
-	}
-	if ack := send("extra"); ack.Status != "rejected" {
-		t.Fatalf("excess ACK=%+v", ack)
-	}
-	frame, err := protocol.Decode(controller)
-	if err != nil || frame.Header.Type != protocol.MessageCommandResult {
-		t.Fatalf("frame=%v err=%v", frame.Header.Type, err)
-	}
-	var result protocol.CommandResultPayload
-	if err := protocol.DecodePayload(frame.Payload, &result); err != nil || result.Code != "QUEUE_FULL" {
-		t.Fatalf("result=%+v err=%v", result, err)
+	// Sustained pressure must not starve duplicate ACKs or admit rejected work.
+	for i := 0; i < 128; i++ {
+		if ack := send("c-0"); ack.Status != "in_progress" {
+			t.Fatalf("duplicate %d ACK=%+v", i, ack)
+		}
+		id := fmt.Sprintf("extra-%d", i)
+		if ack := send(id); ack.Status != "rejected" {
+			t.Fatalf("excess %d ACK=%+v", i, ack)
+		}
+		frame, err := protocol.Decode(controller)
+		if err != nil || frame.Header.Type != protocol.MessageCommandResult {
+			t.Fatalf("frame=%v err=%v", frame.Header.Type, err)
+		}
+		var result protocol.CommandResultPayload
+		if err := protocol.DecodePayload(frame.Payload, &result); err != nil || result.Code != "QUEUE_FULL" || result.CommandID != id {
+			t.Fatalf("result=%+v err=%v", result, err)
+		}
+		if _, exists, err := journal.Lookup(protocol.CommandPayload{CommandID: id, ResourceID: "catalog", Action: "restart"}); err != nil || exists {
+			t.Fatalf("rejected command admitted: %s exists=%v err=%v", id, exists, err)
+		}
 	}
 }
