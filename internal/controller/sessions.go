@@ -3,6 +3,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"hlcp/internal/localapi"
 	"hlcp/internal/protocol"
 	"hlcp/internal/session"
 	"hlcp/internal/telemetry"
@@ -105,7 +106,12 @@ func (sessions *ActiveSessions) Execute(ctx context.Context, nodeID string, comm
 	sessions.registry.mutex.RLock()
 	admissionSessionID := sessions.active[nodeID].sessionID
 	sessions.registry.mutex.RUnlock()
-	fresh, err := sessions.tracker.admit(nodeID, command, deadline, telemetry.Actor(ctx), admissionSessionID)
+	var fresh bool
+	err := localapi.GuardAdmission(ctx, nodeID, command.ResourceID, func() error {
+		var admissionErr error
+		fresh, admissionErr = sessions.tracker.admit(nodeID, command, deadline, telemetry.Actor(ctx), admissionSessionID)
+		return admissionErr
+	})
 	if err != nil {
 		return protocol.CommandResultPayload{}, err
 	}

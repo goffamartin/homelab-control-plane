@@ -15,10 +15,30 @@ import (
 
 // HTTPHandler is intended only for the controller's local loopback API.
 func (server *Server) HTTPHandler(token string) http.Handler {
+	return server.HTTPHandlerWithAuthorizer(localapi.LegacyAuthorizer(token))
+}
+
+func (server *Server) HTTPHandlerWithAuthorizer(authorizer *localapi.Authorizer) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /v1/nodes/{node}/resolve", func(writer http.ResponseWriter, request *http.Request) {
+	handle := func(pattern string, handler http.HandlerFunc) {
+		mux.HandleFunc(pattern, func(writer http.ResponseWriter, request *http.Request) {
+			if node := request.PathValue("node"); node != "" && !localapi.Allowed(request.Context(), node, request.PathValue("resource"), false) {
+				forbidden(writer)
+				return
+			}
+			handler(writer, request)
+		})
+	}
+	handle("POST /v1/nodes/{node}/resolve", func(writer http.ResponseWriter, request *http.Request) {
 		payload, ok := decodeCommand(writer, request)
 		if !ok {
+			return
+		}
+		if !localapi.Allowed(request.Context(), request.PathValue("node"), payload.ResourceID, false) {
+			forbidden(writer)
+			return
+		}
+		if !server.visibleCommand(writer, request, payload.CommandID) {
 			return
 		}
 		plan, err := server.Resolve(request.PathValue("node"), payload)
@@ -28,7 +48,7 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 		}
 		writeJSON(writer, plan)
 	})
-	mux.HandleFunc("GET /v1/nodes/{node}/resources/{resource}", func(writer http.ResponseWriter, request *http.Request) {
+	handle("GET /v1/nodes/{node}/resources/{resource}", func(writer http.ResponseWriter, request *http.Request) {
 		detail, err := server.ResourceDetail(request.PathValue("node"), request.PathValue("resource"))
 		if err != nil {
 			localapi.Error(writer, err.Status, err.Code, err.Message)
@@ -36,43 +56,51 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 		}
 		writeJSON(writer, detail)
 	})
-	mux.HandleFunc("GET /v1/nodes/{node}/commands/{command}", func(writer http.ResponseWriter, request *http.Request) {
+	handle("GET /v1/nodes/{node}/commands/{command}", func(writer http.ResponseWriter, request *http.Request) {
 		operation, exists, err := server.sessions.tracker.Operation(request.PathValue("node"), request.PathValue("command"))
 		if err != nil {
 			localapi.Error(writer, http.StatusServiceUnavailable, "LEDGER_FAILURE", err.Error())
 			return
 		}
-		if !exists {
+		if !exists || !localapi.Allowed(request.Context(), request.PathValue("node"), operation.Command.ResourceID, false) {
 			localapi.Error(writer, http.StatusNotFound, "COMMAND_NOT_FOUND", "command not found")
 			return
 		}
 		writeJSON(writer, operation)
 	})
-	mux.HandleFunc("GET /v1/nodes", func(writer http.ResponseWriter, request *http.Request) { writeJSON(writer, server.registry.List()) })
-	mux.HandleFunc("GET /v1/nodes/{node}", func(writer http.ResponseWriter, request *http.Request) {
+	handle("GET /v1/nodes", func(writer http.ResponseWriter, request *http.Request) {
+		records := make([]NodeRecord, 0)
+		for _, record := range server.registry.List() {
+			if localapi.Allowed(request.Context(), record.NodeID, "", false) {
+				records = append(records, scopedRecord(request.Context(), record))
+			}
+		}
+		writeJSON(writer, records)
+	})
+	handle("GET /v1/nodes/{node}", func(writer http.ResponseWriter, request *http.Request) {
 		record, ok := server.registry.Get(request.PathValue("node"))
 		if !ok {
 			localapi.Error(writer, http.StatusNotFound, "NODE_NOT_FOUND", "node not found")
 			return
 		}
-		writeJSON(writer, record)
+		writeJSON(writer, scopedRecord(request.Context(), record))
 	})
-	mux.HandleFunc("GET /v1/nodes/{node}/actions", func(writer http.ResponseWriter, request *http.Request) {
+	handle("GET /v1/nodes/{node}/actions", func(writer http.ResponseWriter, request *http.Request) {
 		if _, ok := server.registry.Get(request.PathValue("node")); !ok {
 			localapi.Error(writer, http.StatusNotFound, "NODE_NOT_FOUND", "node not found")
 			return
 		}
 		writeJSON(writer, []string{"status"})
 	})
-	mux.HandleFunc("GET /v1/nodes/{node}/resources", func(writer http.ResponseWriter, request *http.Request) {
+	handle("GET /v1/nodes/{node}/resources", func(writer http.ResponseWriter, request *http.Request) {
 		record, ok := server.registry.Get(request.PathValue("node"))
 		if !ok {
 			localapi.Error(writer, http.StatusNotFound, "NODE_NOT_FOUND", "node not found")
 			return
 		}
-		writeJSON(writer, record.Inventory.Resources)
+		writeJSON(writer, scopedRecord(request.Context(), record).Inventory.Resources)
 	})
-	mux.HandleFunc("GET /v1/nodes/{node}/resources/{resource}/actions", func(writer http.ResponseWriter, request *http.Request) {
+	handle("GET /v1/nodes/{node}/resources/{resource}/actions", func(writer http.ResponseWriter, request *http.Request) {
 		record, ok := server.registry.Get(request.PathValue("node"))
 		if !ok {
 			localapi.Error(writer, http.StatusNotFound, "NODE_NOT_FOUND", "node not found")
@@ -86,13 +114,24 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 		}
 		localapi.Error(writer, http.StatusNotFound, "RESOURCE_NOT_FOUND", "resource not found")
 	})
-	mux.HandleFunc("POST /v1/nodes/{node}/commands", func(writer http.ResponseWriter, request *http.Request) {
+	handle("POST /v1/nodes/{node}/commands", func(writer http.ResponseWriter, request *http.Request) {
+		if !localapi.Allowed(request.Context(), request.PathValue("node"), "", true) {
+			forbidden(writer)
+			return
+		}
 		command, ok := decodeCommand(writer, request)
 		if !ok {
 			return
 		}
 		if err := command.Validate(); err != nil {
 			localapi.Error(writer, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
+			return
+		}
+		if !localapi.Allowed(request.Context(), request.PathValue("node"), command.ResourceID, true) {
+			forbidden(writer)
+			return
+		}
+		if !server.visibleCommand(writer, request, command.CommandID) {
 			return
 		}
 		if _, err := server.Resolve(request.PathValue("node"), command); err != nil {
@@ -105,6 +144,8 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 		if err != nil {
 			status := http.StatusInternalServerError
 			switch {
+			case errors.Is(err, localapi.ErrForbidden):
+				status = http.StatusForbidden
 			case errors.Is(err, ErrNodeNotConnected):
 				status = http.StatusServiceUnavailable
 			case errors.Is(err, context.DeadlineExceeded):
@@ -123,6 +164,9 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 				status = 499 // Client Closed Request (non-standard but widely understood).
 			}
 			code := "EXECUTION_ERROR"
+			if errors.Is(err, localapi.ErrForbidden) {
+				code = "FORBIDDEN"
+			}
 			if status == http.StatusGatewayTimeout {
 				code = "TIMEOUT"
 			}
@@ -157,18 +201,54 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 	})
 	audited := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		response := &auditResponse{ResponseWriter: writer}
-		mux.ServeHTTP(response, request.WithContext(telemetry.WithActor(request.Context(), "local-api")))
+		actor := localapi.Identity(request.Context())
+		mux.ServeHTTP(response, request.WithContext(telemetry.WithActor(request.Context(), actor)))
 		if response.status >= 400 {
-			server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.APIRejected, ActorID: "local-api", Code: "REQUEST_REJECTED"})
+			server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.APIRejected, ActorID: actor, Code: "REQUEST_REJECTED"})
 		}
 	})
-	return localapi.ProtectObserved(token, audited, func(code string, allowed bool) {
-		kind, actor := telemetry.APIRejected, "anonymous"
+	return localapi.ProtectPolicy(authorizer, audited, func(code, actor string, allowed bool) {
+		kind := telemetry.APIRejected
 		if allowed {
-			kind, actor = telemetry.Authenticated, "local-api"
+			kind = telemetry.Authenticated
 		}
 		server.config.Telemetry.Record(telemetry.Event{Kind: kind, ActorID: actor, Code: code})
 	})
+}
+
+func forbidden(writer http.ResponseWriter) {
+	localapi.Error(writer, http.StatusForbidden, "FORBIDDEN", "local API permission denied")
+}
+
+func scopedRecord(ctx context.Context, record NodeRecord) NodeRecord {
+	resources := make([]protocol.ResourceDescriptor, 0)
+	states := make([]protocol.ResourceState, 0)
+	for _, resource := range record.Inventory.Resources {
+		if localapi.Allowed(ctx, record.NodeID, resource.ID, false) {
+			resources = append(resources, resource)
+		}
+	}
+	for _, state := range record.Resources.Resources {
+		if localapi.Allowed(ctx, record.NodeID, state.ResourceID, false) {
+			states = append(states, state)
+		}
+	}
+	record.Inventory.Resources, record.Resources.Resources = resources, states
+	return record
+}
+
+// Prevent a permitted resource payload from probing another resource's operation
+// through the shared same-ID resolver. Missing and hidden IDs share one response.
+func (server *Server) visibleCommand(writer http.ResponseWriter, request *http.Request, id string) bool {
+	if id == "" || server.sessions == nil {
+		return true
+	}
+	operation, exists, err := server.sessions.tracker.Operation(request.PathValue("node"), id)
+	if err == nil && exists && !localapi.Allowed(request.Context(), request.PathValue("node"), operation.Command.ResourceID, false) {
+		localapi.Error(writer, http.StatusNotFound, "COMMAND_NOT_FOUND", "command not found")
+		return false
+	}
+	return true
 }
 
 type auditResponse struct {

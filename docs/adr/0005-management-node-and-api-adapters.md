@@ -1,6 +1,6 @@
 # ADR-0005: Debian management node and scoped API adapters
 
-Status: **Proposed**. Date: 2026-10-12.
+Status: **Accepted**. Date: 2026-10-12.
 
 ## Context
 
@@ -9,7 +9,7 @@ management VM, a hosted MCP server and a later web UI. ADR-0002 currently uses
 one privileged local bearer credential. Sharing that credential with a read-only
 adapter would not enforce read-only access at the controller boundary.
 
-## Proposed decision
+## Decision
 
 - Keep one controller and outbound mTLS agents with an explicitly configured,
   stable controller address. No LAN discovery or multi-controller HA.
@@ -30,9 +30,12 @@ adapter would not enforce read-only access at the controller boundary.
 
 ## Consequences and adoption gate
 
-This ADR is not a claim that scoped credentials, log transport or MCP already
-exist. Adopt the detailed permission/API contract during F10B review and update
-ADR-0002 consistently before implementing its credential-model refinement.
+This ADR accepts the architecture, not completion of all adapters/deployment.
+F10B implements the [scoped credential contract](../10-scoped-api-credentials.md):
+observer/operator roles, explicit node/resource scope, strict private policy,
+atomic reload and authorization serialized with durable admission. It refines
+ADR-0002's single-credential model; its networking contract is unchanged.
+Log transport, MCP and web remain subsequent implementation phases.
 Loopback networking remains unchanged. MCP transport/auth interoperability must
 be tested with the chosen real client; the initial endpoint stays private.
 

@@ -16,6 +16,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Build, CI and dependency review](docs/07-build-and-release.md)
 - [Debian management node and MCP implementation plan](docs/08-management-node-and-mcp-plan.md)
 - [Bounded telemetry and audit](docs/09-telemetry-and-audit.md)
+- [Scoped API credentials and rotation](docs/10-scoped-api-credentials.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status
@@ -59,6 +60,12 @@ hlcp-controller -listen :9443 -api-listen 127.0.0.1:9444 -api-token-file /etc/hl
 ```
 
 `hlcp` targets that local address by default. Use `hlcp --help` for the explicit long-form selectors and `--api` override.
+
+The token-file mode is a compatibility operator profile. For separate scoped
+observer/operator identities, use controller `-api-policy-file` instead; see the
+credential guide and `examples/api-policy.json`. Policy mode never adds an
+implicit legacy admin token. Observers read cached GET snapshots and cannot call
+POST commands, including resource `status`. The internal API remains loopback-only.
 
 Short selectors `-n`, `-r`, `-a` have optional values; long singular selectors
 (`--node`, `--resource`, `--action`) require values and plural selectors list

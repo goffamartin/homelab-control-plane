@@ -39,10 +39,11 @@ const (
 	StorageFailure
 	RecoveryQuery
 	WriteQueueFull
+	PolicyReload
 	kindCount
 )
 
-var names = [kindCount]string{"authenticated", "api_rejected", "connection_rejected", "session_started", "session_ended", "session_replaced", "reconnect", "liveness_changed", "command_admitted", "command_duplicate", "command_rejected", "command_attempt", "command_retry", "command_ack", "command_running", "command_result", "command_unresolved", "storage_failure", "recovery_query", "write_queue_full"}
+var names = [kindCount]string{"authenticated", "api_rejected", "connection_rejected", "session_started", "session_ended", "session_replaced", "reconnect", "liveness_changed", "command_admitted", "command_duplicate", "command_rejected", "command_attempt", "command_retry", "command_ack", "command_running", "command_result", "command_unresolved", "storage_failure", "recovery_query", "write_queue_full", "policy_reload"}
 
 type Gauge uint8
 
