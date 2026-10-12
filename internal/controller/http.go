@@ -6,6 +6,7 @@ import (
 	"errors"
 	"hlcp/internal/localapi"
 	"hlcp/internal/protocol"
+	"hlcp/internal/telemetry"
 	"io"
 	"mime"
 	"net/http"
@@ -154,7 +155,38 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 		}
 		writeJSON(writer, result)
 	})
-	return localapi.Protect(token, mux)
+	audited := http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		response := &auditResponse{ResponseWriter: writer}
+		mux.ServeHTTP(response, request.WithContext(telemetry.WithActor(request.Context(), "local-api")))
+		if response.status >= 400 {
+			server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.APIRejected, ActorID: "local-api", Code: "REQUEST_REJECTED"})
+		}
+	})
+	return localapi.ProtectObserved(token, audited, func(code string, allowed bool) {
+		kind, actor := telemetry.APIRejected, "anonymous"
+		if allowed {
+			kind, actor = telemetry.Authenticated, "local-api"
+		}
+		server.config.Telemetry.Record(telemetry.Event{Kind: kind, ActorID: actor, Code: code})
+	})
+}
+
+type auditResponse struct {
+	http.ResponseWriter
+	status int
+}
+
+func (writer *auditResponse) WriteHeader(status int) {
+	if writer.status == 0 {
+		writer.status = status
+	}
+	writer.ResponseWriter.WriteHeader(status)
+}
+func (writer *auditResponse) Write(data []byte) (int, error) {
+	if writer.status == 0 {
+		writer.status = http.StatusOK
+	}
+	return writer.ResponseWriter.Write(data)
 }
 
 func decodeCommand(writer http.ResponseWriter, request *http.Request) (protocol.CommandPayload, bool) {

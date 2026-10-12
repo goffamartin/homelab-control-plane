@@ -13,6 +13,7 @@ import (
 
 	"hlcp/internal/command"
 	"hlcp/internal/protocol"
+	"hlcp/internal/telemetry"
 )
 
 var (
@@ -50,10 +51,13 @@ type CommandTracker struct {
 	closed       bool
 	now          func() time.Time
 	persistFault func() error
+	telemetry    *telemetry.Collector
 }
 type commandWaiter struct {
-	progress CommandProgress
-	changed  chan struct{}
+	progress  CommandProgress
+	changed   chan struct{}
+	actor     string
+	sessionID string
 }
 type ledgerDocument struct {
 	Version    int               `json:"version"`
@@ -163,6 +167,7 @@ func (tracker *CommandTracker) persistLocked() error {
 	if tracker.persistFault != nil {
 		if err := tracker.persistFault(); err != nil {
 			tracker.failed = err
+			tracker.telemetry.Record(telemetry.Event{Kind: telemetry.StorageFailure, Code: "LEDGER_FAILURE"})
 			return fmt.Errorf("%w: %v", ErrLedgerFailure, err)
 		}
 	}
@@ -186,6 +191,7 @@ func (tracker *CommandTracker) persistLocked() error {
 	}
 	if err != nil {
 		tracker.failed = err
+		tracker.telemetry.Record(telemetry.Event{Kind: telemetry.StorageFailure, Code: "LEDGER_FAILURE"})
 		return fmt.Errorf("%w: %v", ErrLedgerFailure, err)
 	}
 	return nil
@@ -233,6 +239,28 @@ func (tracker *CommandTracker) Progress(nodeID, commandID string) (CommandProgre
 	return progress, exists
 }
 func (tracker *CommandTracker) Admit(nodeID string, payload protocol.CommandPayload, deadline time.Time) (bool, error) {
+	return tracker.admit(nodeID, payload, deadline, "controller", "")
+}
+func (tracker *CommandTracker) admit(nodeID string, payload protocol.CommandPayload, deadline time.Time, actor, sessionID string) (fresh bool, returnedErr error) {
+	defer func() {
+		if returnedErr != nil {
+			code := "INVALID_REQUEST"
+			switch {
+			case errors.Is(returnedErr, ErrCommandCapacity):
+				code = "COMMAND_CAPACITY"
+			case errors.Is(returnedErr, ErrCommandConflict):
+				code = "COMMAND_CONFLICT"
+			case errors.Is(returnedErr, ErrLedgerFull):
+				code = "LEDGER_FULL"
+			case errors.Is(returnedErr, ErrLedgerFailure):
+				code = "LEDGER_FAILURE"
+			case errors.Is(returnedErr, context.DeadlineExceeded):
+				code = "TIMEOUT"
+			}
+			// Invalid payloads are not copied into diagnostics.
+			tracker.telemetry.Record(telemetry.Event{Kind: telemetry.CommandRejected, ActorID: actor, Code: code})
+		}
+	}()
 	if payload.Validate() != nil {
 		return false, protocol.ErrInvalidCommand
 	}
@@ -250,6 +278,7 @@ func (tracker *CommandTracker) Admit(nodeID string, payload protocol.CommandPayl
 		if existing.progress.Command != payload {
 			return false, ErrCommandConflict
 		}
+		tracker.telemetry.Record(telemetry.Event{Kind: telemetry.CommandDuplicate, ActorID: actor, NodeID: nodeID, ResourceID: payload.ResourceID, CommandID: payload.CommandID, Action: payload.Action})
 		return false, nil
 	}
 	active := 0
@@ -274,10 +303,11 @@ func (tracker *CommandTracker) Admit(nodeID string, payload protocol.CommandPayl
 	if len(tracker.pending) >= maxLedgerOperations {
 		return false, ErrLedgerFull
 	}
-	tracker.pending[key] = &commandWaiter{progress: CommandProgress{NodeID: nodeID, Command: payload, AdmittedAt: now, Deadline: deadline, State: "accepted"}, changed: make(chan struct{})}
+	tracker.pending[key] = &commandWaiter{progress: CommandProgress{NodeID: nodeID, Command: payload, AdmittedAt: now, Deadline: deadline, State: "accepted"}, changed: make(chan struct{}), actor: telemetry.Field(actor), sessionID: telemetry.Field(sessionID)}
 	if err := tracker.persistLocked(); err != nil {
 		return false, err
 	}
+	tracker.recordLocked(tracker.pending[key], telemetry.CommandAdmitted, "accepted")
 	return true, nil
 }
 func (tracker *CommandTracker) Track(commandID string) error { return tracker.TrackNode("", commandID) }
@@ -330,7 +360,14 @@ func (tracker *CommandTracker) AttemptNode(nodeID, commandID string) error {
 	}
 	waiter.progress.Attempts++
 	waiter.progress.LastAttemptAt = tracker.now()
-	return tracker.persistLocked()
+	err := tracker.persistLocked()
+	if err == nil {
+		tracker.recordLocked(waiter, telemetry.CommandAttempt, "delivery")
+		if waiter.progress.Attempts > 1 {
+			tracker.recordLocked(waiter, telemetry.CommandRetry, "delivery")
+		}
+	}
+	return err
 }
 func (tracker *CommandTracker) AckNode(nodeID string, ack protocol.CommandACKPayload) bool {
 	if ack.Validate() != nil {
@@ -361,6 +398,9 @@ func (tracker *CommandTracker) AckNode(nodeID string, ack protocol.CommandACKPay
 		waiter.progress.State = "running"
 	}
 	err := tracker.persistLocked()
+	if err == nil {
+		tracker.recordLocked(waiter, telemetry.CommandACK, ack.Status)
+	}
 	notify(waiter)
 	return err == nil
 }
@@ -399,6 +439,9 @@ func (tracker *CommandTracker) CompleteNode(nodeID string, result protocol.Comma
 	}
 	waiter.progress.WaitError = ""
 	err := tracker.persistLocked()
+	if err == nil {
+		tracker.recordLocked(waiter, telemetry.CommandResult, telemetry.Outcome(result.Code))
+	}
 	notify(waiter)
 	return err == nil
 }
@@ -418,8 +461,44 @@ func (tracker *CommandTracker) FinishWait(nodeID, commandID, reason string) erro
 		waiter.progress.State = "expired"
 	}
 	err := tracker.persistLocked()
+	if err == nil {
+		tracker.recordLocked(waiter, telemetry.CommandUnresolved, reason)
+	}
 	notify(waiter)
 	return err
+}
+
+func (tracker *CommandTracker) recordLocked(waiter *commandWaiter, kind telemetry.Kind, code string) {
+	if tracker.telemetry == nil {
+		return
+	}
+	p := waiter.progress
+	actor := waiter.actor
+	if actor == "" {
+		actor = "controller-recovery"
+	}
+	duration := time.Duration(0)
+	if !p.CompletedAt.IsZero() {
+		duration = p.CompletedAt.Sub(p.AdmittedAt)
+	}
+	tracker.telemetry.Record(telemetry.Event{Kind: kind, ActorID: actor, NodeID: p.NodeID, ResourceID: p.Command.ResourceID, CommandID: p.Command.CommandID, SessionID: waiter.sessionID, Action: p.Command.Action, Code: code, Attempt: p.Attempts, DurationMillis: duration.Milliseconds()})
+	tracker.updateGaugesLocked()
+}
+
+func (tracker *CommandTracker) updateGaugesLocked() {
+	if tracker.telemetry == nil {
+		return
+	}
+	active := 0
+	for _, waiter := range tracker.pending {
+		if waiter.progress.Result == nil && waiter.progress.WaitError == "" {
+			active++
+		}
+	}
+	tracker.telemetry.SetGauge(telemetry.ActiveCommands, active)
+	tracker.telemetry.SetGauge(telemetry.LedgerEntries, len(tracker.pending))
+	tracker.telemetry.SetGauge(telemetry.ActiveCommandLimit, maxActiveCommands)
+	tracker.telemetry.SetGauge(telemetry.LedgerLimit, maxLedgerOperations)
 }
 func waitError(code string) error {
 	switch code {

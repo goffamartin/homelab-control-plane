@@ -38,6 +38,9 @@ func (writer *Writer) SendContext(parent context.Context, messageType protocol.M
 	select {
 	case writer.slots <- struct{}{}:
 	default:
+		if observer, ok := writer.connection.(interface{ ReportWriteQueueFull() }); ok {
+			observer.ReportWriteQueueFull()
+		}
 		return ErrWriteQueueFull
 	}
 	defer func() { <-writer.slots }()

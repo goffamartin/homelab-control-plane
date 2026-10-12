@@ -42,3 +42,14 @@ HLCP provides general concepts: node, resource, action, state, capability, comma
 ## Success criteria
 
 The product MVP is successful when a configured agent can establish an identity-bound mutually authenticated session, observe a Docker or rootless Podman container, maintain liveness, acknowledge an allow-listed action before execution completes, return a durable terminal or explicit unknown result, and reconcile the same command ID after a transient connection loss. The systemd adapter is an optional deployment profile. The experiment must then quantify the selected liveness and retry policies under emulated network impairment.
+
+## HomeLab management deployment and later extensions
+
+The selected target is one lightweight Debian management VM running the controller
+continuously, a separate read-only MCP adapter and, later, a lightweight web UI.
+Adapters reuse the loopback controller API with separate server-enforced scopes;
+they do not directly control agents or gain arbitrary shell access. Remote log
+queries require a separate bounded capability, not unrestricted log streaming.
+The [management plan](08-management-node-and-mcp-plan.md) separates implementation,
+operator-authorized deployment and live acceptance. MCP/web extensions do not
+replace the original protocol evaluation or make a web UI part of the semester MVP.

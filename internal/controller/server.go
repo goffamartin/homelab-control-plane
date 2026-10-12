@@ -8,6 +8,7 @@ import (
 	"hlcp/internal/liveness"
 	"hlcp/internal/protocol"
 	"hlcp/internal/session"
+	"hlcp/internal/telemetry"
 	"hlcp/internal/transport"
 	"log/slog"
 	"net"
@@ -20,6 +21,7 @@ type Config struct {
 	LivenessPolicy      liveness.Policy
 	HandshakeTimeout    time.Duration
 	Logger              *slog.Logger
+	Telemetry           *telemetry.Collector
 	MaxConnections      int
 	CommandRetry        RetryPolicy
 	LedgerFile          string
@@ -34,6 +36,7 @@ type Server struct {
 	connections     map[net.Conn]struct{}
 	closed          bool
 	workers         sync.WaitGroup
+	ownTelemetry    bool
 }
 
 func Listen(address string, config Config) (*Server, error) {
@@ -58,9 +61,6 @@ func Listen(address string, config Config) (*Server, error) {
 	if config.HandshakeTimeout <= 0 {
 		config.HandshakeTimeout = 10 * time.Second
 	}
-	if config.Logger == nil {
-		config.Logger = slog.Default()
-	}
 	if config.MaxConnections < 0 {
 		return nil, errors.New("max connections must not be negative")
 	}
@@ -80,13 +80,28 @@ func Listen(address string, config Config) (*Server, error) {
 		}
 	}
 	sessions := NewActiveSessions(tracker)
+	ownTelemetry := config.Telemetry == nil
+	if ownTelemetry {
+		var sink telemetry.Sink
+		if config.Logger != nil {
+			sink = func(ctx context.Context, e telemetry.Event) error {
+				config.Logger.LogAttrs(ctx, slog.LevelInfo, "HLCP audit", slog.String("event", e.Name), slog.String("actor_id", e.ActorID), slog.String("node_id", e.NodeID), slog.String("resource_id", e.ResourceID), slog.String("command_id", e.CommandID), slog.String("session_id", e.SessionID), slog.String("action", e.Action), slog.String("code", e.Code), slog.Int("attempt", e.Attempt), slog.Int64("duration_ms", e.DurationMillis))
+				return nil
+			}
+		}
+		config.Telemetry = telemetry.New(sink)
+	}
+	tracker.telemetry = config.Telemetry
+	tracker.updateGaugesLocked()
+	config.Telemetry.SetGauge(telemetry.ConnectionLimit, config.MaxConnections)
 	sessions.policy = config.CommandRetry
 	sessions.registry.stateMaxAge = config.ResourceStateMaxAge
-	return &Server{listener: listener, config: config, registry: sessions.registry, sessions: sessions, connections: make(map[net.Conn]struct{})}, nil
+	return &Server{listener: listener, config: config, registry: sessions.registry, sessions: sessions, connections: make(map[net.Conn]struct{}), ownTelemetry: ownTelemetry}, nil
 }
-func (server *Server) Address() net.Addr         { return server.listener.Addr() }
-func (server *Server) Registry() *Registry       { return server.registry }
-func (server *Server) Sessions() *ActiveSessions { return server.sessions }
+func (server *Server) Telemetry() *telemetry.Collector { return server.config.Telemetry }
+func (server *Server) Address() net.Addr               { return server.listener.Addr() }
+func (server *Server) Registry() *Registry             { return server.registry }
+func (server *Server) Sessions() *ActiveSessions       { return server.sessions }
 func (server *Server) Close() error {
 	server.connectionMutex.Lock()
 	server.closed = true
@@ -97,6 +112,11 @@ func (server *Server) Close() error {
 	server.connectionMutex.Unlock()
 	server.workers.Wait()
 	ledgerErr := server.sessions.tracker.Close()
+	if server.ownTelemetry {
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		_ = server.config.Telemetry.Close(ctx)
+		cancel()
+	}
 	if errors.Is(err, net.ErrClosed) {
 		return ledgerErr
 	}
@@ -121,10 +141,12 @@ func (server *Server) Serve(ctx context.Context) error {
 		server.connectionMutex.Lock()
 		if server.closed || len(server.connections) >= server.config.MaxConnections {
 			server.connectionMutex.Unlock()
+			server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.ConnectionRejected, Code: "CONNECTION_CAPACITY"})
 			_ = rawConnection.Close()
 			continue
 		}
 		server.connections[rawConnection] = struct{}{}
+		server.config.Telemetry.SetGauge(telemetry.Connections, len(server.connections))
 		server.workers.Add(1)
 		server.connectionMutex.Unlock()
 		go func() {
@@ -132,6 +154,7 @@ func (server *Server) Serve(ctx context.Context) error {
 			defer func() {
 				server.connectionMutex.Lock()
 				delete(server.connections, rawConnection)
+				server.config.Telemetry.SetGauge(telemetry.Connections, len(server.connections))
 				server.connectionMutex.Unlock()
 			}()
 			server.handleConnection(ctx, rawConnection)
@@ -143,48 +166,56 @@ func (server *Server) handleConnection(parent context.Context, raw net.Conn) {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
 	defer raw.Close()
-	connection := tls.Server(raw, server.config.TLSConfig)
-	if err := connection.SetDeadline(time.Now().Add(server.config.HandshakeTimeout)); err != nil {
+	tlsConnection := tls.Server(raw, server.config.TLSConfig)
+	if err := tlsConnection.SetDeadline(time.Now().Add(server.config.HandshakeTimeout)); err != nil {
 		return
 	}
-	if err := connection.Handshake(); err != nil {
-		server.config.Logger.Warn("agent TLS handshake failed", "remote", raw.RemoteAddr(), "error", err)
+	if err := tlsConnection.Handshake(); err != nil {
+		server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.ConnectionRejected, Code: "TLS_HANDSHAKE"})
 		return
 	}
-	_ = connection.SetDeadline(time.Time{})
-	state := connection.ConnectionState()
+	_ = tlsConnection.SetDeadline(time.Time{})
+	state := tlsConnection.ConnectionState()
 	if state.NegotiatedProtocol != transport.ALPN || len(state.VerifiedChains) == 0 {
-		server.config.Logger.Warn("agent TLS peer is not verified for HLCP")
+		server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.ConnectionRejected, Code: "TLS_PEER"})
 		return
 	}
 	nodeID, err := transport.AgentNodeID(state.VerifiedChains[0][0])
 	if err != nil {
-		server.config.Logger.Warn("agent certificate identity failed", "error", err)
+		server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.ConnectionRejected, Code: "TLS_IDENTITY"})
 		return
 	}
+	server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.Authenticated, ActorID: nodeID, NodeID: nodeID, Code: "MTLS"})
+	connection := telemetry.Wrap(tlsConnection, server.config.Telemetry)
 	registration, err := session.Accept(connection, session.ControllerConfig{ExpectedNodeID: nodeID, HeartbeatInterval: server.config.LivenessPolicy.HeartbeatInterval, MissedHeartbeatThreshold: server.config.LivenessPolicy.OfflineAfter, HandshakeTimeout: server.config.HandshakeTimeout})
 	if err != nil {
-		server.config.Logger.Warn("agent registration failed", "error", err)
+		server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.ConnectionRejected, NodeID: nodeID, Code: "REGISTRATION"})
 		return
 	}
 	synchronization, err := session.ReceiveInitialSynchronization(connection, server.config.HandshakeTimeout)
 	if err != nil {
-		server.config.Logger.Warn("agent synchronization failed", "node", registration.NodeID, "error", err)
+		server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.ConnectionRejected, NodeID: nodeID, Code: "SYNCHRONIZATION"})
 		return
 	}
 	registeredAt := time.Now()
 	tracker, _ := liveness.NewTracker(server.config.LivenessPolicy, registeredAt)
 	writer := session.NewWriter(connection, 4)
+	_, previouslyRegistered := server.registry.Get(registration.NodeID)
 	server.sessions.Publish(registration, synchronization, registeredAt, writer, cancel)
+	if previouslyRegistered {
+		server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.Reconnect, NodeID: registration.NodeID, SessionID: registration.SessionID, Code: "RECONNECTED"})
+	}
 	defer server.sessions.Remove(registration.NodeID, writer)
 	reconcileDone := make(chan struct{})
 	go func() { defer close(reconcileDone); server.sessions.Reconcile(ctx, registration.NodeID, writer) }()
 	defer func() { cancel(); <-reconcileDone }()
 	inbound := session.StartInbound(ctx, connection)
 	defer func() { cancel(); _ = raw.Close(); <-inbound.Done }()
-	server.config.Logger.Info("agent registered", "node", registration.NodeID, "session", registration.SessionID)
+	server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.SessionStarted, NodeID: registration.NodeID, SessionID: registration.SessionID})
 	err = session.RunInboundLoop(ctx, inbound, tracker, func(change session.StateChange) {
-		server.registry.UpdateLiveness(registration.NodeID, registration.SessionID, change.State, change.LastActivity)
+		if server.registry.UpdateLiveness(registration.NodeID, registration.SessionID, change.State, change.LastActivity) {
+			server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.LivenessChanged, NodeID: registration.NodeID, SessionID: registration.SessionID, Code: string(change.State)})
+		}
 	}, func(ack protocol.CommandACKPayload) bool {
 		return server.sessions.HandleAck(registration.NodeID, writer, ack)
 	}, func(result protocol.CommandResultPayload) bool {
@@ -194,5 +225,9 @@ func (server *Server) handleConnection(parent context.Context, raw net.Conn) {
 	}, StateUpdate: func(update protocol.StateUpdate) bool {
 		return server.sessions.HandleStateUpdate(registration.NodeID, writer, update)
 	}})
-	server.config.Logger.Info("agent session ended", "node", registration.NodeID, "session", registration.SessionID, "error", err)
+	code := "SESSION_CLOSED"
+	if errors.Is(err, session.ErrNodeOffline) {
+		code = "LIVENESS_TIMEOUT"
+	}
+	server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.SessionEnded, NodeID: registration.NodeID, SessionID: registration.SessionID, Code: code, DurationMillis: time.Since(registeredAt).Milliseconds()})
 }

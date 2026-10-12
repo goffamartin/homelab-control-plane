@@ -10,9 +10,9 @@ import (
 	"hlcp/internal/command"
 	"hlcp/internal/protocol"
 	"hlcp/internal/session"
+	"hlcp/internal/telemetry"
 	"hlcp/internal/transport"
 	"io"
-	"log/slog"
 	"math/rand"
 	"net"
 	"os"
@@ -43,7 +43,7 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 	if err != nil {
 		return nil, err
 	}
-	dispatcher := command.NewDispatcher(journal)
+	dispatcher := command.NewObservedDispatcher(journal, config.Telemetry, config.NodeID)
 	for _, resource := range config.Resources {
 		if resource.Target == "" {
 			return nil, fmt.Errorf("resource %q: target is required", resource.ID)
@@ -76,18 +76,19 @@ func contains(values []string, wanted string) bool {
 }
 
 type Config struct {
-	ControllerAddress   string           `yaml:"controller_address"`
-	ServerName          string           `yaml:"server_name"`
-	CertificateFile     string           `yaml:"certificate_file"`
-	PrivateKeyFile      string           `yaml:"private_key_file"`
-	CAFile              string           `yaml:"ca_file"`
-	JournalFile         string           `yaml:"journal_file"`
-	JournalRetention    int              `yaml:"journal_retention"`
-	NodeID              string           `yaml:"node_id"`
-	AgentVersion        string           `yaml:"agent_version"`
-	Capabilities        []string         `yaml:"capabilities"`
-	Resources           []ResourceConfig `yaml:"resources"`
-	ObservationInterval time.Duration    `yaml:"observation_interval"`
+	ControllerAddress   string               `yaml:"controller_address"`
+	ServerName          string               `yaml:"server_name"`
+	CertificateFile     string               `yaml:"certificate_file"`
+	PrivateKeyFile      string               `yaml:"private_key_file"`
+	CAFile              string               `yaml:"ca_file"`
+	JournalFile         string               `yaml:"journal_file"`
+	JournalRetention    int                  `yaml:"journal_retention"`
+	NodeID              string               `yaml:"node_id"`
+	AgentVersion        string               `yaml:"agent_version"`
+	Capabilities        []string             `yaml:"capabilities"`
+	Resources           []ResourceConfig     `yaml:"resources"`
+	ObservationInterval time.Duration        `yaml:"observation_interval"`
+	Telemetry           *telemetry.Collector `yaml:"-"`
 	runner              adapter.CommandRunner
 	refresh             chan struct{}
 }
@@ -190,6 +191,14 @@ func Run(ctx context.Context, config Config) error {
 	if err := config.Validate(); err != nil {
 		return err
 	}
+	if config.Telemetry == nil {
+		config.Telemetry = telemetry.New(nil)
+		defer func() {
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			_ = config.Telemetry.Close(ctx)
+		}()
+	}
 	config.refresh = make(chan struct{}, 1)
 	tlsConfig, err := transport.ClientTLSConfig(transport.TLSFiles{CertificateFile: config.CertificateFile, PrivateKeyFile: config.PrivateKeyFile, CAFile: config.CAFile, ServerName: config.ServerName})
 	if err != nil {
@@ -205,7 +214,7 @@ func Run(ctx context.Context, config Config) error {
 	}
 	defer dispatcher.Close()
 	for attempt := 0; ; attempt++ {
-		stable, err := runSession(ctx, config, tlsConfig, sync, dispatcher)
+		stable, _ := runSession(ctx, config, tlsConfig, sync, dispatcher)
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -213,7 +222,7 @@ func Run(ctx context.Context, config Config) error {
 			attempt = 0
 		}
 		delay := reconnectDelay(attempt, rand.Float64())
-		slog.Warn("agent session ended; reconnecting", "error", err, "delay", delay)
+		config.Telemetry.Record(telemetry.Event{Kind: telemetry.Reconnect, NodeID: config.NodeID, Code: "RECONNECT_SCHEDULED", Attempt: attempt + 1, DurationMillis: delay.Milliseconds()})
 		if !waitForReconnect(ctx, delay) {
 			return nil
 		}
@@ -229,13 +238,16 @@ func runSession(ctx context.Context, config Config, tlsConfig *tls.Config, synch
 	defer raw.Close()
 	stop := context.AfterFunc(ctx, func() { _ = raw.Close() })
 	defer stop()
-	connection := tls.Client(raw, tlsConfig)
+	tlsConnection := tls.Client(raw, tlsConfig)
 	handshakeContext, cancelHandshake := context.WithTimeout(ctx, 10*time.Second)
-	err = connection.HandshakeContext(handshakeContext)
+	err = tlsConnection.HandshakeContext(handshakeContext)
 	cancelHandshake()
 	if err != nil {
+		config.Telemetry.Record(telemetry.Event{Kind: telemetry.ConnectionRejected, NodeID: config.NodeID, Code: "TLS_HANDSHAKE"})
 		return false, err
 	}
+	config.Telemetry.Record(telemetry.Event{Kind: telemetry.Authenticated, NodeID: config.NodeID, Code: "MTLS"})
+	connection := telemetry.Wrap(tlsConnection, config.Telemetry)
 	defer connection.Close()
 	welcome, err := session.Start(connection, config.hello(), 10*time.Second)
 	if err != nil {
@@ -254,6 +266,10 @@ func runSession(ctx context.Context, config Config, tlsConfig *tls.Config, synch
 	}()
 	defer func() { cancelObservations(); _ = raw.Close(); <-observationDone }()
 	readyAt := time.Now()
+	config.Telemetry.Record(telemetry.Event{Kind: telemetry.SessionStarted, NodeID: config.NodeID, SessionID: welcome.SessionID})
+	defer func() {
+		config.Telemetry.Record(telemetry.Event{Kind: telemetry.SessionEnded, NodeID: config.NodeID, SessionID: welcome.SessionID, Code: "SESSION_CLOSED", DurationMillis: time.Since(readyAt).Milliseconds()})
+	}()
 	stable := func() bool { return time.Since(readyAt) >= time.Minute }
 	commandErrors := make(chan error, 1)
 	commandDone := make(chan struct{})

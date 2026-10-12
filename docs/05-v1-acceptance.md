@@ -32,3 +32,14 @@ prerequisite for the first product acceptance run.
 Minecraft-specific operations, arbitrary commands, Docker Compose stacks,
 Kubernetes, a web UI, remote configuration, scheduling and multi-controller HA
 are outside v1.
+
+## Management-node extension acceptance
+
+The [management and MCP plan](08-management-node-and-mcp-plan.md) expands the F10
+operational preparation and separately defines read-only MCP, bounded remote log
+queries and later mutation/web extensions. Existing acceptance criteria are not
+evidence that these extensions already exist. Scoped controller authorization must
+be verified before an adapter receives credentials; hosting an endpoint is not
+proof of actual client connectivity. A14 still needs real Debian deployment and
+A11 still needs live rootless Podman evidence. A15 does not depend on deferred
+mutating MCP or web UI.

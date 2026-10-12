@@ -542,7 +542,10 @@ Stav realizace:
 | F7 | Rozpracováno | Typed runtime observation, connect/post-action/periodic refresh, session/revision validace a freshness; Windows test/vet, Linux race, fake Docker/Podman a živý Docker lifecycle/externí stop. Zbývá živé ověření Podman, který v této stanici není dostupný |
 | F8 | Dokončeno | Společný serverový resolver execute/dry-run, inventory/capabilities, resource detail; striktní progressive selektory, text/JSON výstup, exit kódy, stable command-ID a read-only lookup. Testy skutečného CLI procesu, Windows test/vet a Linux race |
 | F9 | Dokončeno | Recovery/stress/fuzz, Go 1.27.2/CBOR 2.9.6, --version, offline reproducible build 3 binárek × 3 platformy, manifest/checksumy, source vulnerability check a SHA-pinned read-only CI. Lokální Windows test/vet, Linux race, actionlint, dva shodné clean buildy; hosted CI 38231609545 na bf79a03 prošlo včetně uploadu artefaktů |
-| F10–F11 | Plánováno | Kritéria jednotlivých fází výše |
+| F10 | Rozpracováno | F10A bounded JSON audit, fixed-cardinality metriky a opt-in journald profily; Windows test/vet a Linux race včetně blokovaného sinku/mTLS. [Důkazy](09-telemetry-and-audit.md). F10B–F10E plánované; skutečný Debian a produkční přístupy zatím neověřené |
+| F11 | Plánováno | Reprodukovatelné experimenty, report a prezentace; nezávislé na budoucím web UI |
+| M1–M2 | Plánováno, rozšíření | Read-only MCP a bounded vzdálené logy; žádná implementace tímto plánem nevznikla |
+| M3, W1 | Odloženo, rozšíření | Mutační MCP vyžaduje další schválení; web UI později |
 
 F7 má implementovaný observation/synchronization blok; zbývá živý Podman smoke
 na dostupném Podman hostu. F8 API/CLI kontrakt je implementovaný nezávisle na této
@@ -552,5 +555,8 @@ odděluje doložené recovery/stress/fuzz scénáře od živé runtime akceptace
 F9 je uzavřená zeleným [hosted CI během 38231609545](https://github.com/goffamartin/homelab-control-plane/actions/runs/38231609545)
 na commitu `bf79a03`. F10 nyní řeší provozní pozorovatelnost a Debian nasazení;
 živý Podman smoke F7 tím není nahrazen.
+Nový [management plán](08-management-node-and-mcp-plan.md) rozpracovává F10
+a odděluje MCP/web rozšíření od původní v1/ANI-COM akceptace. Přidání minimálních
+API oprávnění neznamená rozsáhlý IAM ani automatické vystavení API do LAN.
 Není důvod přepisovat celý projekt: framing,
 základní TLS setup, datové modely a adapter boundary lze zachovat a postupně zpevnit.

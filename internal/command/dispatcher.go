@@ -4,13 +4,13 @@ package command
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 	"sync"
 	"time"
 	"unicode/utf8"
 
 	"hlcp/internal/protocol"
+	"hlcp/internal/telemetry"
 )
 
 const QueueCapacity = 16
@@ -18,13 +18,14 @@ const QueueCapacity = 16
 type Executor func(context.Context, string) protocol.CommandResultPayload
 
 type Job struct {
-	command   protocol.CommandPayload
-	executor  Executor
-	start     chan struct{}
-	startOnce sync.Once
-	skip      bool
-	Done      chan struct{}
-	Result    protocol.CommandResultPayload
+	command    protocol.CommandPayload
+	executor   Executor
+	start      chan struct{}
+	startOnce  sync.Once
+	skip       bool
+	Done       chan struct{}
+	Result     protocol.CommandResultPayload
+	admittedAt time.Time
 }
 
 type Admission struct {
@@ -48,11 +49,19 @@ type Dispatcher struct {
 	cancel    context.CancelFunc
 	done      chan struct{}
 	closed    bool
+	telemetry *telemetry.Collector
+	nodeID    string
 }
 
 func NewDispatcher(journal Journal) *Dispatcher {
+	return NewObservedDispatcher(journal, nil, "")
+}
+
+func NewObservedDispatcher(journal Journal, diagnostics *telemetry.Collector, nodeID string) *Dispatcher {
 	ctx, cancel := context.WithCancel(context.Background())
 	dispatcher := &Dispatcher{executors: make(map[string]registration), pending: make(map[string]*Job), journal: journal, queue: make(chan *Job, QueueCapacity), ctx: ctx, cancel: cancel, done: make(chan struct{})}
+	dispatcher.telemetry, dispatcher.nodeID = diagnostics, nodeID
+	dispatcher.updateGauges()
 	go dispatcher.work()
 	return dispatcher
 }
@@ -100,7 +109,26 @@ func journalRejection(command protocol.CommandPayload, err error) Admission {
 
 // Admit persists queued intent before ACK. Start must be called only after
 // successful ACK delivery. Duplicates never acquire another execution slot.
-func (dispatcher *Dispatcher) Admit(command protocol.CommandPayload) Admission {
+func (dispatcher *Dispatcher) Admit(command protocol.CommandPayload) (admission Admission) {
+	defer func() {
+		kind, code := telemetry.CommandAdmitted, admission.Ack.Status
+		if code == "rejected" {
+			kind = telemetry.CommandRejected
+			code = telemetry.Outcome(admission.Result.Code)
+			if code == "JOURNAL_FAILURE" {
+				dispatcher.record(command, telemetry.StorageFailure, code, 0)
+			}
+		}
+		if code == "completed" || code == "in_progress" {
+			kind = telemetry.CommandDuplicate
+		}
+		if command.Validate() == nil {
+			dispatcher.record(command, kind, code, 0)
+		} else {
+			dispatcher.telemetry.Record(telemetry.Event{Kind: telemetry.CommandRejected, NodeID: dispatcher.nodeID, Code: "INVALID_REQUEST"})
+		}
+		dispatcher.updateGauges()
+	}()
 	if err := command.Validate(); err != nil {
 		return rejected(command, "INVALID_REQUEST", err.Error())
 	}
@@ -137,7 +165,7 @@ func (dispatcher *Dispatcher) Admit(command protocol.CommandPayload) Admission {
 	if _, _, err := dispatcher.journal.BeginQueued(command); err != nil {
 		return journalRejection(command, err)
 	}
-	job := &Job{command: command, executor: resource.execute, start: make(chan struct{}), Done: make(chan struct{})}
+	job := &Job{command: command, executor: resource.execute, start: make(chan struct{}), Done: make(chan struct{}), admittedAt: time.Now()}
 	dispatcher.pending[command.CommandID] = job
 	dispatcher.queue <- job
 	return Admission{Ack: protocol.CommandACKPayload{CommandID: command.CommandID, Status: "accepted"}, Job: job}
@@ -189,9 +217,11 @@ func (dispatcher *Dispatcher) work() {
 		result := protocol.CommandResultPayload{CommandID: job.command.CommandID, Code: "EXECUTION_NOT_STARTED", Message: "command was not started"}
 		if dispatcher.ctx.Err() == nil && !job.skip {
 			if err := dispatcher.journal.MarkRunning(job.command.CommandID); err != nil {
+				dispatcher.record(job.command, telemetry.StorageFailure, "JOURNAL_FAILURE", 0)
 				result.Code = "JOURNAL_FAILURE"
 				result.Message = err.Error()
 			} else {
+				dispatcher.record(job.command, telemetry.CommandRunning, "running", 0)
 				ctx, cancel := context.WithTimeout(dispatcher.ctx, 20*time.Second)
 				result = job.executor(ctx, job.command.Action)
 				if ctx.Err() != nil {
@@ -216,14 +246,40 @@ func (dispatcher *Dispatcher) work() {
 			}
 		}
 		if err := dispatcher.journal.Complete(result); err != nil {
-			slog.Error("command result could not be durably recorded", "command_id", job.command.CommandID, "error", err)
+			dispatcher.record(job.command, telemetry.StorageFailure, "JOURNAL_FAILURE", 0)
 			result = protocol.CommandResultPayload{CommandID: job.command.CommandID, Code: "EXECUTION_UNKNOWN", Message: "command outcome could not be durably recorded"}
 		}
 		job.Result = result
+		dispatcher.record(job.command, telemetry.CommandResult, telemetry.Outcome(result.Code), time.Since(job.admittedAt))
 		close(job.Done)
 		dispatcher.mutex.Lock()
 		delete(dispatcher.pending, job.command.CommandID)
 		dispatcher.mutex.Unlock()
+		dispatcher.updateGauges()
+	}
+}
+
+func (dispatcher *Dispatcher) record(command protocol.CommandPayload, kind telemetry.Kind, code string, elapsed time.Duration) {
+	dispatcher.telemetry.Record(telemetry.Event{Kind: kind, ActorID: "controller", NodeID: dispatcher.nodeID, ResourceID: command.ResourceID, CommandID: command.CommandID, Action: command.Action, Code: code, DurationMillis: elapsed.Milliseconds()})
+}
+
+// ACKDelivered is called by the session only after a successful frame write.
+func (dispatcher *Dispatcher) ACKDelivered(command protocol.CommandPayload, status string) {
+	dispatcher.record(command, telemetry.CommandACK, status, 0)
+}
+
+func (dispatcher *Dispatcher) updateGauges() {
+	if dispatcher.telemetry == nil {
+		return
+	}
+	dispatcher.mutex.Lock()
+	dispatcher.telemetry.SetGauge(telemetry.AgentPending, len(dispatcher.pending))
+	dispatcher.telemetry.SetGauge(telemetry.AgentPendingLimit, QueueCapacity)
+	dispatcher.mutex.Unlock()
+	if journal, ok := dispatcher.journal.(interface{ Usage() (int, int) }); ok {
+		entries, capacity := journal.Usage()
+		dispatcher.telemetry.SetGauge(telemetry.JournalEntries, entries)
+		dispatcher.telemetry.SetGauge(telemetry.JournalLimit, capacity)
 	}
 }
 
