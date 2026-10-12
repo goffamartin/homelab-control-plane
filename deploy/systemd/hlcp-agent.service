@@ -8,19 +8,24 @@ After=network-online.target
 Type=simple
 User=hlcp
 Group=hlcp
-SupplementaryGroups=docker
-ExecStart=/usr/local/bin/hlcp-agent -config /etc/hlcp/agent.yaml
-Restart=always
+LoadCredential=agent.yaml:/etc/hlcp/agent/agent.yaml
+LoadCredential=agent.crt:/etc/hlcp/agent/agent.crt
+LoadCredential=agent.key:/etc/hlcp/agent/agent.key
+LoadCredential=ca.crt:/etc/hlcp/agent/ca.crt
+StateDirectory=hlcp
+StateDirectoryMode=0700
+ExecStartPre=/usr/local/bin/hlcp-agent -config %d/agent.yaml -check-config
+ExecStart=/usr/local/bin/hlcp-agent -config %d/agent.yaml
+Restart=on-failure
 RestartSec=5s
 
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/var/lib/hlcp
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 SystemCallArchitectures=native
-UMask=0027
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target
