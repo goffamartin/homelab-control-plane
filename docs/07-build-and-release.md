@@ -115,8 +115,8 @@ still-open live Podman acceptance or Debian deployment/reboot/upgrade in F10.
   advisory appears. [Maintained YAML upstream](https://github.com/yaml/go-yaml).
 - `github.com/x448/float16 v0.8.4` remains the CBOR indirect dependency. No new
   runtime dependencies are introduced for builds or version reporting.
-- The pinned `govulncheck v1.9.0` source scan on Windows reported no vulnerabilities
-  for this tree with Go 1.27.2. The CI repeats the source scan on Linux. This means
+- The pinned `govulncheck v1.9.0` source scans on Windows and hosted Linux CI passed
+  for this tree with Go 1.27.2. This means
   no known reachable finding in that database snapshot, not a complete security
   audit. [Go vulnerability management](https://go.dev/doc/security/vuln/).
 
@@ -126,3 +126,12 @@ checksums for all nine binaries and the manifest. Version metadata was checked
 in all three Windows executables. Dirty-tree and output-overwrite rejection and
 workflow actionlint checks passed. The local validation builds carry `-dirty`;
 the hosted clean-commit CI run is the release provenance gate.
+
+Hosted evidence: [run 38231609545](https://github.com/goffamartin/homelab-control-plane/actions/runs/38231609545)
+passed on full revision `bf79a036ba814e094ad1166495cb69cf13ac6c2a`, including
+format/module/vet/race/fuzz/vulnerability gates, two matching clean builds,
+checksum verification, all three Linux amd64 `--version` smoke checks and
+artifact upload. The artifact is named
+`hlcp-bf79a036ba814e094ad1166495cb69cf13ac6c2a` and has seven-day retention.
+Two local clean builds of the same revision also matched, with all checksums
+verified and the Windows CLI reporting that exact revision without `-dirty`.
