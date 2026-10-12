@@ -11,6 +11,11 @@ addresses. Mutating and read endpoints require a bearer token loaded from a
 local file; the CLI reads the same token from its local configuration or an
 explicit file option.
 
+The credential model is refined by accepted [ADR-0005](0005-management-node-and-api-adapters.md)
+and the [F10B permission contract](../10-scoped-api-credentials.md): policy mode
+supports separate scoped principals; legacy token mode remains an explicit
+unrestricted operator profile. Loopback networking and browser protections remain.
+
 The API applies server timeouts, bounded request bodies, strict JSON decoding,
 Host/Origin checks and a stable JSON error envelope. The token and configuration
 files are deployment secrets and are never committed.

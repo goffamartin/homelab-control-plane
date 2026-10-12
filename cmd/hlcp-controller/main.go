@@ -24,6 +24,7 @@ func main() {
 	listen := flag.String("listen", ":9443", "agent TCP address")
 	apiListen := flag.String("api-listen", "127.0.0.1:9444", "local controller API address")
 	apiTokenFile := flag.String("api-token-file", localapi.DefaultTokenFile, "private local API bearer token file")
+	apiPolicyFile := flag.String("api-policy-file", "", "private scoped API policy JSON (exclusive with explicit api-token-file)")
 	certificate := flag.String("cert", "", "controller certificate PEM")
 	privateKey := flag.String("key", "", "controller private key PEM")
 	ca := flag.String("ca", "", "trusted agent CA bundle PEM")
@@ -58,7 +59,13 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
 	}
-	apiToken, err := localapi.LoadToken(*apiTokenFile)
+	explicitToken := false
+	flag.Visit(func(value *flag.Flag) {
+		if value.Name == "api-token-file" {
+			explicitToken = true
+		}
+	})
+	authorizer, err := loadAPIAuthorizer(*apiPolicyFile, *apiTokenFile, explicitToken)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(2)
@@ -86,18 +93,65 @@ func main() {
 	defer server.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	if *apiPolicyFile != "" {
+		hup := make(chan os.Signal, 1)
+		signal.Notify(hup, syscall.SIGHUP)
+		reloadContext, cancelReload := context.WithCancel(ctx)
+		reloadDone := make(chan struct{})
+		go func() {
+			defer close(reloadDone)
+			runPolicyReloads(reloadContext, hup, authorizer, *apiPolicyFile, diagnostics)
+		}()
+		defer func() { signal.Stop(hup); cancelReload(); <-reloadDone }()
+	}
 	apiListener, err := net.Listen("tcp", *apiListen)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "cannot bind local API:", err)
 		os.Exit(1)
 	}
 	defer apiListener.Close()
-	api := &http.Server{Addr: *apiListen, Handler: server.HTTPHandler(apiToken), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: *resultTimeout + 5*time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192}
+	api := &http.Server{Addr: *apiListen, Handler: server.HTTPHandlerWithAuthorizer(authorizer), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: *resultTimeout + 5*time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192}
 	fmt.Printf("HLCP controller listening on %s (%s)\n", server.Address(), transport.ALPN)
 	fmt.Printf("HLCP local API listening on %s\n", *apiListen)
 	if err := serveProcesses(ctx, server, api, apiListener); err != nil {
 		fmt.Fprintf(os.Stderr, "controller failed: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+func loadAPIAuthorizer(policyFile, tokenFile string, explicitToken bool) (*localapi.Authorizer, error) {
+	if policyFile != "" {
+		if explicitToken {
+			return nil, errors.New("api-policy-file and api-token-file cannot be combined")
+		}
+		p, err := localapi.LoadPolicy(policyFile)
+		if err != nil {
+			return nil, err
+		}
+		return localapi.NewAuthorizer(p), nil
+	}
+	token, err := localapi.LoadToken(tokenFile)
+	if err != nil {
+		return nil, err
+	}
+	return localapi.LegacyAuthorizer(token), nil
+}
+
+func runPolicyReloads(ctx context.Context, signals <-chan os.Signal, authorizer *localapi.Authorizer, path string, diagnostics *telemetry.Collector) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case _, ok := <-signals:
+			if !ok {
+				return
+			}
+			code := "POLICY_RELOADED"
+			if authorizer.Reload(path) != nil {
+				code = "POLICY_RELOAD_REJECTED"
+			}
+			diagnostics.Record(telemetry.Event{Kind: telemetry.PolicyReload, ActorID: "controller", Code: code})
+		}
 	}
 }
 

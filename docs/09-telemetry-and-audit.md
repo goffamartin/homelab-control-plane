@@ -21,10 +21,12 @@ adapter output, request path/query, HTTP header, token or private key is copied
 into events. Unknown agent outcome codes become `OTHER_RESULT`. IDs intentionally
 remain visible metadata; do not put secrets in identifiers.
 
-At present the local API identity is `local-api`, not a per-person account.
+In legacy token mode the local API identity is `local-api`, not a per-person account.
+F10B policy mode instead attributes API calls to authenticated principal IDs;
+see the [credential contract](10-scoped-api-credentials.md).
 Authenticated agents use their certificate node identity. Internal calls use
 `controller`; results restored from the ledger use `controller-recovery` because
-actor attribution is not durable yet. F10B introduces scoped principals.
+actor attribution is not durable yet.
 Command session ID is the admission session, not proof of the result's delivery
 session; restored operations have no retained admission session metadata.
 

@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "principals": [
+    {
+      "id": "cli-operator",
+      "role": "operator",
+      "token_file": "/etc/hlcp/api.token",
+      "scope": { "all_nodes": true }
+    },
+    {
+      "id": "mcp-observer",
+      "role": "observer",
+      "token_file": "/etc/hlcp/mcp.token",
+      "scope": {
+        "nodes": {
+          "debian-01": { "resources": ["example-catalog"] }
+        }
+      }
+    }
+  ]
+}
