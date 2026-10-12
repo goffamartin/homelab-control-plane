@@ -14,4 +14,6 @@ type Request struct {
 	Output            string
 	API               string
 	APITokenFile      string
+	CommandID         string
+	Lookup            bool
 }

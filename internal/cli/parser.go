@@ -1,12 +1,33 @@
 package cli
 
-import "fmt"
+import (
+	"fmt"
+	"hlcp/internal/protocol"
+)
 
 // Parse accepts selectors with optional values: -n lists nodes, -n ID selects one.
 func Parse(args []string) (Request, error) {
 	var request Request
+	seen := make(map[string]bool)
 	for index := 0; index < len(args); index++ {
 		argument := args[index]
+		group := argument
+		switch argument {
+		case "-n", "--node", "--nodes":
+			group = "node selector"
+		case "-r", "--resource", "--resources":
+			group = "resource selector"
+		case "-a", "--action", "--actions":
+			group = "action selector"
+		case "--command-id", "--result":
+			group = "command ID"
+		case "-h", "--help":
+			group = "help"
+		}
+		if seen[group] {
+			return Request{}, fmt.Errorf("duplicate or conflicting %s", group)
+		}
+		seen[group] = true
 		var target *string
 		optional := false
 		switch argument {
@@ -44,17 +65,12 @@ func Parse(args []string) (Request, error) {
 		case "--dry-run":
 			request.DryRun = true
 		case "--api":
-			if index+1 >= len(args) {
-				return Request{}, fmt.Errorf("--api requires a value")
-			}
-			index++
-			request.API = args[index]
+			target = &request.API
 		case "--api-token-file":
-			if index+1 >= len(args) || len(args[index+1]) == 0 || args[index+1][0] == '-' {
-				return Request{}, fmt.Errorf("--api-token-file requires a value")
-			}
-			index++
-			request.APITokenFile = args[index]
+			target = &request.APITokenFile
+		case "--command-id", "--result":
+			target = &request.CommandID
+			request.Lookup = argument == "--result"
 		default:
 			return Request{}, fmt.Errorf("unknown argument %q", argument)
 		}
@@ -67,6 +83,29 @@ func Parse(args []string) (Request, error) {
 			}
 		}
 	}
+	if request.Help {
+		return request, nil
+	}
+	if (request.ResourceSpecified || request.ActionSpecified || request.Lookup) && request.Node == "" {
+		return Request{}, fmt.Errorf("resource, action and result selectors require a selected node")
+	}
+	if request.ResourceSpecified && request.Resource == "" && request.ActionSpecified {
+		return Request{}, fmt.Errorf("an action requires a selected resource, not a resource list")
+	}
+	if request.Lookup && (request.ResourceSpecified || request.ActionSpecified || request.DryRun) {
+		return Request{}, fmt.Errorf("--result cannot be combined with resource, action or dry-run")
+	}
+	if request.CommandID != "" && !request.Lookup && (request.Resource == "" || request.Action == "") {
+		return Request{}, fmt.Errorf("--command-id requires a resource action")
+	}
+	if request.DryRun && request.Action == "" {
+		return Request{}, fmt.Errorf("--dry-run requires an action")
+	}
+	if request.CommandID != "" {
+		if err := (protocol.CommandPayload{CommandID: request.CommandID, ResourceID: "resource", Action: "status"}).Validate(); err != nil {
+			return Request{}, fmt.Errorf("invalid command ID")
+		}
+	}
 	return request, nil
 }
 
@@ -74,6 +113,9 @@ func Parse(args []string) (Request, error) {
 func Intent(request Request) string {
 	if request.Help {
 		return "help"
+	}
+	if request.Lookup {
+		return "result"
 	}
 	if !request.NodeSpecified || request.Node == "" {
 		return "nodes"

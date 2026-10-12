@@ -35,6 +35,8 @@ hlcp -n debian-01 -a status
 hlcp -n debian-01 -r
 hlcp -n debian-01 -r example-catalog -a
 hlcp -n debian-01 -r example-catalog -a restart
+hlcp -n debian-01 -r example-catalog -a restart --command-id op-1 --json
+hlcp -n debian-01 --result op-1 --json
 ```
 
 Start the controller API on its default local address (`127.0.0.1:9444`) with:
@@ -44,6 +46,24 @@ hlcp-controller -listen :9443 -api-listen 127.0.0.1:9444 -api-token-file /etc/hl
 ```
 
 `hlcp` targets that local address by default. Use `hlcp --help` for the explicit long-form selectors and `--api` override.
+
+Short selectors `-n`, `-r`, `-a` have optional values; long singular selectors
+(`--node`, `--resource`, `--action`) require values and plural selectors list
+choices. Repeated/conflicting selectors and missing selected parents are errors.
+Default output is readable text; `--json` preserves the API response on stdout.
+Diagnostics go to stderr. Resource execution prints its ID and lookup hint to
+stderr before submission. `--command-id <id>` supplies a stable ID; `--result <id>`
+with a selected node only reads the retained controller operation, never resends.
+Lookup cannot be combined with resource/action/dry-run. Keep the original payload
+if deliberately submitting the same ID again; a changed payload is a conflict.
+
+Exit codes: `0` success, `2` invalid/rejected request, `3` definitive failed action,
+`4` connection/API/response error, `5` timeout or unresolved operation (including
+pending/unknown/expired lookup). A failed or unresolved result remains on stdout;
+API rejection and diagnostics are on stderr. After timeout, look up the original
+ID using the same `--api`/`--api-token-file`; do not assume non-execution or create
+a new ID to repeat the action. Lookup availability follows the ledger retention
+window, not an unlimited history.
 
 Controller retry defaults are `--command-ack-timeout 5s`,
 `--command-result-timeout 30s` and `--command-max-attempts 6`. Acknowledged
