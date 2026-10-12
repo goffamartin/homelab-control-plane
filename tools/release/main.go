@@ -181,6 +181,17 @@ func release(out, version, targetList string, allowDirty bool) error {
 	}
 	result.Artifacts = append(result.Artifacts, deployment)
 	fmt.Println(deployment.Name)
+	for _, target := range targets {
+		if !strings.HasPrefix(target, "linux/") {
+			continue
+		}
+		packaged, err := packageControllerDeb(out, version, revision, strings.TrimPrefix(target, "linux/"))
+		if err != nil {
+			return err
+		}
+		result.Artifacts = append(result.Artifacts, packaged)
+		fmt.Println(packaged.Name)
+	}
 	current, err := sourceRevision(allowDirty)
 	if err != nil {
 		return err

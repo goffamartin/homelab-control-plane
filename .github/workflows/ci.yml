@@ -65,6 +65,14 @@ jobs:
           for binary in hlcp hlcp-agent hlcp-controller; do
             "dist/first/${binary}-linux-amd64" --version
           done
+          for package in dist/first/*.deb; do
+            dpkg-deb -f "$package" Package Version Architecture
+            control_dir=$(mktemp -d)
+            dpkg-deb -e "$package" "$control_dir"
+            for script in preinst postinst prerm postrm; do
+              sh -n "$control_dir/$script"
+            done
+          done
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
         with:
           name: hlcp-${{ github.sha }}

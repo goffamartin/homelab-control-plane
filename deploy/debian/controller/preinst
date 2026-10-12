@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+case "$1" in
+  install|upgrade)
+    if [ -e /etc/systemd/system/hlcp-controller.service ] || [ -L /etc/systemd/system/hlcp-controller.service ]; then
+      echo "A manually installed hlcp-controller.service overrides this package." >&2
+      echo "Stop the service and move that unit to a private backup before installing." >&2
+      exit 1
+    fi
+    ;;
+esac

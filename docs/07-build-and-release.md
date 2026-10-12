@@ -54,10 +54,15 @@ are no wall-clock timestamps or absolute host paths in release metadata.
 Outputs:
 
 - nine binaries by default;
+- native `hlcp-controller_VERSION_amd64.deb` / `_arm64.deb` packages;
 - `hlcp-deployment.tar.gz` containing profiles/templates/runbooks only;
 - `build-manifest.json` with version, full Git revision, Go version and artifact
   SHA-256 hashes;
-- `SHA256SUMS`, covering binaries, deployment archive and manifest, in deterministic order.
+- `SHA256SUMS`, covering binaries, Debian packages, deployment archive and manifest, in deterministic order.
+
+The controller package is the preferred installation path; see
+[package installation/update](13-debian-controller-package.md). It includes
+the local CLI but no production credentials, automatic startup or publication.
 
 The output directory must be new: existing files are never overwritten. A failed
 build can leave a partial new directory; it is not a verified release unless the
