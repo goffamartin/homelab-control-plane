@@ -541,7 +541,7 @@ Stav realizace:
 | F6 | Dokončeno | Verzovaný bounded controller ledger se zámkem, durable admission/ACK/result, HTTP idempotence a pozdní výsledky; query-only reconnect/restart i po expiraci. Fault injection, abrupt exit, wire recovery, Windows test/vet a Linux race |
 | F7 | Rozpracováno | Typed runtime observation, connect/post-action/periodic refresh, session/revision validace a freshness; Windows test/vet, Linux race, fake Docker/Podman a živý Docker lifecycle/externí stop. Zbývá živé ověření Podman, který v této stanici není dostupný |
 | F8 | Dokončeno | Společný serverový resolver execute/dry-run, inventory/capabilities, resource detail; striktní progressive selektory, text/JSON výstup, exit kódy, stable command-ID a read-only lookup. Testy skutečného CLI procesu, Windows test/vet a Linux race |
-| F9 | Rozpracováno | Recovery/stress/fuzz ověřeno; Go 1.27.2 a CBOR 2.9.6, --version, offline reproducible build 3 binárek × 3 platformy, manifest/checksumy, source vulnerability check a SHA-pinned read-only CI. Lokální test/vet/race, actionlint a dva shodné buildy prošly; čeká první hosted CI běh |
+| F9 | Dokončeno | Recovery/stress/fuzz, Go 1.27.2/CBOR 2.9.6, --version, offline reproducible build 3 binárek × 3 platformy, manifest/checksumy, source vulnerability check a SHA-pinned read-only CI. Lokální Windows test/vet, Linux race, actionlint, dva shodné clean buildy; hosted CI 38231609545 na bf79a03 prošlo včetně uploadu artefaktů |
 | F10–F11 | Plánováno | Kritéria jednotlivých fází výše |
 
 F7 má implementovaný observation/synchronization blok; zbývá živý Podman smoke
@@ -549,6 +549,8 @@ na dostupném Podman hostu. F8 API/CLI kontrakt je implementovaný nezávisle na
 runtime bráně. F9 má první end-to-end recovery blok; `06-recovery-test-evidence.md`
 odděluje doložené recovery/stress/fuzz scénáře od živé runtime akceptace.
 `07-build-and-release.md` popisuje implementovanou build/CI bránu a dependency review;
-F9 uzavřeme po ověření prvního hosted CI běhu.
+F9 je uzavřená zeleným [hosted CI během 38231609545](https://github.com/goffamartin/homelab-control-plane/actions/runs/38231609545)
+na commitu `bf79a03`. F10 nyní řeší provozní pozorovatelnost a Debian nasazení;
+živý Podman smoke F7 tím není nahrazen.
 Není důvod přepisovat celý projekt: framing,
 základní TLS setup, datové modely a adapter boundary lze zachovat a postupně zpevnit.
