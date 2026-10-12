@@ -47,6 +47,10 @@ dirty marker and must not be represented as committed releases.
 Package bytes use deterministic ar/tar/gzip metadata and normalized text LF;
 no dpkg, Docker or native Linux builder is needed to generate them on Windows.
 Package hashes join the existing manifest/SHA256SUMS, including both architectures.
+Debian '~' version separators are represented as '-' in artifact filenames so
+GitHub does not rewrite them. For example the file is
+hlcp-controller_0.1.0-preview.1_amd64.deb, while its internal Debian version is
+0.1.0~preview.1. Downloaded filenames match SHA256SUMS without manual renaming.
 
 Before installation, verify the selected artifact hash against the trusted
 SHA256SUMS/manifest. If downloading only selected artifacts:

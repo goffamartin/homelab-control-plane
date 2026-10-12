@@ -192,4 +192,19 @@ func TestControllerPackageContents(t *testing.T) {
 	if bytes.Contains(contents, []byte("SECRET")) {
 		t.Fatal("packaged secret")
 	}
+	preview, err := packageControllerDeb("out", "v0.1.0-preview.1", "abc123", "amd64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.Name != "hlcp-controller_0.1.0-preview.1_amd64.deb" {
+		t.Fatal("unsafe release asset name")
+	}
+	previewBytes, err := os.ReadFile(filepath.Join("out", preview.Name))
+	if err != nil {
+		t.Fatal(err)
+	}
+	previewControl := readDebTar(t, readDebMembers(t, previewBytes)["control.tar.gz"])
+	if !strings.Contains(string(previewControl["control"].data), "Version: 0.1.0~preview.1\n") {
+		t.Fatal("lost Debian prerelease ordering")
+	}
 }

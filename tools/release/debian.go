@@ -173,7 +173,9 @@ func packageControllerDeb(out, version, revision, arch string) (artifact, error)
 		}
 		control = append(control, debEntry{name, 0755, script})
 	}
-	filename := "hlcp-controller_" + packageVersion + "_" + arch + ".deb"
+	// GitHub normalizes '~' in uploaded asset names. Keep filenames portable;
+	// the Debian version inside control retains '~' for prerelease ordering.
+	filename := "hlcp-controller_" + strings.ReplaceAll(packageVersion, "~", "-") + "_" + arch + ".deb"
 	file, err := os.OpenFile(filepath.Join(out, filename), os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		return artifact{}, err
