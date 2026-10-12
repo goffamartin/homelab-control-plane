@@ -1,6 +1,7 @@
 # Recovery test evidence and remaining integration gates
 
-This is evidence for the first F9 slice, not a claim that v1 or F9 is complete.
+This is evidence for the recovery and stress/fuzz F9 slices, not a claim that v1
+or F9 is complete.
 The reference deployment remains Linux/Debian; live Podman acceptance in F7 is
 still open. No live Docker/Podman resource is modified by the tests below.
 
@@ -69,10 +70,54 @@ by full Windows tests and vet and full Linux `go test -race` (all packages).
 | Foreign node/stale writer/session/revision rejection | `internal/controller/sessions_test.go`, `internal/controller/resource_state_test.go`, `internal/session/session_test.go` |
 | CLI streams, exit codes, selectors and integer-safe JSON | `cmd/hlcp/main_test.go`, `cmd/hlcp/output_test.go`, `internal/cli/parser_test.go` |
 
+## Sustained pressure and reconnect lifecycle
+
+`TestAgentFullQueueStillAcknowledgesDuplicatesAndRejectsExcess` fills the 16
+admitted-job/result slots with a blocked executor. It then exchanges 128 duplicate
+commands and 128 excess commands: duplicates remain `in_progress`, every excess
+command receives a correlated `QUEUE_FULL` result, and no excess ID is admitted
+to the journal. Socket deadlines bound stalls. This is sustained saturation,
+not a benchmark or a claim of unlimited throughput.
+
+`TestRepeatedReconnectJoinsCommandWaitersAndInboundReaders` reconnects 64 times
+around one pending command. Each connection joins its agent reader/result waiters
+and controller inbound reader and releases its writer reservations before the
+next iteration. The final session gets the successful result, with exactly one
+executor invocation. Explicit joins test lifecycle ownership without relying on
+noisy process-wide goroutine counts; they do not prove absence of every possible
+memory leak or cover 64 live TLS handshakes.
+
+## Bounded fuzz campaigns
+
+The checked-in seed corpus runs with ordinary `go test`. Mutation campaigns use
+two workers and a configured five-second budget per target. On 2026-10-12:
+
+| Target | Environment | Executions | Result |
+|---|---|---:|---|
+| `FuzzFrameDecode` | Windows | 250819 | Passed |
+| `FuzzCommandPayloadDecode` | Windows | 242795 | Passed |
+| `FuzzProgressiveParser` | Windows | 324906 | Passed |
+| `FuzzJournalRecovery` | Linux tmpfs | 38279 | Passed |
+
+Frame and payload fuzzing check accepted-input round trips; CLI fuzzing checks
+determinism and selected-parent/read-only lookup invariants. Journal fuzzing uses
+the actual file loader: rejected input must remain unchanged and accepted input
+must survive close/reopen. The Windows journal campaign also passed but managed
+only nine executions due to file-system overhead, hence the Linux repetition.
+These short campaigns found no failing input; they are not exhaustive validation
+or a security audit. They cap mutation-input sizes and run offline.
+
+Example (change package and target for the other campaigns):
+
+```text
+go test ./internal/protocol -run '^$' -fuzz '^FuzzFrameDecode$' -fuzztime 5s -parallel 2 -timeout 60s
+```
+
+The new stress and seed tests passed three repeated Windows runs. Full Windows
+tests/vet and full Linux race validation are the regression gate for this slice.
+
 ## Remaining F9 gates
 
-- Sustained 100+ command ACK/backpressure and repeated-reconnect leak tests.
-- Bounded fuzz campaigns for frame/payload/parser and journal decoding.
 - CI verification and reproducible build of all three binaries, version metadata
   and release checksums; dependency/security review, including YAML RC usage.
 - Keep live Docker/Podman runtime acceptance separate; fake runners do not close
