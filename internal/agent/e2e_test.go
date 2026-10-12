@@ -22,6 +22,7 @@ import (
 	"hlcp/internal/command"
 	"hlcp/internal/controller"
 	"hlcp/internal/liveness"
+	"hlcp/internal/telemetry"
 	"hlcp/internal/transport"
 )
 
@@ -68,14 +69,19 @@ type e2eController struct {
 
 const e2eToken = "01234567890123456789012345678901"
 
-func startE2EController(t *testing.T, files transport.TLSFiles, ledger string) *e2eController {
+func startE2EController(t *testing.T, files transport.TLSFiles, ledger string, diagnostics ...*telemetry.Collector) *e2eController {
 	t.Helper()
 	tlsConfig, err := transport.ServerTLSConfig(files)
 	if err != nil {
 		t.Fatal(err)
 	}
+	var collector *telemetry.Collector
+	if len(diagnostics) > 0 {
+		collector = diagnostics[0]
+	}
 	server, err := controller.Listen("127.0.0.1:0", controller.Config{
 		TLSConfig: tlsConfig, LedgerFile: ledger,
+		Telemetry:      collector,
 		Logger:         slog.New(slog.NewTextHandler(io.Discard, nil)),
 		LivenessPolicy: liveness.Policy{HeartbeatInterval: time.Second, DegradedAfter: 2, OfflineAfter: 3},
 		CommandRetry:   controller.RetryPolicy{ACKTimeout: time.Second, ResultTimeout: 3 * time.Second, MaxAttempts: 2},

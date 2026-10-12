@@ -73,3 +73,15 @@ Measure failure-detection time, false failure detections, command success rate, 
 Connect results back to the research question. Explain where the observed trade-off changes, which assumptions limit external validity, and which protocol choices were validated or falsified.
 
 **Exit criterion:** the written report distinguishes measured evidence from design rationale and future work.
+
+## Management node and MCP extension
+
+The selected HomeLab direction is a continuously running lightweight Debian
+management VM, a read-only MCP adapter and a later web UI. The
+[management implementation plan](08-management-node-and-mcp-plan.md) expands F10
+into telemetry, scoped API credentials, bounded diagnostics, Debian packaging
+and real-host acceptance, then separately tracks MCP and remote container logs.
+MCP and web reuse the loopback controller API; they do not bypass its policy or
+command lifecycle. Mutating MCP and web UI are deferred extensions, not F11 gates.
+The outstanding live Podman validation remains required. Baseline protocol
+experiments exclude or explicitly account for diagnostic polling traffic.

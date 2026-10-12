@@ -14,6 +14,8 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [HLCP v1 acceptance contract](docs/05-v1-acceptance.md)
 - [Recovery test evidence and remaining integration gates](docs/06-recovery-test-evidence.md)
 - [Build, CI and dependency review](docs/07-build-and-release.md)
+- [Debian management node and MCP implementation plan](docs/08-management-node-and-mcp-plan.md)
+- [Bounded telemetry and audit](docs/09-telemetry-and-audit.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status
@@ -35,7 +37,8 @@ The v1 implementation currently includes:
 - allow-listed `systemd`, Docker, and Podman resource actions;
 - controller-side command correlation and agent-side command-result deduplication;
 - ACK-aware bounded retries, a durable controller ledger and read-only recovery;
-- a loopback-only HTTP API consumed by the `hlcp` CLI.
+- a loopback-only HTTP API consumed by the `hlcp` CLI;
+- bounded structured audit events and fixed-cardinality operational telemetry.
 
 The CLI navigates the discovered inventory progressively:
 

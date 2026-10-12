@@ -65,6 +65,7 @@ func RunAgentCommandLoop(parent context.Context, connection net.Conn, writer *Wr
 			}
 			return err
 		}
+		dispatcher.ACKDelivered(payload, admission.Ack.Status)
 		if admission.Result != nil {
 			if err := writer.SendContext(ctx, protocol.MessageCommandResult, *admission.Result); err != nil {
 				return err

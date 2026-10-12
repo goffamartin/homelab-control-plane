@@ -7,6 +7,7 @@ import (
 
 	"hlcp/internal/protocol"
 	"hlcp/internal/session"
+	"hlcp/internal/telemetry"
 )
 
 func (sessions *ActiveSessions) HandleCommandState(nodeID string, writer *session.Writer, state protocol.CommandStatePayload) bool {
@@ -60,6 +61,7 @@ func (sessions *ActiveSessions) Reconcile(ctx context.Context, nodeID string, wr
 				if err := writer.SendContext(ctx, protocol.MessageCommandQuery, progress.Command); err != nil {
 					return
 				}
+				sessions.tracker.telemetry.Record(telemetry.Event{Kind: telemetry.RecoveryQuery, NodeID: nodeID, CommandID: progress.Command.CommandID})
 			}
 			cursor = (cursor + count) % len(operations)
 		}

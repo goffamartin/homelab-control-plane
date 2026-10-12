@@ -60,6 +60,13 @@ type FileJournal struct {
 	fault        func(string) error
 }
 
+// Usage is a bounded, read-only capacity snapshot; it never prunes the journal.
+func (journal *FileJournal) Usage() (entries, capacity int) {
+	journal.mutex.Lock()
+	defer journal.mutex.Unlock()
+	return len(journal.entries), journal.limit
+}
+
 type journalDocument struct {
 	Version int     `json:"version"`
 	NodeID  string  `json:"node_id"`

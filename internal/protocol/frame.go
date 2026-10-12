@@ -130,6 +130,9 @@ func Decode(reader io.Reader) (Frame, error) {
 		return Frame{}, fmt.Errorf("read HLCP payload: %w", err)
 	}
 
+	if observer, ok := reader.(interface{ FrameRead() }); ok {
+		observer.FrameRead()
+	}
 	return Frame{Header: header, Payload: payload}, nil
 }
 
@@ -150,6 +153,9 @@ func WriteFrame(writer io.Writer, frame Frame) error {
 			return io.ErrShortWrite
 		}
 		encoded = encoded[written:]
+	}
+	if observer, ok := writer.(interface{ FrameWritten() }); ok {
+		observer.FrameWritten()
 	}
 	return nil
 }

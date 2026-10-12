@@ -75,27 +75,41 @@ func Error(writer http.ResponseWriter, status int, code, message string) {
 }
 
 func Protect(token string, handler http.Handler) http.Handler {
+	return ProtectObserved(token, handler, nil)
+}
+
+// observe receives only controlled codes, never credentials, URLs or headers.
+func ProtectObserved(token string, handler http.Handler, observe func(string, bool)) http.Handler {
 	return http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		record := func(code string, allowed bool) {
+			if observe != nil {
+				observe(code, allowed)
+			}
+		}
 		host := request.Host
 		if parsed, _, err := net.SplitHostPort(host); err == nil {
 			host = parsed
 		}
 		ip := net.ParseIP(host)
 		if host != "localhost" && (ip == nil || !ip.IsLoopback()) {
+			record("INVALID_HOST", false)
 			Error(writer, http.StatusForbidden, "INVALID_HOST", "loopback Host is required")
 			return
 		}
 		if request.Header.Get("Origin") != "" || request.Header.Get("Sec-Fetch-Site") == "cross-site" {
+			record("BROWSER_REQUEST_DENIED", false)
 			Error(writer, http.StatusForbidden, "BROWSER_REQUEST_DENIED", "browser-origin requests are not supported")
 			return
 		}
 		credentials := request.Header.Get("Authorization")
 		if len(token) < 32 || subtle.ConstantTimeCompare([]byte(credentials), []byte("Bearer "+token)) != 1 {
+			record("UNAUTHORIZED", false)
 			writer.Header().Set("WWW-Authenticate", "Bearer")
 			Error(writer, http.StatusUnauthorized, "UNAUTHORIZED", "valid local API credentials are required")
 			return
 		}
 		writer.Header().Set("Cache-Control", "no-store")
+		record("LOCAL_API", true)
 		handler.ServeHTTP(writer, request)
 	})
 }

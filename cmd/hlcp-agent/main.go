@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"hlcp/internal/agent"
 	"hlcp/internal/buildinfo"
+	"hlcp/internal/telemetry"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func main() {
@@ -31,6 +33,12 @@ func main() {
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	config.Telemetry = telemetry.New(telemetry.JSONSink(os.Stderr))
+	defer func() {
+		closeContext, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		_ = config.Telemetry.Close(closeContext)
+	}()
 	if err := agent.Run(ctx, config); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

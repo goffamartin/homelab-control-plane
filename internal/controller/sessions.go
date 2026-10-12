@@ -5,6 +5,7 @@ import (
 	"errors"
 	"hlcp/internal/protocol"
 	"hlcp/internal/session"
+	"hlcp/internal/telemetry"
 	"time"
 )
 
@@ -35,8 +36,10 @@ func (sessions *ActiveSessions) Publish(registration session.Registration, synch
 	previous, exists := sessions.active[registration.NodeID]
 	sessions.active[registration.NodeID] = activeSession{writer: writer, sessionID: registration.SessionID, cancel: cancel}
 	sessions.registry.nodes[registration.NodeID] = record
+	sessions.tracker.telemetry.SetGauge(telemetry.Sessions, len(sessions.active))
 	sessions.registry.mutex.Unlock()
 	if exists {
+		sessions.tracker.telemetry.Record(telemetry.Event{Kind: telemetry.SessionReplaced, NodeID: registration.NodeID, SessionID: registration.SessionID})
 		previous.cancel()
 		_ = previous.writer.Close()
 	}
@@ -51,6 +54,7 @@ func (sessions *ActiveSessions) Remove(nodeID string, writer *session.Writer) {
 		record.State = "offline"
 		record.DisconnectedAt = time.Now()
 		sessions.registry.nodes[nodeID] = record
+		sessions.tracker.telemetry.SetGauge(telemetry.Sessions, len(sessions.active))
 	}
 }
 
@@ -98,7 +102,10 @@ func (sessions *ActiveSessions) Execute(ctx context.Context, nodeID string, comm
 	operationContext, stop := context.WithTimeout(ctx, sessions.policy.ResultTimeout)
 	defer stop()
 	deadline, _ := operationContext.Deadline()
-	fresh, err := sessions.tracker.Admit(nodeID, command, deadline)
+	sessions.registry.mutex.RLock()
+	admissionSessionID := sessions.active[nodeID].sessionID
+	sessions.registry.mutex.RUnlock()
+	fresh, err := sessions.tracker.admit(nodeID, command, deadline, telemetry.Actor(ctx), admissionSessionID)
 	if err != nil {
 		return protocol.CommandResultPayload{}, err
 	}
