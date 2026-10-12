@@ -1,0 +1,15 @@
+[Unit]
+Description=HomeLab rootless Podman agent
+
+[Service]
+Type=simple
+ExecStartPre=%h/.local/bin/hlcp-agent -config %h/.config/hlcp/agent.yaml -check-config
+ExecStart=%h/.local/bin/hlcp-agent -config %h/.config/hlcp/agent.yaml
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+# Do not copy NoNewPrivileges/capability restrictions here: rootless Podman
+# may need the privileged newuidmap/newgidmap helpers.
+
+[Install]
+WantedBy=default.target

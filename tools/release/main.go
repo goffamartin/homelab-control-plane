@@ -175,6 +175,12 @@ func release(out, version, targetList string, allowDirty bool) error {
 			fmt.Println(filename)
 		}
 	}
+	deployment, err := packageDeployment(out)
+	if err != nil {
+		return err
+	}
+	result.Artifacts = append(result.Artifacts, deployment)
+	fmt.Println(deployment.Name)
 	current, err := sourceRevision(allowDirty)
 	if err != nil {
 		return err

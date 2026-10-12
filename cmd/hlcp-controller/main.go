@@ -15,12 +15,15 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 )
 
 func main() {
 	version := flag.Bool("version", false, "print build metadata and exit")
+	checkConfig := flag.Bool("check-config", false, "validate configuration without binding sockets or opening the ledger")
+	nodesFile := flag.String("node-allowlist-file", "", "startup JSON array of admitted certificate node identities; restart to apply")
 	listen := flag.String("listen", ":9443", "agent TCP address")
 	apiListen := flag.String("api-listen", "127.0.0.1:9444", "local controller API address")
 	apiTokenFile := flag.String("api-token-file", localapi.DefaultTokenFile, "private local API bearer token file")
@@ -74,10 +77,33 @@ func main() {
 		fmt.Fprintln(os.Stderr, "thresholds must not exceed 255")
 		os.Exit(2)
 	}
+	policy := liveness.Policy{HeartbeatInterval: *interval, DegradedAfter: uint8(*degraded), OfflineAfter: uint8(*offline)}
+	if err := policy.Validate(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(2)
+	}
+	_, port, addressErr := net.SplitHostPort(*listen)
+	portNumber, portErr := strconv.Atoi(port)
+	if addressErr != nil || portErr != nil || portNumber < 0 || portNumber > 65535 {
+		fmt.Fprintln(os.Stderr, "invalid agent listen address")
+		os.Exit(2)
+	}
+	var allowedNodes map[string]bool
+	if *nodesFile != "" {
+		allowedNodes, err = transport.LoadAllowedNodes(*nodesFile)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+	}
 	tlsConfig, err := transport.ServerTLSConfig(transport.TLSFiles{CertificateFile: *certificate, PrivateKeyFile: *privateKey, CAFile: *ca})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "invalid TLS configuration: %v\n", err)
 		os.Exit(2)
+	}
+	if *checkConfig {
+		fmt.Println("configuration valid (listener availability and ledger contents not checked)")
+		return
 	}
 	diagnostics := telemetry.New(telemetry.JSONSink(os.Stderr))
 	defer func() {
@@ -85,7 +111,7 @@ func main() {
 		defer cancel()
 		_ = diagnostics.Close(ctx)
 	}()
-	server, err := controller.Listen(*listen, controller.Config{TLSConfig: tlsConfig, LivenessPolicy: liveness.Policy{HeartbeatInterval: *interval, DegradedAfter: uint8(*degraded), OfflineAfter: uint8(*offline)}, CommandRetry: commandRetry, LedgerFile: *ledgerFile, ResourceStateMaxAge: *stateMaxAge, Telemetry: diagnostics})
+	server, err := controller.Listen(*listen, controller.Config{TLSConfig: tlsConfig, LivenessPolicy: policy, AllowedNodeIDs: allowedNodes, CommandRetry: commandRetry, LedgerFile: *ledgerFile, ResourceStateMaxAge: *stateMaxAge, Telemetry: diagnostics})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cannot start controller: %v\n", err)
 		os.Exit(1)

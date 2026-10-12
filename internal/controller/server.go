@@ -26,6 +26,8 @@ type Config struct {
 	CommandRetry        RetryPolicy
 	LedgerFile          string
 	ResourceStateMaxAge time.Duration
+	// Nil retains CA-only admission; an explicit empty map denies all nodes.
+	AllowedNodeIDs map[string]bool
 }
 type Server struct {
 	listener        net.Listener
@@ -42,6 +44,13 @@ type Server struct {
 }
 
 func Listen(address string, config Config) (*Server, error) {
+	if config.AllowedNodeIDs != nil {
+		nodes := make(map[string]bool, len(config.AllowedNodeIDs))
+		for node, allowed := range config.AllowedNodeIDs {
+			nodes[node] = allowed
+		}
+		config.AllowedNodeIDs = nodes
+	}
 	if config.TLSConfig == nil {
 		return nil, errors.New("hlcp controller: TLS configuration is required")
 	}
@@ -185,6 +194,10 @@ func (server *Server) handleConnection(parent context.Context, raw net.Conn) {
 	nodeID, err := transport.AgentNodeID(state.VerifiedChains[0][0])
 	if err != nil {
 		server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.ConnectionRejected, Code: "TLS_IDENTITY"})
+		return
+	}
+	if server.config.AllowedNodeIDs != nil && !server.config.AllowedNodeIDs[nodeID] {
+		server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.ConnectionRejected, NodeID: nodeID, Code: "NODE_NOT_ALLOWED"})
 		return
 	}
 	server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.Authenticated, ActorID: nodeID, NodeID: nodeID, Code: "MTLS"})

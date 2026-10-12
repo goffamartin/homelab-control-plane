@@ -1,0 +1,35 @@
+[Unit]
+Description=HomeLab Control Plane controller
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=hlcp-controller
+Group=hlcp-controller
+EnvironmentFile=/etc/hlcp/controller/controller.env
+LoadCredential=controller.crt:/etc/hlcp/controller/controller.crt
+LoadCredential=controller.key:/etc/hlcp/controller/controller.key
+LoadCredential=ca.crt:/etc/hlcp/controller/ca.crt
+LoadCredential=api-policy.json:/etc/hlcp/controller/api-policy.json
+LoadCredential=api.token:/etc/hlcp/controller/api.token
+LoadCredential=observer.token:/etc/hlcp/controller/observer.token
+LoadCredential=nodes.json:/etc/hlcp/controller/nodes.json
+StateDirectory=hlcp-controller
+StateDirectoryMode=0700
+ExecStartPre=/usr/local/bin/hlcp-controller -check-config -listen ${HLCP_AGENT_LISTEN} -api-listen 127.0.0.1:9444 -cert %d/controller.crt -key %d/controller.key -ca %d/ca.crt -api-policy-file %d/api-policy.json -node-allowlist-file %d/nodes.json -ledger-file /var/lib/hlcp-controller/controller-operations.json
+ExecStart=/usr/local/bin/hlcp-controller -listen ${HLCP_AGENT_LISTEN} -api-listen 127.0.0.1:9444 -cert %d/controller.crt -key %d/controller.key -ca %d/ca.crt -api-policy-file %d/api-policy.json -node-allowlist-file %d/nodes.json -ledger-file /var/lib/hlcp-controller/controller-operations.json
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectHome=true
+ProtectSystem=strict
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

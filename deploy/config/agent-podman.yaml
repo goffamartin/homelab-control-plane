@@ -1,0 +1,18 @@
+# Replace all /home/hlcp-podman paths with the actual runtime owner's home.
+controller_address: controller.example.internal:9443
+server_name: controller.example.internal
+certificate_file: /home/hlcp-podman/.config/hlcp/agent.crt
+private_key_file: /home/hlcp-podman/.config/hlcp/agent.key
+ca_file: /home/hlcp-podman/.config/hlcp/ca.crt
+journal_file: /home/hlcp-podman/.local/state/hlcp/command-journal.json
+journal_retention: 1024
+node_id: debian-01
+agent_version: 0.1.0
+capabilities: [resource.control, podman]
+observation_interval: 10s
+resources:
+  - id: example-catalog
+    type: container
+    adapter: podman
+    target: example-catalog
+    actions: [status, restart]

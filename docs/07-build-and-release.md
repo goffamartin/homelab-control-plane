@@ -26,6 +26,11 @@ can fail later without a code change when new findings are published.
 
 ## Release builder
 
+F10D also produces deterministic `hlcp-deployment.tar.gz` with explicitly
+allowlisted systemd profiles, configuration templates and deployment runbooks.
+It contains no production credentials or binaries; its digest is included in
+the manifest and SHA256SUMS. See [Debian deployment](12-debian-management-deployment.md).
+
 Run at repository root with a clean committed source tree and cached modules:
 
 ```text
@@ -49,9 +54,10 @@ are no wall-clock timestamps or absolute host paths in release metadata.
 Outputs:
 
 - nine binaries by default;
+- `hlcp-deployment.tar.gz` containing profiles/templates/runbooks only;
 - `build-manifest.json` with version, full Git revision, Go version and artifact
   SHA-256 hashes;
-- `SHA256SUMS`, covering the binaries and manifest, in deterministic order.
+- `SHA256SUMS`, covering binaries, deployment archive and manifest, in deterministic order.
 
 The output directory must be new: existing files are never overwritten. A failed
 build can leave a partial new directory; it is not a verified release unless the

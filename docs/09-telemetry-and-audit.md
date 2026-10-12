@@ -85,7 +85,7 @@ For the eventual system service, the operator installs the first file as
 the system agent service), and the second as
 `/etc/systemd/journald@hlcp.conf.d/10-retention.conf`. It must **not** be installed
 as machine-wide `journald.conf`. Do not apply LogNamespace to a rootless Podman
-user service; that profile needs separate F10D treatment. Check the target
+user service; use the separate F10D user profile and host/user journald policy. Check the target
 systemd version and units before enabling, then reload/restart under the approved
 deployment procedure. No host services or credentials were changed by F10A.
 
@@ -106,9 +106,11 @@ journalctl --namespace=hlcp -u hlcp-controller.service -n 100 --no-pager
 journalctl --namespace=hlcp --disk-usage
 ```
 
-These files do not promise a working live install. `systemd-analyze` is absent
-from the local Go test image; unit/config validation and real journald disk
-retention, reboot and storage-full behavior remain F10D/F10E deployment gates.
+These files do not promise a working live install. F10D verified the system
+units with logging/Docker drop-ins and the user unit using systemd 252.39
+in a disposable Debian container. Real journald disk retention, reboot and
+storage-full behavior remain F10E deployment gates; see the
+[deployment runbook](12-debian-management-deployment.md).
 
 ## Verification evidence
 

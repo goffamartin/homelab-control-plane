@@ -1,2 +1,2 @@
 # Linux logging profiles must remain usable from Windows checkouts.
-deploy/**/*.conf text eol=lf
+deploy/** text eol=lf

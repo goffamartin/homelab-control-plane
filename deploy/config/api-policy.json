@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "principals": [
+    {"id": "operator", "role": "operator", "token_file": "api.token", "scope": {"all_nodes": true}},
+    {"id": "observer", "role": "observer", "token_file": "observer.token", "scope": {"all_nodes": true}}
+  ]
+}
