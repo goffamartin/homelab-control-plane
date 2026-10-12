@@ -4,6 +4,7 @@ package command
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -215,6 +216,7 @@ func (dispatcher *Dispatcher) work() {
 			}
 		}
 		if err := dispatcher.journal.Complete(result); err != nil {
+			slog.Error("command result could not be durably recorded", "command_id", job.command.CommandID, "error", err)
 			result = protocol.CommandResultPayload{CommandID: job.command.CommandID, Code: "EXECUTION_UNKNOWN", Message: "command outcome could not be durably recorded"}
 		}
 		job.Result = result

@@ -541,10 +541,12 @@ Stav realizace:
 | F6 | Dokončeno | Verzovaný bounded controller ledger se zámkem, durable admission/ACK/result, HTTP idempotence a pozdní výsledky; query-only reconnect/restart i po expiraci. Fault injection, abrupt exit, wire recovery, Windows test/vet a Linux race |
 | F7 | Rozpracováno | Typed runtime observation, connect/post-action/periodic refresh, session/revision validace a freshness; Windows test/vet, Linux race, fake Docker/Podman a živý Docker lifecycle/externí stop. Zbývá živé ověření Podman, který v této stanici není dostupný |
 | F8 | Dokončeno | Společný serverový resolver execute/dry-run, inventory/capabilities, resource detail; striktní progressive selektory, text/JSON výstup, exit kódy, stable command-ID a read-only lookup. Testy skutečného CLI procesu, Windows test/vet a Linux race |
-| F9–F11 | Plánováno | Kritéria jednotlivých fází výše |
+| F9 | Rozpracováno | Skutečná CLI binárka → HTTP → mTLS controller/agent, dočasná PKI, dry-run bez zápisu, durable ACK, ztráta výsledku po side effectu, restart obou komponent, reconciliation a souběžné duplicity s jedním side effectem; zbývá stress/fuzz a CI/build/release brána |
+| F10–F11 | Plánováno | Kritéria jednotlivých fází výše |
 
 F7 má implementovaný observation/synchronization blok; zbývá živý Podman smoke
 na dostupném Podman hostu. F8 API/CLI kontrakt je implementovaný nezávisle na této
-runtime bráně; další implementační fáze F9 doplní end-to-end fault/recovery a build bránu.
+runtime bráně. F9 má první end-to-end recovery blok; `06-recovery-test-evidence.md`
+odděluje doložené scénáře od zbývající stress/fuzz a CI/build/release brány.
 Není důvod přepisovat celý projekt: framing,
 základní TLS setup, datové modely a adapter boundary lze zachovat a postupně zpevnit.
