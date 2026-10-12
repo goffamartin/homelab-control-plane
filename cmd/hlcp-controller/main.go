@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"hlcp/internal/buildinfo"
 	"hlcp/internal/controller"
 	"hlcp/internal/liveness"
 	"hlcp/internal/localapi"
@@ -18,6 +19,7 @@ import (
 )
 
 func main() {
+	version := flag.Bool("version", false, "print build metadata and exit")
 	listen := flag.String("listen", ":9443", "agent TCP address")
 	apiListen := flag.String("api-listen", "127.0.0.1:9444", "local controller API address")
 	apiTokenFile := flag.String("api-token-file", localapi.DefaultTokenFile, "private local API bearer token file")
@@ -34,6 +36,10 @@ func main() {
 	ledgerFile := flag.String("ledger-file", "/var/lib/hlcp/controller-operations.json", "durable controller operation ledger")
 	stateMaxAge := flag.Duration("resource-state-max-age", time.Minute, "maximum age of a received resource observation")
 	flag.Parse()
+	if *version {
+		fmt.Println(buildinfo.String())
+		return
+	}
 	if *stateMaxAge < time.Second || *stateMaxAge > 24*time.Hour {
 		fmt.Fprintln(os.Stderr, "resource-state-max-age must be 1s..24h")
 		os.Exit(2)

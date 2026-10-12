@@ -10,6 +10,7 @@ type Request struct {
 	ResourceSpecified bool
 	ActionSpecified   bool
 	Help              bool
+	Version           bool
 	DryRun            bool
 	Output            string
 	API               string

@@ -1,0 +1,73 @@
+name: Verify and build HLCP
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**/*.md']
+  pull_request:
+    paths-ignore: ['**/*.md']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hlcp-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      GOTOOLCHAIN: local
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: .go-version
+          cache-dependency-path: go.sum
+      - name: Verify modules and formatting
+        shell: bash
+        run: |
+          go mod download
+          go mod verify
+          go mod tidy
+          git diff --exit-code -- go.mod go.sum
+          mapfile -d '' files < <(git ls-files -z -- '*.go')
+          unformatted=$(gofmt -l "${files[@]}")
+          if [ -n "$unformatted" ]; then printf '%s\n' "$unformatted"; exit 1; fi
+      - name: Vet and race tests (includes real CLI/mTLS E2E)
+        run: |
+          go vet ./...
+          go test -race -count=1 -timeout=120s ./...
+      - name: Bounded fuzz campaigns
+        shell: bash
+        run: |
+          go test ./internal/protocol -run '^$' -fuzz '^FuzzFrameDecode$' -fuzztime 5s -parallel 2 -timeout 60s
+          go test ./internal/protocol -run '^$' -fuzz '^FuzzCommandPayloadDecode$' -fuzztime 5s -parallel 2 -timeout 60s
+          go test ./internal/cli -run '^$' -fuzz '^FuzzProgressiveParser$' -fuzztime 5s -parallel 2 -timeout 60s
+          go test ./internal/command -run '^$' -fuzz '^FuzzJournalRecovery$' -fuzztime 5s -parallel 2 -timeout 60s
+      - name: Known reachable vulnerabilities
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+          govulncheck ./...
+      - name: Build twice and compare checksums
+        shell: bash
+        run: |
+          version="dev-$(git rev-parse --short=12 HEAD)"
+          go run ./tools/release -version "$version" -out dist/first
+          go run ./tools/release -version "$version" -out dist/second
+          diff -u dist/first/SHA256SUMS dist/second/SHA256SUMS
+          (cd dist/first && sha256sum -c SHA256SUMS)
+          for binary in hlcp hlcp-agent hlcp-controller; do
+            "dist/first/${binary}-linux-amd64" --version
+          done
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: hlcp-${{ github.sha }}
+          path: dist/first/*
+          if-no-files-found: error
+          retention-days: 7

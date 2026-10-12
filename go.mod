@@ -1,9 +1,11 @@
 module hlcp
 
-go 1.25.0
+go 1.27.0
+
+toolchain go1.27.2
 
 require (
-	github.com/fxamacker/cbor/v2 v2.9.2
+	github.com/fxamacker/cbor/v2 v2.9.6
 	go.yaml.in/yaml/v4 v4.0.0-rc.6
 )
 

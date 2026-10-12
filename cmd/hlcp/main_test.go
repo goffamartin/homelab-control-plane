@@ -35,6 +35,7 @@ func TestCLIOutputAndExitContracts(t *testing.T) {
 		{name: "bad-json", args: []string{"-n"}, status: 200, body: `not json`, path: "/v1/nodes", code: 4},
 		{name: "conflict", args: []string{"--nodes", "--node", "n"}, code: 2, noRequest: true},
 		{name: "help", args: []string{"--help"}, noRequest: true},
+		{name: "version", args: []string{"--version", "--json"}, noRequest: true, json: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			file := filepath.Join(t.TempDir(), "api.token")

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hlcp/internal/buildinfo"
 	"hlcp/internal/cli"
 	"hlcp/internal/localapi"
 	"io"
@@ -37,6 +38,14 @@ func main() {
 		return
 	}
 	outputMode = request.Output
+	if request.Version {
+		if outputMode == "json" {
+			output(buildinfo.Current())
+		} else {
+			fmt.Println(buildinfo.String())
+		}
+		return
+	}
 	operationIntent = cli.Intent(request)
 	if request.DryRun {
 		operationIntent = "resolve"
@@ -228,6 +237,7 @@ Explicit forms:
 Options:
   -n, -r, -a          navigational selectors; value is optional
   -h, --help          show this help
+  --version           print build metadata without contacting the API
   --dry-run           validate without sending a command
   --json              machine-readable output
   --command-id <id>   stable ID for a resource action (otherwise generated)

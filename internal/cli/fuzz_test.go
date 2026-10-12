@@ -25,7 +25,7 @@ func FuzzProgressiveParser(f *testing.F) {
 		}
 		intent := Intent(request)
 		switch intent {
-		case "help", "nodes":
+		case "help", "version", "nodes":
 		case "node", "resources", "node-actions", "node-status", "node-command":
 			if request.Node == "" {
 				t.Fatal("missing selected node")
