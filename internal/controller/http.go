@@ -15,6 +15,26 @@ import (
 // HTTPHandler is intended only for the controller's local loopback API.
 func (server *Server) HTTPHandler(token string) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/nodes/{node}/resolve", func(writer http.ResponseWriter, request *http.Request) {
+		payload, ok := decodeCommand(writer, request)
+		if !ok {
+			return
+		}
+		plan, err := server.Resolve(request.PathValue("node"), payload)
+		if err != nil {
+			localapi.Error(writer, err.Status, err.Code, err.Message)
+			return
+		}
+		writeJSON(writer, plan)
+	})
+	mux.HandleFunc("GET /v1/nodes/{node}/resources/{resource}", func(writer http.ResponseWriter, request *http.Request) {
+		detail, err := server.ResourceDetail(request.PathValue("node"), request.PathValue("resource"))
+		if err != nil {
+			localapi.Error(writer, err.Status, err.Code, err.Message)
+			return
+		}
+		writeJSON(writer, detail)
+	})
 	mux.HandleFunc("GET /v1/nodes/{node}/commands/{command}", func(writer http.ResponseWriter, request *http.Request) {
 		operation, exists, err := server.sessions.tracker.Operation(request.PathValue("node"), request.PathValue("command"))
 		if err != nil {
@@ -66,49 +86,16 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 		localapi.Error(writer, http.StatusNotFound, "RESOURCE_NOT_FOUND", "resource not found")
 	})
 	mux.HandleFunc("POST /v1/nodes/{node}/commands", func(writer http.ResponseWriter, request *http.Request) {
-		mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
-		if err != nil || mediaType != "application/json" {
-			localapi.Error(writer, http.StatusUnsupportedMediaType, "INVALID_CONTENT_TYPE", "application/json is required")
-			return
-		}
-		request.Body = http.MaxBytesReader(writer, request.Body, 8192)
-		var command protocol.CommandPayload
-		decoder := json.NewDecoder(request.Body)
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&command); err != nil {
-			localapi.Error(writer, http.StatusBadRequest, "INVALID_REQUEST", "invalid or oversized command")
-			return
-		}
-		if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
-			localapi.Error(writer, http.StatusBadRequest, "INVALID_REQUEST", "exactly one JSON command is required")
+		command, ok := decodeCommand(writer, request)
+		if !ok {
 			return
 		}
 		if err := command.Validate(); err != nil {
 			localapi.Error(writer, http.StatusBadRequest, "INVALID_REQUEST", err.Error())
 			return
 		}
-		known := false
-		if server.sessions != nil {
-			operation, exists, err := server.sessions.tracker.Operation(request.PathValue("node"), command.CommandID)
-			if err != nil {
-				localapi.Error(writer, http.StatusServiceUnavailable, "LEDGER_FAILURE", err.Error())
-				return
-			}
-			known = exists
-			if exists && operation.Command != command {
-				localapi.Error(writer, http.StatusConflict, "COMMAND_CONFLICT", ErrCommandConflict.Error())
-				return
-			}
-		}
-		if status, message := server.validateResourceCommand(request.PathValue("node"), command); !known && status != 0 {
-			code := "RESOURCE_NOT_FOUND"
-			if message == "node not found" {
-				code = "NODE_NOT_FOUND"
-			}
-			if status == http.StatusUnprocessableEntity {
-				code = "ACTION_NOT_SUPPORTED"
-			}
-			localapi.Error(writer, status, code, message)
+		if _, err := server.Resolve(request.PathValue("node"), command); err != nil {
+			localapi.Error(writer, err.Status, err.Code, err.Message)
 			return
 		}
 		requestContext, cancel := contextWithTimeout(request, server.sessions.policy.ResultTimeout+time.Second)
@@ -170,23 +157,25 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 	return localapi.Protect(token, mux)
 }
 
-func (server *Server) validateResourceCommand(nodeID string, command protocol.CommandPayload) (int, string) {
-	record, ok := server.registry.Get(nodeID)
-	if !ok {
-		return http.StatusNotFound, "node not found"
+func decodeCommand(writer http.ResponseWriter, request *http.Request) (protocol.CommandPayload, bool) {
+	mediaType, _, err := mime.ParseMediaType(request.Header.Get("Content-Type"))
+	if err != nil || mediaType != "application/json" {
+		localapi.Error(writer, http.StatusUnsupportedMediaType, "INVALID_CONTENT_TYPE", "application/json is required")
+		return protocol.CommandPayload{}, false
 	}
-	for _, resource := range record.Inventory.Resources {
-		if resource.ID != command.ResourceID {
-			continue
-		}
-		for _, action := range resource.Actions {
-			if action == command.Action {
-				return 0, ""
-			}
-		}
-		return http.StatusUnprocessableEntity, "action is not supported by resource"
+	request.Body = http.MaxBytesReader(writer, request.Body, 8192)
+	var command protocol.CommandPayload
+	decoder := json.NewDecoder(request.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&command); err != nil {
+		localapi.Error(writer, http.StatusBadRequest, "INVALID_REQUEST", "invalid or oversized command")
+		return command, false
 	}
-	return http.StatusNotFound, "resource not found"
+	if err := decoder.Decode(new(any)); !errors.Is(err, io.EOF) {
+		localapi.Error(writer, http.StatusBadRequest, "INVALID_REQUEST", "exactly one JSON command is required")
+		return command, false
+	}
+	return command, true
 }
 func writeJSON(writer http.ResponseWriter, value any) {
 	writer.Header().Set("Content-Type", "application/json")

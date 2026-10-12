@@ -19,7 +19,7 @@ func retrySession(t *testing.T, policy RetryPolicy) (*ActiveSessions, *session.W
 	connection, peer := net.Pipe()
 	writer := session.NewWriter(connection, 1)
 	_, cancel := context.WithCancel(context.Background())
-	sessions.Publish(session.Registration{NodeID: "n", SessionID: "s"}, session.Synchronization{Inventory: protocol.InventorySnapshot{Resources: []protocol.ResourceDescriptor{{ID: "catalog", Type: "container", Actions: []string{"restart"}}}}}, time.Now(), writer, cancel)
+	sessions.Publish(session.Registration{NodeID: "n", SessionID: "s", Capabilities: []string{"resource.control", "docker"}}, session.Synchronization{Inventory: protocol.InventorySnapshot{Resources: []protocol.ResourceDescriptor{{ID: "catalog", Type: "container", Actions: []string{"restart"}}}}}, time.Now(), writer, cancel)
 	t.Cleanup(func() { cancel(); connection.Close(); peer.Close() })
 	peer.SetDeadline(time.Now().Add(2 * time.Second))
 	return sessions, writer, peer

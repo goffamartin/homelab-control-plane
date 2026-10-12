@@ -52,6 +52,17 @@ outcome, not proof of non-execution. `--ledger-file` is required and defaults to
 `/var/lib/hlcp/controller-operations.json`. A restart reconciles existing IDs using
 read-only journal queries, never automatic re-execution. Retrieve the operation
 and any late result through authenticated `GET /v1/nodes/{node}/commands/{id}`.
+
+`--dry-run` now calls authenticated `POST /v1/nodes/{node}/resolve` with the same
+command payload used for execution. The server checks inventory, actions, online
+state and advertised capabilities without admitting a ledger record or sending a
+command. The plan is a snapshot, not a guarantee against later session changes.
+Known same-ID operations resolve as existing read-only lookups even without current
+inventory; a different payload is a conflict. Node-only `status` reads cached
+metadata and remains available offline; unsupported node actions are errors.
+`hlcp -n debian-01 -r example-catalog` returns real resource detail/observation.
+Agents with resources must advertise `resource.control` and each configured adapter
+(`docker`, `podman`, or `systemd`); invalid declarations fail startup validation.
 The ledger is bounded to 1024 operations / 8 MiB; definitive results have at least
 24-hour retention, and unresolved unknown history is never automatically evicted.
 Upgrade controller and agents together for the pre-release query/state extension.

@@ -10,6 +10,8 @@ func TestParseProgressiveSelectors(t *testing.T) {
 		{[]string{"-n"}, "nodes"},
 		{[]string{"--node", "debian-01", "-a"}, "node-actions"},
 		{[]string{"--node", "debian-01", "-a", "status"}, "node-status"},
+		{[]string{"-n", "debian-01", "-a", "restart"}, "node-command"},
+		{[]string{"-n", "debian-01", "-r", "catalog"}, "resource"},
 		{[]string{"--node", "debian-01", "-r"}, "resources"},
 		{[]string{"-n", "debian-01", "-r", "catalog", "-a"}, "actions"},
 		{[]string{"-n", "debian-01", "-r", "catalog", "-a", "restart"}, "command"},

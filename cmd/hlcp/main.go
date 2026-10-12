@@ -44,18 +44,28 @@ func main() {
 	switch cli.Intent(request) {
 	case "nodes":
 		get(api + "/v1/nodes")
-	case "node", "node-status":
+	case "node":
 		get(api + "/v1/nodes/" + url.PathEscape(request.Node))
+	case "node-status":
+		if request.DryRun {
+			post(api+"/v1/nodes/"+url.PathEscape(request.Node)+"/resolve", map[string]string{"action": "status"})
+		} else {
+			get(api + "/v1/nodes/" + url.PathEscape(request.Node))
+		}
+	case "node-command":
+		post(api+"/v1/nodes/"+url.PathEscape(request.Node)+"/resolve", map[string]string{"action": request.Action})
 	case "node-actions":
 		get(api + "/v1/nodes/" + url.PathEscape(request.Node) + "/actions")
 	case "resources":
 		get(api + "/v1/nodes/" + url.PathEscape(request.Node) + "/resources")
 	case "actions":
 		get(api + "/v1/nodes/" + url.PathEscape(request.Node) + "/resources/" + url.PathEscape(request.Resource) + "/actions")
+	case "resource":
+		get(api + "/v1/nodes/" + url.PathEscape(request.Node) + "/resources/" + url.PathEscape(request.Resource))
 	case "command":
 		command := map[string]string{"command_id": randomID(), "resource_id": request.Resource, "action": request.Action}
 		if request.DryRun {
-			output(command)
+			post(api+"/v1/nodes/"+url.PathEscape(request.Node)+"/resolve", command)
 			return
 		}
 		post(api+"/v1/nodes/"+url.PathEscape(request.Node)+"/commands", command)
