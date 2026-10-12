@@ -37,6 +37,25 @@ func TestScopedCredentialsWithRealMTLSCommandPath(t *testing.T) {
 	api := httptest.NewServer(fixture.server.HTTPHandlerWithAuthorizer(localapi.NewAuthorizer(p)))
 	defer api.Close()
 	before := diagnostics.Snapshot().Counters["written_frames"]
+	// Diagnostic polling shares neither the agent command writer nor the ledger.
+	for i := 0; i < 30; i++ {
+		r, err := http.NewRequest("GET", api.URL+"/v1/nodes/debian-01/resources/catalog/diagnostics/logs", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		r.Header.Set("Authorization", "Bearer "+strings.Repeat("m", 32))
+		response, err := api.Client().Do(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != 200 && response.StatusCode != 429 {
+			t.Fatal(response.StatusCode)
+		}
+	}
+	if runner.calls.Load() != 0 || diagnostics.Snapshot().Counters["command_admitted"] != 0 || diagnostics.Snapshot().Counters["written_frames"] != before {
+		t.Fatal("diagnostics modified the command path")
+	}
 	for _, test := range []struct {
 		token, action string
 		status        int

@@ -29,6 +29,7 @@ func (server *Server) HTTPHandlerWithAuthorizer(authorizer *localapi.Authorizer)
 			handler(writer, request)
 		})
 	}
+	server.registerDiagnostics(handle)
 	handle("POST /v1/nodes/{node}/resolve", func(writer http.ResponseWriter, request *http.Request) {
 		payload, ok := decodeCommand(writer, request)
 		if !ok {
@@ -255,6 +256,8 @@ type auditResponse struct {
 	http.ResponseWriter
 	status int
 }
+
+func (writer *auditResponse) Unwrap() http.ResponseWriter { return writer.ResponseWriter }
 
 func (writer *auditResponse) WriteHeader(status int) {
 	if writer.status == 0 {

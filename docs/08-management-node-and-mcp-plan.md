@@ -1,11 +1,12 @@
 # Debian management node a MCP — implementační plán
 
-Datum: 2026-10-12. Stav: **F10A–F10B implementováno a lokálně ověřeno; ostatní bloky plánované**.
+Datum: 2026-10-12. Stav: **F10A–F10C implementováno a lokálně ověřeno; ostatní bloky plánované**.
 
 Důkazy a omezení F10A shrnuje [telemetry dokumentace](09-telemetry-and-audit.md).
 Journald profily jsou připravené, nikoli nainstalované; skutečné deployment brány
 F10D/F10E zůstávají otevřené.
 F10B kontrakt a důkazy shrnuje [scoped API dokumentace](10-scoped-api-credentials.md).
+F10C kontrakt, limity a důkazy shrnuje [diagnostické API](11-bounded-diagnostics-api.md).
 
 Navazuje na [F10–F11](04-review-and-completion-plan.md),
 [v1 akceptaci](05-v1-acceptance.md) a [build bránu](07-build-and-release.md).
@@ -246,7 +247,7 @@ pro souběh a změny lifecycle, podle povahy fuzz/protocol compatibility testy.
 Release změny navíc reprodukovatelnost a checksum/version smoke. Aktualizovat
 stav fáze až s konkrétním důkazem. Dokumentační blok: odkazy a `git diff --check`.
 
-Nejbližší implementace je **F10C — bounded diagnostické API**, nikoli web nebo vzdálené nasazení.
+Nejbližší implementace je **F10D — Debian balení a provozní runbooky**, nikoli web nebo vzdálené nasazení.
 Volba skutečného MCP klienta/auth profilu je nutná před uzavřením M1; volba hostů
 a přístupů před F10E. Mutační oprávnění odložíme do samostatně schválené M3.
 

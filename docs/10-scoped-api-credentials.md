@@ -107,6 +107,7 @@ compatibility. These tests use a fake external container runner, not live deploy
 
 Full Windows test/vet and isolated Linux race suites passed with Go 1.27.2.
 
-F10C will add scoped bounded diagnostic queries; M1 will use a dedicated observer
+F10C implements [scoped bounded diagnostic queries](11-bounded-diagnostics-api.md);
+global metrics/audit require explicit all-node scope. M1 will use a dedicated observer
 credential after its transport/auth profile is chosen. No production credential,
 running service or firewall was modified here. Debian deployment remains F10D/E.

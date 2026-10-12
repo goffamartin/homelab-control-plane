@@ -37,6 +37,8 @@ type Server struct {
 	closed          bool
 	workers         sync.WaitGroup
 	ownTelemetry    bool
+	diagnosticsOnce sync.Once
+	diagnostics     *diagnostics
 }
 
 func Listen(address string, config Config) (*Server, error) {

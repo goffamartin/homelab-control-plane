@@ -17,6 +17,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Debian management node and MCP implementation plan](docs/08-management-node-and-mcp-plan.md)
 - [Bounded telemetry and audit](docs/09-telemetry-and-audit.md)
 - [Scoped API credentials and rotation](docs/10-scoped-api-credentials.md)
+- [Bounded controller diagnostics API](docs/11-bounded-diagnostics-api.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status
@@ -39,7 +40,8 @@ The v1 implementation currently includes:
 - controller-side command correlation and agent-side command-result deduplication;
 - ACK-aware bounded retries, a durable controller ledger and read-only recovery;
 - a loopback-only HTTP API consumed by the `hlcp` CLI;
-- bounded structured audit events and fixed-cardinality operational telemetry.
+- bounded structured audit events and fixed-cardinality operational telemetry;
+- scoped, bounded controller-audit queries and authorized global metric snapshots.
 
 The CLI navigates the discovered inventory progressively:
 

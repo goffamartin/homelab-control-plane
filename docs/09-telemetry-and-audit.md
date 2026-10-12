@@ -53,8 +53,9 @@ process start, reported by `started_at`; journal/ledger capacities survive only
 through their existing persistence. No new telemetry database is created.
 
 `Server.Telemetry().Snapshot()` and `Events()` are internal read-only accessors.
-There is **no new HTTP metrics/log endpoint** in F10A. Authorized bounded
-diagnostic queries and cursor semantics belong to F10C; MCP is not implemented.
+F10A itself adds no HTTP metrics/log endpoint. F10C now implements
+[authorized bounded queries and cursor semantics](11-bounded-diagnostics-api.md);
+MCP and remote container logs are still not implemented.
 
 ## Memory, overload and shutdown
 
