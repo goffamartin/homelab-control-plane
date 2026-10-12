@@ -268,6 +268,27 @@ func Allowed(ctx context.Context, node, resource string, execute bool) bool {
 	return ok && auth.principal.allows(node, resource, execute)
 }
 
+func GlobalRead(ctx context.Context) bool {
+	auth, ok := ctx.Value(authKey{}).(*authentication)
+	return ok && auth.principal.scope.AllNodes
+}
+
+// DiagnosticBinding is not a public fingerprint. It is used only as encrypted
+// cursor associated data; token rotation or a scope/identity change invalidates it.
+func DiagnosticBinding(ctx context.Context) [32]byte {
+	auth, ok := ctx.Value(authKey{}).(*authentication)
+	if !ok {
+		return [32]byte{}
+	}
+	p := auth.principal
+	data, _ := json.Marshal(struct {
+		ID, Role string
+		Scope    scope
+		Digest   [32]byte
+	}{p.id, p.role, p.scope, p.digest})
+	return sha256.Sum256(data)
+}
+
 // GuardAdmission gives internal trusted callers their original behavior, while
 // authenticated API callers are rechecked at the durable admission boundary.
 // Every policy reload invalidates older, not-yet-admitted request snapshots.

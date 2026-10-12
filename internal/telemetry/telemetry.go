@@ -79,6 +79,7 @@ type Event struct {
 	Code           string    `json:"code,omitempty"`
 	Attempt        int       `json:"attempt,omitempty"`
 	DurationMillis int64     `json:"duration_ms,omitempty"`
+	Sequence       uint64    `json:"-"`
 }
 
 type Sink func(context.Context, Event) error
@@ -99,6 +100,7 @@ type Collector struct {
 	ring                                               [BufferCapacity]Event
 	next, size                                         int
 	closed                                             bool
+	sequence                                           uint64
 	counts                                             [kindCount]atomic.Uint64
 	gauges                                             [gaugeCount]atomic.Int64
 	readBytes, writtenBytes, readFrames, writtenFrames atomic.Uint64
@@ -184,6 +186,8 @@ func (c *Collector) Record(e Event) {
 	}
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
+	c.sequence++
+	e.Sequence = c.sequence
 	c.ring[c.next] = e
 	c.next = (c.next + 1) % BufferCapacity
 	if c.size < BufferCapacity {
@@ -236,8 +240,17 @@ func (c *Collector) Snapshot() Snapshot {
 
 // Events returns a bounded chronological copy. API cursors/permissions belong to F10C.
 func (c *Collector) Events() []Event {
+	return c.Window().Events
+}
+
+type Window struct {
+	Oldest, Latest uint64
+	Events         []Event
+}
+
+func (c *Collector) Window() Window {
 	if c == nil {
-		return nil
+		return Window{}
 	}
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
@@ -245,7 +258,11 @@ func (c *Collector) Events() []Event {
 	for i := range events {
 		events[i] = c.ring[(c.next-c.size+i+BufferCapacity)%BufferCapacity]
 	}
-	return events
+	oldest := c.sequence + 1
+	if len(events) > 0 {
+		oldest = events[0].Sequence
+	}
+	return Window{Oldest: oldest, Latest: c.sequence, Events: events}
 }
 
 // Close discards queued diagnostics; it is bounded even if a sink ignores
