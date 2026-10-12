@@ -13,9 +13,18 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Review findings and phased v1 completion plan](docs/04-review-and-completion-plan.md)
 - [HLCP v1 acceptance contract](docs/05-v1-acceptance.md)
 - [Recovery test evidence and remaining integration gates](docs/06-recovery-test-evidence.md)
+- [Build, CI and dependency review](docs/07-build-and-release.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status
+
+Build/test toolchain is pinned to Go 1.27.2 (`.go-version`, `go.mod`). All three
+binaries support `--version` without TLS/config/API setup; `hlcp --version --json`
+returns machine-readable metadata. From a clean checkout with cached modules,
+`go run ./tools/release -version v0.1.0 -out dist/v0.1.0` creates Linux amd64/arm64
+and Windows amd64 binaries, a deterministic manifest and `SHA256SUMS`.
+This does not publish a GitHub release or install any service. See the build guide
+for local validation, reproducibility checks, artifact permissions and CI scope.
 
 The v1 implementation currently includes:
 

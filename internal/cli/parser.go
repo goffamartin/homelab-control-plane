@@ -60,6 +60,8 @@ func Parse(args []string) (Request, error) {
 			request.ActionSpecified = true
 		case "-h", "--help":
 			request.Help = true
+		case "--version":
+			request.Version = true
 		case "--json":
 			request.Output = "json"
 		case "--dry-run":
@@ -83,7 +85,7 @@ func Parse(args []string) (Request, error) {
 			}
 		}
 	}
-	if request.Help {
+	if request.Help || request.Version {
 		return request, nil
 	}
 	if (request.ResourceSpecified || request.ActionSpecified || request.Lookup) && request.Node == "" {
@@ -113,6 +115,9 @@ func Parse(args []string) (Request, error) {
 func Intent(request Request) string {
 	if request.Help {
 		return "help"
+	}
+	if request.Version {
+		return "version"
 	}
 	if request.Lookup {
 		return "result"

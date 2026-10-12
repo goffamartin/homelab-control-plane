@@ -1,7 +1,7 @@
 # Recovery test evidence and remaining integration gates
 
 This is evidence for the recovery and stress/fuzz F9 slices, not a claim that v1
-or F9 is complete.
+or the whole v1 is complete. Build/CI status is tracked in the completion plan.
 The reference deployment remains Linux/Debian; live Podman acceptance in F7 is
 still open. No live Docker/Podman resource is modified by the tests below.
 
@@ -116,9 +116,10 @@ go test ./internal/protocol -run '^$' -fuzz '^FuzzFrameDecode$' -fuzztime 5s -pa
 The new stress and seed tests passed three repeated Windows runs. Full Windows
 tests/vet and full Linux race validation are the regression gate for this slice.
 
-## Remaining F9 gates
+## Build gate and remaining runtime acceptance
 
-- CI verification and reproducible build of all three binaries, version metadata
-  and release checksums; dependency/security review, including YAML RC usage.
+- Build, CI, version metadata, checksums and dependency/security review are now
+  implemented; see `07-build-and-release.md` and the completion plan for hosted
+  verification status.
 - Keep live Docker/Podman runtime acceptance separate; fake runners do not close
   the missing live Podman gate.

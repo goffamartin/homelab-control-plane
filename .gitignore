@@ -1,6 +1,7 @@
 # Per-project toolchain and Go build/module caches.
 .tools/
 .cache/
+dist/
 
 # Local deployment material; never commit private keys or environment config.
 *.key
