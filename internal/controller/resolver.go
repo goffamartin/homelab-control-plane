@@ -103,11 +103,13 @@ func (server *Server) Resolve(nodeID string, payload protocol.CommandPayload) (R
 			supported = hasCapability(record.Capabilities, "docker") || hasCapability(record.Capabilities, "podman")
 		case "service":
 			supported = hasCapability(record.Capabilities, "systemd")
+		case "task":
+			supported = hasCapability(record.Capabilities, "script")
 		}
 		if !supported {
 			return Resolution{}, resolveError(http.StatusUnprocessableEntity, "CAPABILITY_NOT_SUPPORTED", "node does not advertise a provider for this resource type")
 		}
-		plan.ReadOnly = payload.Action == "status"
+		plan.ReadOnly = resource.Type != "task" && payload.Action == "status"
 		return plan, nil
 	}
 	return Resolution{}, resolveError(http.StatusNotFound, "RESOURCE_NOT_FOUND", "resource not found")

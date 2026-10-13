@@ -266,6 +266,8 @@ Selectors cannot be repeated or combined with their singular/plural alternatives
 Resource/action discovery requires a selected node. Long singular forms require values.
 Default output is text; --json preserves API JSON on stdout. Diagnostics and the
 command ID before submission go to stderr. Dry-run validates a snapshot only.
+Action names come from the resource inventory (including custom script actions).
+Task actions are not assumed read-only, even when named status.
 Timeout does not prove an action did not happen: look up the ID; do not issue a new ID.
 Exit codes: 0 success, 2 invalid/rejected request, 3 failed action,
             4 connection/API error, 5 timeout or unresolved operation.

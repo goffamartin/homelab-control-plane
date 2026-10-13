@@ -139,3 +139,59 @@ func TestResolveRejectsMalformedJSON(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveScriptTasks(t *testing.T) {
+	for _, action := range []string{"diagnose", "reload", "status"} {
+		for _, capabilities := range [][]string{{"resource.control", "script"}, {"resource.control"}, {"script"}, {"resource.control", "docker"}} {
+			sessions, _, peer := retrySession(t, DefaultRetryPolicy())
+			server := &Server{registry: sessions.registry, sessions: sessions}
+			record := server.registry.nodes["n"]
+			record.Capabilities = capabilities
+			record.Inventory.Resources = []protocol.ResourceDescriptor{{ID: "diagnostics", Type: "task", Actions: []string{"diagnose", "reload", "status"}}}
+			server.registry.nodes["n"] = record
+			payload := protocol.CommandPayload{CommandID: "script-check", ResourceID: "diagnostics", Action: action}
+			plan, err := server.Resolve("n", payload)
+			if len(capabilities) == 2 && capabilities[1] == "script" {
+				if err != nil || plan.ReadOnly || plan.KnownOperation || plan.Command == nil {
+					t.Fatalf("script action %s plan=%+v err=%v", action, plan, err)
+				}
+			} else if err == nil || err.Code != "CAPABILITY_NOT_SUPPORTED" {
+				t.Fatalf("capabilities=%v err=%v", capabilities, err)
+			}
+			payload.Action = "unconfigured"
+			if _, err := server.Resolve("n", payload); err == nil || err.Code != "ACTION_NOT_SUPPORTED" {
+				t.Fatalf("unknown script action err=%v", err)
+			}
+			if _, exists := sessions.tracker.Progress("n", "script-check"); exists {
+				t.Fatal("script resolve wrote ledger")
+			}
+			peer.SetReadDeadline(time.Now().Add(20 * time.Millisecond))
+			if _, err := protocol.Decode(peer); err == nil {
+				t.Fatal("script resolve sent command")
+			}
+		}
+	}
+}
+
+func TestResolveLegacyTypesAndUnknownType(t *testing.T) {
+	for _, test := range []struct {
+		resourceType, capability string
+		supported                bool
+	}{
+		{"container", "docker", true}, {"container", "podman", true}, {"service", "systemd", true}, {"unrecognized", "script", false},
+	} {
+		sessions, _, _ := retrySession(t, DefaultRetryPolicy())
+		server := &Server{registry: sessions.registry, sessions: sessions}
+		record := server.registry.nodes["n"]
+		record.Capabilities = []string{"resource.control", test.capability}
+		record.Inventory.Resources = []protocol.ResourceDescriptor{{ID: "catalog", Type: test.resourceType, Actions: []string{"status"}}}
+		server.registry.nodes["n"] = record
+		plan, err := server.Resolve("n", protocol.CommandPayload{CommandID: "check", ResourceID: "catalog", Action: "status"})
+		if test.supported && (err != nil || !plan.ReadOnly) {
+			t.Fatalf("legacy %s: %+v %v", test.capability, plan, err)
+		}
+		if !test.supported && (err == nil || err.Code != "CAPABILITY_NOT_SUPPORTED") {
+			t.Fatalf("unknown type: %v", err)
+		}
+	}
+}

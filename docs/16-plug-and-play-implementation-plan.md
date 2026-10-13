@@ -146,6 +146,17 @@ Akceptace: valid/invalid/duplicate YAML; custom diagnose/reload actions;
 
 Commit: `Define allow-listed local script resource configuration`.
 
+Stav P02 (2026-10-13): konfigurační kontrakt implementován; přesné mapování
+actions/commands, lokální absolutní Linux cesty, bounded argv/environment a timeout,
+strict YAML, task/script capability resolver a konzervativní read_only klasifikace.
+Žádný nový wire frame ani runtime dependency. Podrobnosti a příklad jsou v
+[script kontraktu](18-script-resource-contract.md). Script startup má dočasnou
+fail-closed bránu před otevřením journalu; `-check-config` validuje bez exec/probes.
+Windows test/vet a Linux race testy prošly, včetně skutečného check-config CLI
+bez spuštění připraveného skriptu, wire round-trip, custom actions a dry-run bez
+command frame/ledger mutation. P02 není hotový executor ani publikovaný release;
+P03 odstraní startup bránu až s bounded execution a recovery testy.
+
 ## P03 — Bounded script execution a recovery
 
 Změny: adapter runner/script, dispatcher, agent observations, e2e tests.
