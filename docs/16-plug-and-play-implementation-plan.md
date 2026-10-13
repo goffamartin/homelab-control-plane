@@ -197,6 +197,13 @@ shutdown i tvrdý pád procesu agenta a žádný replay. Checkpoint A ještě po
 čistý reproducible build/package release gate a operátorskou VM akceptaci;
 neprohlašovat container/parser testy za živý reboot nebo production containment.
 
+Release gate checkpointu A (2026-10-13): dokončen; dva čisté buildy a všech 16
+artefaktů shodné, lokální i remote SHA256 ověřeny, Debian lifecycle/legacy upgrade
+testy prošly. Publikovaný privátní preview.4 míří na
+`2dd68dd3a4c87d4dc1ec54c9175e137e6879ec3c`.
+[Přesná release evidence a otevřené VM brány](19-checkpoint-a-release-evidence.md).
+Operátorská VM akceptace není tímto zápisem uzavřena; následuje implementace P04.
+
 ## P04 — Sdílený non-destructive setup engine a doctor
 
 Změny: nový interní setup balík, hlcp/agent/controller command entrypoints.
