@@ -70,6 +70,8 @@ func Parse(args []string) (Request, error) {
 			target = &request.API
 		case "--api-token-file":
 			target = &request.APITokenFile
+		case "--config":
+			target = &request.ConfigFile
 		case "--command-id", "--result":
 			target = &request.CommandID
 			request.Lookup = argument == "--result"
