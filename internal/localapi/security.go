@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"runtime"
 	"strings"
 )
 
@@ -46,8 +45,8 @@ func LoadToken(path string) (string, error) {
 	if err != nil || !info.Mode().IsRegular() || info.Size() > 257 {
 		return "", errors.New("invalid local API token file")
 	}
-	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
-		return "", errors.New("API token file must be private (mode 0600)")
+	if !privateCredential(file, info) {
+		return "", errors.New("API token file must be private (owner-only or protected systemd read ACL)")
 	}
 	data, err := io.ReadAll(io.LimitReader(file, 258))
 	if err != nil {
