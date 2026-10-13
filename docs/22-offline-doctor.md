@@ -10,6 +10,7 @@ hlcp doctor --role agent --config /home/martin/.config/hlcp/agent.yaml
 hlcp doctor --help
 hlcp-agent doctor --config /home/martin/.config/hlcp/agent.yaml --host-checks --scope user
 hlcp-agent doctor --config /home/martin/.config/hlcp/agent.yaml --host-checks --scope user --unit hlcp-agent-podman.service
+hlcp doctor --setup-dir /etc/hlcp/controller --json
 ```
 
 Controller role standardně čte controller.crt/controller.key/ca.crt v
@@ -25,9 +26,9 @@ přístup (typicky sudo pro controller); doctor jejich práva neopravuje.
   kontroly odmítnou předstírat POSIX ownership.
 - Bounded agent YAML (1 MiB), stejné strict schema a semantic validátory jako Load.
 - Syntaxi controller endpointu včetně číselného portu.
-- Pouze nakonfigurované runtime/executable soubory: PATH lookup a základní kontrolu
+- Pouze nakonfigurované runtime soubory: PATH lookup a základní kontrolu
   regular/executable/non-writable file a owner. Nic nespouští; nejde o test
-  interpreteru, script argv/cwd, rodičů executable, socket access ani Podman health.
+  socket access ani Podman health. Script readiness má samostatný kontrakt níže.
   Script-only agent nevyžaduje Docker/Podman.
 - Bounded cert/key/trust čtení, absolutní clean cesty, non-symlink ancestors,
   regular single-link files, owner root nebo aktuální effective UID,
@@ -58,8 +59,9 @@ Help funguje bez konfigurace, API tokenu a běžící služby.
 ## Otevřené brány P04c/P05
 
 Tento blok není kompletní doctor ani hotové P04:
-explicitní jiný runtime účet při root inspekci, script interpreter/cwd readiness,
-transaction inspect a opt-in bounded network/TLS peer probe zatím chybí.
+explicitní jiný runtime účet při root inspekci a opt-in bounded network/TLS
+peer probe zatím chybí. Script interpreter/cwd a transaction inspect jsou níže;
+nejde o potvrzení skutečného script/runtime chování.
 Remote peer chain verification není nahrazena kontrolou lokálního CA bundle;
 issuer leafu může být jiný než trust pro peer a nebude se automaticky předpokládat
 společná CA. Controller env/API policy/node allowlist zatím nevaliduje.
@@ -124,3 +126,54 @@ prošly; Linux testuje i 4KiB overflow a timeout skutečného child procesu. Acc
 unit/linger/manager/mask/override a subid hranice jsou testované přes fake query
 provider; žádné živé VM/systemd acceptance tím není nahrazeno. Nápověda funguje
 bez probes. Linux arm64 compile-only prošel, nikoli live ARM. Žádný nový preview.
+
+## Script readiness a setup inspect
+
+Validní script resources dostávají samostatné check codes script.executable,
+script.directory, script.interpreter/format a script.execution. Akce se
+kontrolují deterministicky v seřazeném pořadí, bez vypsání jejich argv, prostředí
+a cest. Žádná testovací akce, interpreter --version ani script --help se nevolá.
+
+Linux kontroluje regular single-link executable bez special bits a group/other
+write, owner root/effective UID, a mode execute/search podle effective account
+včetně supplementary groups. Working directory musí být clean absolute,
+existující non-symlink bezpečný adresář s dostupnými rodiči; nemění se jeho práva.
+Symlinky standardních executable/interpreter cest (např. /bin/sh) lze vyřešit;
+kontrolují se resolved parents a original resolved parent. Mutable symlink chains,
+ACL, noexec mount nebo souběžný root/same-UID editor nejsou tímto snapshotem
+plně vyloučeny. Nejvýše 256 bytes executable header se čte přes
+NOFOLLOW/NONBLOCK FD s pre-open identity a post-read metadata checks.
+
+ELF magic je pouze rozpoznání formátu (skip pro loader/arch/libraries).
+Shebang vyžaduje newline v bounded header, bez CR/NUL a s dostupným absolutním
+interpreter souborem. /usr/bin/env je warning: nepředstírá se vyřešení command
+podle nakonfigurovaného prostředí. Unknown header/missing interpreter je fail;
+valid script bez shebang není pro přímý exec podporován. Pokud executable je
+např. /bin/sh a argv obsahuje cestu jiného scriptu, doctor ji neinterpretuje:
+libovolné argv semantics a environment dependencies zůstávají skip.
+Native filesystem readiness je Linux-only; jiný OS nepotvrdí úspěch.
+
+--setup-dir je explicitní a nezávislý na konfiguraci role. Neodvozuje se z HOME,
+není to journal/ledger cesta a není to oprávnění k recovery. Existující adresář
+musí splnit stejný kontrakt setup.OpenPlanner: mode 0700, effective UID a jeho
+registrovaný primary GID, bezpečné ancestors, Linux descriptor-relative reads.
+Root zatím neinspektuje user-owned setup pod odhadnutým jiným účtem.
+
+Příkaz volá výhradně Planner.Inspect: žádný Build/Apply/Recover/DiscardBackup,
+flock, vytvoření adresáře, přepis souborů ani cleanup. None je ok, committed backup
+warning, pending/discarding fail vyžadující samostatně schválený recovery postup.
+Missing directory je warning (nebude vytvořen); corrupt/conflicting/unsafe
+state je fail (bude zachován). Výstup neobsahuje manifest fields, hashes, names,
+privátní staged contents ani raw errors. Inspect při souběžném setupu není
+globálně zamčený snapshot; přechodný nekonzistentní stav může vyžadovat opakování.
+
+Linux test fixtures dokazují neexistenci execution markeru po script inspection
+a shodu bytes/modes/mtimes i struktury setup directory před/po clean, committed,
+pending a corrupt inspekci. Zálohu pro fixture vytváří explicitní test Apply,
+nikoli doctor. Fake provider pokrývá stavy, redakci a opt-in; VM acceptance
+a skutečné exec/runtime chování tím nejsou potvrzené. Nový preview se nevydává.
+
+Lokální evidence tohoto bloku 2026-10-14: Windows full test/vet a Linux full
+race/test/vet prošly. Linux arm64 test binary compile-only prošel (ne live ARM).
+Skutečný hlcp doctor --help vstup prošel bez konfigurace/tokenu a bez inspekce.
+git diff --check čistý; VM se v tomto bloku neměnily.
