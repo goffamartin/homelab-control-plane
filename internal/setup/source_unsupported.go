@@ -1,0 +1,5 @@
+//go:build !linux
+
+package setup
+
+func openNativeSource(string, Owner) (Source, error) { return nil, ErrUnsupportedPlatform }

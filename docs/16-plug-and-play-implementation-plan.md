@@ -226,6 +226,20 @@ Akceptace: žádné writes pro doctor/preview; mocked OS effects; existing-inval
 
 Commit: `Add validated setup planning and deployment diagnostics`.
 
+P04 je rozdělena na menší ověřitelné bloky: P04a read-only plánovací jádro,
+P04b transactional Apply/backup/rollback/recovery a P04c read-only doctor/CLI.
+P04a zavádí interní kontrakt plánů, bounded vstupy, validaci existing i proposed
+obsahu, explicitní replacement selection, stale recheck a Linux descriptor-relative
+source s NOFOLLOW/owner/mode kontrolami. Žádný Apply ani uživatelský instalační
+příkaz zatím neexistuje; celé P04 tím není dokončené. Pravidla a zbývající brány
+shrnuje [P04a dokumentace](20-setup-planning-core.md).
+
+Stav P04a (2026-10-13): implementováno a lokálně ověřeno. Windows test/vet,
+Linux race/vet, bounded fuzz (poslední kampaň 75 921 běhů) prošly. Linux arm64
+compile-only gate prošel, nikoli živý ARM test. Preview a recheck nevytvářejí
+konfiguraci, secrets, lock files ani backupy; unsupported native OS fail closed.
+P04b/P04c zůstávají otevřené, nový preview se v tomto bloku nevydává.
+
 ## P05 — Imported TLS setup jako první použitelný průvodce
 
 - Controller setup importuje server cert/key + agent trust bundle, ověří key match,
