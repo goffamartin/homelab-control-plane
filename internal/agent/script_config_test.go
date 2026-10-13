@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -49,14 +50,21 @@ func TestScriptConfigurationContract(t *testing.T) {
 	if err != nil || sync.Inventory.Resources[0].Type != "task" || sync.State.Resources[0].Code != "NOT_OBSERVED" {
 		t.Fatalf("sync=%+v err=%v", sync, err)
 	}
-	// P02 validates without probing nonexistent executable/cwd/TLS files.
-	// P03 will remove this staged startup guard only when execution is ready.
+	// Configuration validation does not probe executable/cwd/TLS files.
 	config.JournalFile = filepath.Join(t.TempDir(), "journal.json")
-	if _, err := config.NewDispatcher(); err == nil || !strings.Contains(err.Error(), "P03") {
-		t.Fatalf("script execution was enabled prematurely: %v", err)
-	}
-	if _, err := os.Stat(config.JournalFile); !os.IsNotExist(err) {
-		t.Fatalf("staged script startup touched journal: %v", err)
+	dispatcher, err := config.NewDispatcher()
+	if runtime.GOOS == "linux" {
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer dispatcher.Close()
+	} else {
+		if err == nil || !strings.Contains(err.Error(), "Linux") {
+			t.Fatalf("unsupported platform: %v", err)
+		}
+		if _, err := os.Stat(config.JournalFile); !os.IsNotExist(err) {
+			t.Fatalf("unsupported startup touched journal: %v", err)
+		}
 	}
 }
 

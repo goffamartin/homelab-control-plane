@@ -24,7 +24,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Onboarding and agent-profile design notes](docs/15-onboarding-and-agent-profile-design-notes.md)
 - [Plug-and-play onboarding implementation plan](docs/16-plug-and-play-implementation-plan.md)
 - [Generic agent execution profiles and migration](docs/17-generic-agent-profiles.md)
-- [Local script resource contract (P02, execution follows in P03)](docs/18-script-resource-contract.md)
+- [Local script resources and bounded Linux execution](docs/18-script-resource-contract.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status
@@ -113,8 +113,9 @@ metadata and remains available offline; unsupported node actions are errors.
 `hlcp -n debian-01 -r example-catalog` returns real resource detail/observation.
 Agents with resources must advertise `resource.control` and each configured adapter
 (`docker`, `podman`, `systemd`, or `script`); invalid declarations fail validation.
-The P02 script/task contract supports agent-local named commands, but execution
-is guarded until P03. Task actions are never assumed read-only by their names.
+Script/task resources execute fixed agent-local commands on Linux without a
+container runtime. Task actions are never assumed read-only by their names;
+they are not polled automatically. See the script runbook for limits and recovery.
 The ledger is bounded to 1024 operations / 8 MiB; definitive results have at least
 24-hour retention, and unresolved unknown history is never automatically evicted.
 Upgrade controller and agents together for the pre-release query/state extension.

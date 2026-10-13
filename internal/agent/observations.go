@@ -30,6 +30,8 @@ func (config Config) observe(ctx context.Context, resource ResourceConfig) proto
 		state = (adapter.Container{Runtime: resource.Adapter, Name: resource.Target, Runner: config.runner}).Observe(ctx)
 	case "systemd":
 		state = (adapter.Systemd{Unit: resource.Target, Runner: config.runner}).Observe(ctx)
+	case "script":
+		state = protocol.ResourceState{State: "unknown", Code: "NOT_OBSERVED"}
 	default:
 		state = protocol.ResourceState{State: "error", Code: "INVALID_CONFIGURATION", ObservedAt: time.Now().UTC()}
 	}

@@ -171,7 +171,7 @@ func TestControllerCheckConfigDoesNotBindOrCreateLedger(t *testing.T) {
 }
 
 func TestDeploymentAgentTemplates(t *testing.T) {
-	for _, name := range []string{"agent-docker.yaml", "agent-podman.yaml", "agent-user.yaml", "agent-system.yaml"} {
+	for _, name := range []string{"agent-docker.yaml", "agent-podman.yaml", "agent-user.yaml", "agent-system.yaml", "agent-script.yaml"} {
 		if _, err := Load(filepath.Join("..", "..", "deploy", "config", name)); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}

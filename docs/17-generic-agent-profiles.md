@@ -3,7 +3,7 @@
 One agent binary supports optional adapters. The core Debian package now depends
 only on systemd (>=252), suggests dbus-user-session and installs no Docker,
 Podman or uidmap. Runtime dependencies belong to the explicitly chosen resource
-profile, not every node. Script execution remains P02/P03, not part of P01.
+profile, not every node. P03 now adds [bounded Linux script execution](18-script-resource-contract.md).
 
 ## Installed files and safe lifecycle
 
@@ -11,7 +11,7 @@ profile, not every node. Script execution remains P02/P03, not part of P01.
 - /usr/lib/systemd/user/hlcp-agent.service: recommended generic user unit.
 - /usr/lib/systemd/user/hlcp-agent-podman.service: unchanged compatibility unit.
 - /usr/lib/systemd/system/hlcp-agent.service: opt-in system account profile.
-- Examples under /usr/share/hlcp-agent: agent-user/system/docker/podman.yaml and
+- Examples under /usr/share/hlcp-agent: agent-user/system/docker/podman/script.yaml and
   explicit Docker group drop-in. Templates are not active configuration.
 
 Installation does not create any account, install config/keys into /etc or a
@@ -69,8 +69,9 @@ require privileged UID/GID mapping helpers. This profile is not a script sandbox
   service. Running as a user does not grant stop/restart rights for those units.
   Grant only intended local rights separately; no broad sudoers setup is provided.
   User-unit targeting via systemctl --user is not implemented by this slice.
-- Scripts: named local executable/argv actions are planned in P02/P03; do not
-  write unsupported script configuration into the current agent.
+- Scripts (Linux): configure named local executable/argv actions explicitly,
+  with `script` + `resource.control` capabilities and type `task`. No container
+  runtime or implicit sudo is needed. Follow the [script runbook](18-script-resource-contract.md).
 
 ## Opt-in system profile
 

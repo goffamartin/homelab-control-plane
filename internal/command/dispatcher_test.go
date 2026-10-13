@@ -4,6 +4,7 @@ import (
 	"context"
 	"hlcp/internal/protocol"
 	"testing"
+	"time"
 )
 
 func TestDispatcherCachesDuplicateCommand(t *testing.T) {
@@ -20,6 +21,40 @@ func TestDispatcherCachesDuplicateCommand(t *testing.T) {
 	ack, result = dispatcher.Execute(command)
 	if ack.Status != "completed" || !result.Success || calls != 1 {
 		t.Fatalf("duplicate result = %#v / %#v, calls=%d", ack, result, calls)
+	}
+}
+
+func TestDispatcherMutatingStatusCancellationIsUnknown(t *testing.T) {
+	for _, mutating := range []bool{false, true} {
+		dispatcher := newTestDispatcher(t)
+		started := make(chan struct{})
+		execute := func(ctx context.Context, _ string) protocol.CommandResultPayload {
+			close(started)
+			<-ctx.Done()
+			return protocol.CommandResultPayload{Code: "EXECUTION_UNKNOWN"}
+		}
+		if mutating {
+			dispatcher.RegisterMutating("task", execute, "status")
+		} else {
+			dispatcher.Register("task", execute, "status")
+		}
+		admission := dispatcher.Admit(protocol.CommandPayload{CommandID: "status-check", ResourceID: "task", Action: "status"})
+		dispatcher.Start(admission.Job)
+		select {
+		case <-started:
+		case <-time.After(time.Second):
+			t.Fatal("executor not started")
+		}
+		if err := dispatcher.Close(); err != nil {
+			t.Fatal(err)
+		}
+		want := "TIMEOUT"
+		if mutating {
+			want = "EXECUTION_UNKNOWN"
+		}
+		if admission.Job.Result.Code != want {
+			t.Fatalf("mutating=%v result=%+v", mutating, admission.Job.Result)
+		}
 	}
 }
 

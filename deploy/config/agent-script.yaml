@@ -1,0 +1,24 @@
+# Generic user profile: replace /home/hlcp-user with the actual user's home.
+# No Docker/Podman is required. Commands are local fixed executable/argv only.
+controller_address: controller.example.internal:9443
+server_name: controller.example.internal
+certificate_file: /home/hlcp-user/.config/hlcp/agent.crt
+private_key_file: /home/hlcp-user/.config/hlcp/agent.key
+ca_file: /home/hlcp-user/.config/hlcp/ca.crt
+journal_file: /home/hlcp-user/.local/state/hlcp/command-journal.json
+journal_retention: 1024
+node_id: debian-01
+agent_version: 0.1.0
+capabilities: [resource.control, script]
+observation_interval: 10s
+resources:
+  - id: host-check
+    type: task
+    adapter: script
+    actions: [diagnose]
+    commands:
+      diagnose:
+        executable: /usr/bin/uname
+        argv: [--all]
+        working_directory: /
+        timeout: 10s
