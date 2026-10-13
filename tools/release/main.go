@@ -191,6 +191,12 @@ func release(out, version, targetList string, allowDirty bool) error {
 		}
 		result.Artifacts = append(result.Artifacts, packaged)
 		fmt.Println(packaged.Name)
+		agent, err := packageAgentDeb(out, version, revision, strings.TrimPrefix(target, "linux/"))
+		if err != nil {
+			return err
+		}
+		result.Artifacts = append(result.Artifacts, agent)
+		fmt.Println(agent.Name)
 	}
 	current, err := sourceRevision(allowDirty)
 	if err != nil {
