@@ -25,10 +25,13 @@ func runCLI(args []string, defaultRole string, out io.Writer, host Host, now tim
 	flags.StringVar(&options.Key, "key", "/etc/hlcp/controller/controller.key", "absolute controller key path")
 	flags.StringVar(&options.CA, "ca", "/etc/hlcp/controller/ca.crt", "absolute controller trust bundle path")
 	flags.StringVar(&options.ServerName, "server-name", "", "controller hostname/IP to check")
+	flags.BoolVar(&options.HostChecks, "host-checks", false, "read local clock and systemd readiness")
+	flags.StringVar(&options.Scope, "scope", "system", "system or current non-root user service")
+	flags.StringVar(&options.Unit, "unit", "", "hlcp-agent.service or legacy hlcp-agent-podman.service")
 	jsonOutput := flags.Bool("json", false, "JSON report")
 	if err := flags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
-			_, err = fmt.Fprintln(out, "Usage: doctor [--role agent|controller] [--config /absolute/agent.yaml]\n  [--cert /absolute/cert] [--key /absolute/key] [--ca /absolute/ca]\n  [--server-name name] [--json]\nOffline, read-only Linux diagnostics. No files, services, scripts or network are changed.")
+			_, err = fmt.Fprintln(out, "Usage: doctor [--role agent|controller] [--config /absolute/agent.yaml]\n  [--cert /absolute/cert] [--key /absolute/key] [--ca /absolute/ca]\n  [--server-name name] [--json] [--host-checks --scope system|user]\n  [--unit hlcp-agent.service|hlcp-agent-podman.service]\nRead-only Linux diagnostics. No configuration, service activation, scripts or remote network operations.")
 			if err != nil {
 				return 2
 			}
@@ -37,7 +40,10 @@ func runCLI(args []string, defaultRole string, out io.Writer, host Host, now tim
 		fmt.Fprintln(out, "Invalid doctor options. Use doctor --help.")
 		return 2
 	}
-	if flags.NArg() != 0 || (options.Role != "agent" && options.Role != "controller") {
+	if flags.NArg() != 0 || (options.Role != "agent" && options.Role != "controller") ||
+		(options.Scope != "system" && options.Scope != "user") ||
+		(options.Role == "controller" && (options.Scope != "system" || options.Unit != "")) ||
+		(options.Unit != "" && options.Unit != "hlcp-agent.service" && options.Unit != "hlcp-agent-podman.service") {
 		fmt.Fprintln(out, "Invalid doctor options. Use doctor --help.")
 		return 2
 	}
