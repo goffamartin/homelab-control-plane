@@ -19,8 +19,18 @@ for the CLI operator and uses a different file for a limited MCP observer. It
 contains no credentials and must be adapted before deployment. CLI grammar and
 JSON output are unchanged; select a credential with `--api-token-file`.
 
-Policy and token files must be regular, private files (0600 on Unix; Windows ACL
-protection remains the operator's responsibility). Parent directories must also
+Policy and token files must be regular, private files (owner-only permissions,
+normally 0600 or 0400 on Unix; Windows ACL protection remains the operator's
+responsibility). Linux also accepts the exact root:root-owned 0440 read ACL used
+by systemd: owner read, current non-root service UID read, mask read, owning group
+and others no access. The ACL is checked on the opened descriptor; extra users,
+groups, write/execute permissions and ordinary group-readable files are rejected.
+Neither a pathname nor CREDENTIALS_DIRECTORY establishes trust. Source files
+remain root-owned 0600; this exception applies to protected credential copies.
+The apparent group bits are the ACL mask, not a grant to the owning group
+([POSIX ACL permissions](https://man7.org/linux/man-pages/man5/acl.5.html),
+[systemd v257 credential setup](https://github.com/systemd/systemd/blob/v257/src/core/exec-credential.c)).
+Parent directories must also
 be administrator-owned and not adapter-writable. Policy loading is bounded to
 64 KiB, 32 principals, 128 nodes per principal and 256 resources per node. Relative
 token paths resolve against the policy file directory. Unknown/case-variant

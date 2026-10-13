@@ -111,6 +111,19 @@ Reboot/real credential permissions, rotation, management networking and live
 Podman remain F10E gates, not proven by package-format/install smoke alone.
 The VM operator runs all commands manually; development does not connect to it.
 
+### systemd credential ACL compatibility
+
+Preview.1 incorrectly rejects systemd's protected root:root 0440 ACL copies of
+API policy/tokens. Preview.2 validates the exact per-service-UID read ACL instead
+of interpreting its mask as broad group access. Ordinary group-readable files
+remain rejected; no credential regeneration or permission workaround is needed.
+See the [private-file contract](10-scoped-api-credentials.md). Linux regression
+tests load real root-owned ACL policy/tokens under a non-root UID and reject
+additional users, owning-group access, writable masks and non-root ownership.
+This reproduces credential access, not a booted-systemd startup/reboot test.
+Upgrade the verified package, then explicitly reset-failed/start and inspect the
+service on the VM. Keep the existing configuration, CA, leaf key and API tokens.
+
 ## Update, existing manual installs and rollback
 
 Back up consistent state/configuration first; preserve original command IDs.

@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 )
@@ -93,7 +92,7 @@ func LoadPolicy(path string) (*Policy, error) {
 	}
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() > maxPolicyBytes || (runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0) {
+	if err != nil || !info.Mode().IsRegular() || info.Size() > maxPolicyBytes || !privateCredential(file, info) {
 		return nil, invalid
 	}
 	data, err := io.ReadAll(io.LimitReader(file, maxPolicyBytes+1))
