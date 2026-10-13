@@ -25,6 +25,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Plug-and-play onboarding implementation plan](docs/16-plug-and-play-implementation-plan.md)
 - [Generic agent execution profiles and migration](docs/17-generic-agent-profiles.md)
 - [Local script resources and bounded Linux execution](docs/18-script-resource-contract.md)
+- [Checkpoint A / preview.4 release evidence and open VM gates](docs/19-checkpoint-a-release-evidence.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status
