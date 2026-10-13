@@ -26,6 +26,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Generic agent execution profiles and migration](docs/17-generic-agent-profiles.md)
 - [Local script resources and bounded Linux execution](docs/18-script-resource-contract.md)
 - [Checkpoint A / preview.4 release evidence and open VM gates](docs/19-checkpoint-a-release-evidence.md)
+- [Read-only setup planning core (P04a, internal foundation)](docs/20-setup-planning-core.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status
