@@ -240,6 +240,20 @@ compile-only gate prošel, nikoli živý ARM test. Preview a recheck nevytváře
 konfiguraci, secrets, lock files ani backupy; unsupported native OS fail closed.
 P04b/P04c zůstávají otevřené, nový preview se v tomto bloku nevydává.
 
+P04b: interní potvrzené transakce v jednom privátním existujícím adresáři,
+descriptor-relative exclusive staging, Linux NOREPLACE/EXCHANGE, fsync bariéry,
+strict bounded manifest, rollback a zotavení podle durable fáze. Záloha je jediná
+a její odstranění vyžaduje samostatné potvrzení; nový mutující plán ji sám neeviktuje.
+Konflikty a neznámé/corrupt/orphan state zůstávají zachované pro inspekci, nikoli
+force overwrite. Detaily, hranice a otevřené P04c/P05 brány jsou v
+[transaction dokumentaci](21-setup-transactions.md). Nejde o setup CLI ani VM zásah.
+
+Stav P04b: implementováno a lokálně ověřeno. Windows test/vet a Linux race/vet
+prošly, transakční testy prošly třikrát opakovaně a metadata fuzz prošel
+233 871 běhů. Linux arm64 compile-only prošel. Native testy pokrývají i racing
+editor, explicitní účet, pády po exchange/commit markeru a během cleanup.
+P04c doctor/entrypoints a P05 wizard integrace zůstávají otevřené; preview.4 se nemění.
+
 ## P05 — Imported TLS setup jako první použitelný průvodce
 
 - Controller setup importuje server cert/key + agent trust bundle, ověří key match,

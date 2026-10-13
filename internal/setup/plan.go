@@ -83,8 +83,7 @@ type plannedFile struct {
 }
 
 // Plan deliberately keeps file contents and validators out of exported reports.
-// There is no Apply API in P04a; a later transactional engine must consume these
-// snapshots with locking, no-clobber staging, backup/recovery and explicit consent.
+// Applying it requires explicit consent and a transactional native source.
 type Plan struct {
 	planner *Planner
 	files   []plannedFile
@@ -109,6 +108,7 @@ type Planner struct {
 	source Source
 	owner  Owner
 	closed bool
+	fault  func(string) error // Test seam only; never exposes arbitrary errors.
 }
 
 func NewPlanner(source Source) (*Planner, error) {
@@ -208,6 +208,10 @@ func (planner *Planner) Build(ctx context.Context, intents []Intent) (*Plan, err
 func (planner *Planner) Recheck(ctx context.Context, plan *Plan) error {
 	planner.mutex.Lock()
 	defer planner.mutex.Unlock()
+	return planner.recheck(ctx, plan)
+}
+
+func (planner *Planner) recheck(ctx context.Context, plan *Plan) error {
 	if planner.closed {
 		return ErrClosed
 	}

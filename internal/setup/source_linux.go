@@ -17,6 +17,7 @@ import (
 type nativeSource struct {
 	directory *os.File
 	owner     Owner
+	path      string
 }
 
 func openNativeSource(directory string, owner Owner) (Source, error) {
@@ -69,7 +70,7 @@ func openNativeSource(directory string, owner Owner) (Source, error) {
 		_ = syscall.Close(fd)
 		return nil, ErrUnsafePath
 	}
-	return &nativeSource{directory: os.NewFile(uintptr(fd), "setup-directory"), owner: owner}, nil
+	return &nativeSource{directory: os.NewFile(uintptr(fd), "setup-directory"), owner: owner, path: directory}, nil
 }
 
 func (source *nativeSource) Owner() Owner { return source.owner }
