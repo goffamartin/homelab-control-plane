@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"hlcp/internal/buildinfo"
 	"hlcp/internal/cli"
+	"hlcp/internal/doctor"
 	"hlcp/internal/localapi"
 	"io"
 	"net"
@@ -27,6 +28,9 @@ var outputMode string
 var operationIntent string
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "doctor" {
+		os.Exit(doctor.CLI(os.Args[2:], "controller", os.Stdout))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "configure" {
 		if err := configure(os.Args[2:], os.Stdin, os.Stdout); err != nil {
 			exitError(err, 2)
@@ -259,6 +263,7 @@ First-time client setup (run as the actual CLI user, not sudo):
   hlcp configure --api-token-file <private-token-file>
   hlcp configure --token-stdin
   hlcp configure --help
+  hlcp doctor --help
 User configuration supplies API/token defaults; explicit command-line options win.
 Configure does not grant access, change controller policy, or start services.
 

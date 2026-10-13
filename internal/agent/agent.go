@@ -115,6 +115,11 @@ func Load(path string) (Config, error) {
 	if err != nil {
 		return Config{}, err
 	}
+	return Parse(data)
+}
+
+// Parse validates configuration without opening journals, TLS files or resources.
+func Parse(data []byte) (Config, error) {
 	var config Config
 	decoder := yaml.NewDecoder(strings.NewReader(string(data)))
 	decoder.KnownFields(true)

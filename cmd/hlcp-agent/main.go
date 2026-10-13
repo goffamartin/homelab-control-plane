@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"hlcp/internal/agent"
 	"hlcp/internal/buildinfo"
+	"hlcp/internal/doctor"
 	"hlcp/internal/telemetry"
 	"os"
 	"os/signal"
@@ -14,6 +15,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "doctor" {
+		os.Exit(doctor.CLI(os.Args[2:], "agent", os.Stdout))
+	}
 	configPath := flag.String("config", "/etc/hlcp/agent.yaml", "agent YAML configuration")
 	checkConfig := flag.Bool("check-config", false, "validate configuration and exit")
 	version := flag.Bool("version", false, "print build metadata and exit")
