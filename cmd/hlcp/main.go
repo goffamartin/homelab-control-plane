@@ -27,6 +27,12 @@ var outputMode string
 var operationIntent string
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "configure" {
+		if err := configure(os.Args[2:], os.Stdin, os.Stdout); err != nil {
+			exitError(err, 2)
+		}
+		return
+	}
 	request, err := cli.Parse(os.Args[1:])
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -45,6 +51,9 @@ func main() {
 			fmt.Println(buildinfo.String())
 		}
 		return
+	}
+	if err := applyClientConfig(&request); err != nil {
+		exitError(err, 2)
 	}
 	operationIntent = cli.Intent(request)
 	if request.DryRun {
@@ -126,7 +135,7 @@ func post(url string, value any) {
 func authenticatedRequest(method, address string, body io.Reader) (*http.Response, error) {
 	token, err := localapi.LoadToken(apiTokenFile)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w; run hlcp configure --help or specify --api-token-file", err)
 	}
 	request, err := http.NewRequest(method, address, body)
 	if err != nil {
@@ -244,6 +253,14 @@ Options:
   --result <id>       read-only result lookup; requires --node / -n <id>
   --api <url>         controller loopback API (default: ` + defaultAPI + `)
   --api-token-file    private bearer token file (default: /etc/hlcp/api.token)
+  --config <file>     explicit client JSON configuration (otherwise user hlcp/cli.json)
+
+First-time client setup (run as the actual CLI user, not sudo):
+  hlcp configure --api-token-file <private-token-file>
+  hlcp configure --token-stdin
+  hlcp configure --help
+User configuration supplies API/token defaults; explicit command-line options win.
+Configure does not grant access, change controller policy, or start services.
 
 Selectors cannot be repeated or combined with their singular/plural alternatives.
 Resource/action discovery requires a selected node. Long singular forms require values.
