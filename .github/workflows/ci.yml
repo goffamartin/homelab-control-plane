@@ -70,7 +70,9 @@ jobs:
             control_dir=$(mktemp -d)
             dpkg-deb -e "$package" "$control_dir"
             for script in preinst postinst prerm postrm; do
-              sh -n "$control_dir/$script"
+              if [ -f "$control_dir/$script" ]; then
+                sh -n "$control_dir/$script"
+              fi
             done
           done
       - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6

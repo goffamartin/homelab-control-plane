@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+case "$1" in
+  install|upgrade)
+    if [ -e /etc/systemd/system/hlcp-agent.service ] || [ -L /etc/systemd/system/hlcp-agent.service ]; then
+      echo "A manual system hlcp-agent.service overrides this package." >&2
+      echo "Review and move that exact unit/mask to a private backup before installing." >&2
+      exit 1
+    fi
+    ;;
+esac

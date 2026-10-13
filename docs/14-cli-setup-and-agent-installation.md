@@ -39,6 +39,10 @@ Help/version do not require a working config or token.
 
 ## Debian rootless agent package
 
+P01 generalizes the core package: see [generic execution profiles and migration](17-generic-agent-profiles.md).
+The dependency/unit description below documents the preview.3 baseline; newer
+core builds have no container runtime dependency and retain its unit for compatibility.
+
 Release builds produce `hlcp-agent_VERSION_amd64.deb` and arm64 equivalent.
 The package installs `/usr/bin/hlcp-agent`, a systemd user unit under
 `/usr/lib/systemd/user`, an example configuration and this runbook. APT installs

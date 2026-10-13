@@ -1,0 +1,13 @@
+# System profile; explicitly provision the hlcp account and private credentials.
+controller_address: controller.example.internal:9443
+server_name: controller.example.internal
+certificate_file: /run/credentials/hlcp-agent.service/agent.crt
+private_key_file: /run/credentials/hlcp-agent.service/agent.key
+ca_file: /run/credentials/hlcp-agent.service/ca.crt
+journal_file: /var/lib/hlcp/command-journal.json
+journal_retention: 1024
+node_id: debian-01
+agent_version: 0.1.0
+capabilities: []
+observation_interval: 10s
+resources: []

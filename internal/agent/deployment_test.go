@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"errors"
 	"hlcp/internal/controller"
 	"hlcp/internal/liveness"
 	"hlcp/internal/localapi"
@@ -13,9 +14,44 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+type noRuntimeRunner struct{ calls atomic.Int32 }
+
+func (runner *noRuntimeRunner) Run(context.Context, string, ...string) (string, error) {
+	runner.calls.Add(1)
+	return "", errors.New("no runtime is installed")
+}
+
+func TestRuntimeIndependentAgentConnectsWithoutAdapters(t *testing.T) {
+	serverFiles, clientFiles := e2ePKI(t)
+	dir := t.TempDir()
+	server := startE2EController(t, serverFiles, filepath.Join(dir, "ledger.json"))
+	runner := &noRuntimeRunner{}
+	stopAgent := startE2EAgent(t, Config{
+		ControllerAddress: server.server.Address().String(), ServerName: clientFiles.ServerName,
+		CertificateFile: clientFiles.CertificateFile, PrivateKeyFile: clientFiles.PrivateKeyFile, CAFile: clientFiles.CAFile,
+		JournalFile: filepath.Join(dir, "journal.json"), NodeID: "debian-01", AgentVersion: "generic-test",
+		runner: runner, ObservationInterval: time.Second,
+	})
+	defer stopAgent()
+	e2eEventually(t, "generic node online", func() bool {
+		node, ok := server.server.Registry().Get("debian-01")
+		return ok && node.State == "online" && node.Inventory.Revision == 1
+	})
+	first, _ := server.server.Registry().Get("debian-01")
+	e2eEventually(t, "generic node heartbeat without runtime", func() bool {
+		node, ok := server.server.Registry().Get("debian-01")
+		return ok && node.State == "online" && node.LastActivity.After(first.LastActivity)
+	})
+	last, _ := server.server.Registry().Get("debian-01")
+	if len(last.Capabilities) != 0 || len(last.Inventory.Resources) != 0 || len(last.Resources.Resources) != 0 || runner.calls.Load() != 0 {
+		t.Fatal("generic node invented resources or invoked an unavailable runtime")
+	}
+}
 
 func TestNodeRemovalOnControllerRestart(t *testing.T) {
 	serverFiles, clientFiles := e2ePKI(t)
@@ -135,7 +171,7 @@ func TestControllerCheckConfigDoesNotBindOrCreateLedger(t *testing.T) {
 }
 
 func TestDeploymentAgentTemplates(t *testing.T) {
-	for _, name := range []string{"agent-docker.yaml", "agent-podman.yaml"} {
+	for _, name := range []string{"agent-docker.yaml", "agent-podman.yaml", "agent-user.yaml", "agent-system.yaml"} {
 		if _, err := Load(filepath.Join("..", "..", "deploy", "config", name)); err != nil {
 			t.Fatalf("%s: %v", name, err)
 		}

@@ -109,6 +109,16 @@ bez přihlášení doplní operátor, ne deklarace z container testu.
 
 Commit: `Decouple agent packaging from container runtimes`.
 
+Stav P01 (2026-10-13): implementováno pro lokální ověření; core .deb bez runtime,
+generic user/system units a zachovaná legacy Podman unit, no-resource mTLS/heartbeat
+regrese, preinst odmítnutí ručního systémového unit/mask a migrační runbook.
+Windows test/vet a Linux race prošly; Debian 13 disposable-container test ověřil
+fresh install bez runtime, upgrade z preview.3 se zachováním legacy enable symlinku
+i override, konfigurace/key/journal a remove/purge. Parser není booted service test.
+Čistý reprodukovatelný build je release gate; P01 samotné zatím není publikovaný
+checkpoint A. Živá migrace názvu unit/reboot user/system a Podman bez přihlášení
+zůstává VM branou pro operátora. Nový setup wizard ani script adapter nejsou hotové.
+
 ## P02 — Script kontrakt a kompatibilní konfigurace
 
 Změny: agent config, protocol tests, controller resolver, CLI help/examples.
