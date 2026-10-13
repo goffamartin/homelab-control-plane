@@ -126,6 +126,7 @@ func TestControllerPackageContents(t *testing.T) {
 		"docs/14-cli-setup-and-agent-installation.md",
 		"docs/17-generic-agent-profiles.md",
 		"docs/15-onboarding-and-agent-profile-design-notes.md", "docs/16-plug-and-play-implementation-plan.md",
+		"docs/18-script-resource-contract.md",
 	} {
 		contents, err := os.ReadFile(filepath.Join("..", "..", filepath.FromSlash(name)))
 		if err != nil {
@@ -176,7 +177,7 @@ func TestControllerPackageContents(t *testing.T) {
 			t.Fatal("script permissions/LF")
 		}
 	}
-	if len(payload) != 27 {
+	if len(payload) != 28 {
 		t.Fatalf("unexpected files: %v", payload)
 	}
 	if string(payload["etc/hlcp/controller/nodes.json"].data) != "[]\n" {

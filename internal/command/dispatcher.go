@@ -23,6 +23,7 @@ type Job struct {
 	start      chan struct{}
 	startOnce  sync.Once
 	skip       bool
+	readOnly   bool
 	Done       chan struct{}
 	Result     protocol.CommandResultPayload
 	admittedAt time.Time
@@ -35,8 +36,9 @@ type Admission struct {
 }
 
 type registration struct {
-	execute Executor
-	actions map[string]bool
+	execute        Executor
+	actions        map[string]bool
+	statusReadOnly bool
 }
 
 type Dispatcher struct {
@@ -79,6 +81,15 @@ func (dispatcher *Dispatcher) Close() error {
 }
 
 func (dispatcher *Dispatcher) Register(resourceID string, executor Executor, actions ...string) {
+	dispatcher.register(resourceID, executor, true, actions...)
+}
+
+// RegisterMutating never infers read-only semantics from an action name.
+func (dispatcher *Dispatcher) RegisterMutating(resourceID string, executor Executor, actions ...string) {
+	dispatcher.register(resourceID, executor, false, actions...)
+}
+
+func (dispatcher *Dispatcher) register(resourceID string, executor Executor, statusReadOnly bool, actions ...string) {
 	dispatcher.mutex.Lock()
 	defer dispatcher.mutex.Unlock()
 	if len(actions) == 0 {
@@ -88,7 +99,7 @@ func (dispatcher *Dispatcher) Register(resourceID string, executor Executor, act
 	for _, action := range actions {
 		allowed[action] = true
 	}
-	dispatcher.executors[resourceID] = registration{executor, allowed}
+	dispatcher.executors[resourceID] = registration{executor, allowed, statusReadOnly}
 }
 
 func rejected(command protocol.CommandPayload, code, message string) Admission {
@@ -165,7 +176,7 @@ func (dispatcher *Dispatcher) Admit(command protocol.CommandPayload) (admission 
 	if _, _, err := dispatcher.journal.BeginQueued(command); err != nil {
 		return journalRejection(command, err)
 	}
-	job := &Job{command: command, executor: resource.execute, start: make(chan struct{}), Done: make(chan struct{}), admittedAt: time.Now()}
+	job := &Job{command: command, executor: resource.execute, readOnly: resource.statusReadOnly && command.Action == "status", start: make(chan struct{}), Done: make(chan struct{}), admittedAt: time.Now()}
 	dispatcher.pending[command.CommandID] = job
 	dispatcher.queue <- job
 	return Admission{Ack: protocol.CommandACKPayload{CommandID: command.CommandID, Status: "accepted"}, Job: job}
@@ -224,9 +235,9 @@ func (dispatcher *Dispatcher) work() {
 				dispatcher.record(job.command, telemetry.CommandRunning, "running", 0)
 				ctx, cancel := context.WithTimeout(dispatcher.ctx, 20*time.Second)
 				result = job.executor(ctx, job.command.Action)
-				if ctx.Err() != nil {
+				if ctx.Err() != nil && result.Code != "EXECUTION_NOT_STARTED" && (job.readOnly || result.Code != "EXECUTION_UNKNOWN") {
 					result = protocol.CommandResultPayload{Code: "EXECUTION_UNKNOWN", Message: "execution interrupted; external outcome is uncertain"}
-					if job.command.Action == "status" {
+					if job.readOnly {
 						result.Code = "TIMEOUT"
 						result.Message = "status observation interrupted"
 					}

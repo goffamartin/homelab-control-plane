@@ -16,6 +16,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -39,8 +40,8 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 		if err := resource.validate(); err != nil {
 			return nil, err
 		}
-		if resource.Adapter == "script" {
-			return nil, errors.New("script configuration is valid but execution is not available yet (P03)")
+		if resource.Adapter == "script" && runtime.GOOS != "linux" {
+			return nil, errors.New("script execution is supported only on Linux")
 		}
 	}
 	journal, err := command.OpenNodeJournal(config.JournalFile, config.JournalRetention, config.NodeID)
@@ -49,6 +50,18 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 	}
 	dispatcher := command.NewObservedDispatcher(journal, config.Telemetry, config.NodeID)
 	for _, resource := range config.Resources {
+		if resource.Adapter == "script" {
+			commands := make(map[string]adapter.ScriptCommand, len(resource.Commands))
+			for action, spec := range resource.Commands {
+				environment := make(map[string]string, len(spec.Environment))
+				for name, value := range spec.Environment {
+					environment[name] = value
+				}
+				commands[action] = adapter.ScriptCommand{Executable: spec.Executable, Argv: append([]string(nil), spec.Argv...), WorkingDirectory: spec.WorkingDirectory, Environment: environment, Timeout: spec.ExecutionTimeout()}
+			}
+			dispatcher.RegisterMutating(resource.ID, (adapter.Script{Commands: commands}).Execute, resource.Actions...)
+			continue
+		}
 		if resource.Target == "" {
 			return nil, fmt.Errorf("resource %q: target is required", resource.ID)
 		}

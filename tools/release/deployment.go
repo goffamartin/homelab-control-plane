@@ -26,6 +26,7 @@ var deploymentFiles = []string{
 	"deploy/config/agent-podman.yaml",
 	"deploy/config/agent-user.yaml",
 	"deploy/config/agent-system.yaml",
+	"deploy/config/agent-script.yaml",
 	"examples/api-policy.json",
 	"docs/07-build-and-release.md",
 	"docs/09-telemetry-and-audit.md",
@@ -37,6 +38,7 @@ var deploymentFiles = []string{
 	"docs/17-generic-agent-profiles.md",
 	"docs/15-onboarding-and-agent-profile-design-notes.md",
 	"docs/16-plug-and-play-implementation-plan.md",
+	"docs/18-script-resource-contract.md",
 }
 
 func writeDeployment(root string, output io.Writer) error {

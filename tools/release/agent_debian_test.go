@@ -10,7 +10,7 @@ import (
 
 func TestAgentPackageContentsAndReproducibility(t *testing.T) {
 	root := t.TempDir()
-	for _, path := range []string{"deploy/systemd/user/hlcp-agent-podman.service", "deploy/systemd/user/hlcp-agent.service", "deploy/systemd/hlcp-agent.service", "deploy/systemd/hlcp-agent-docker.conf", "deploy/debian/agent/preinst", "deploy/config/agent-podman.yaml", "deploy/config/agent-docker.yaml", "deploy/config/agent-user.yaml", "deploy/config/agent-system.yaml", "docs/14-cli-setup-and-agent-installation.md", "docs/17-generic-agent-profiles.md", "docs/15-onboarding-and-agent-profile-design-notes.md", "docs/16-plug-and-play-implementation-plan.md"} {
+	for _, path := range []string{"deploy/systemd/user/hlcp-agent-podman.service", "deploy/systemd/user/hlcp-agent.service", "deploy/systemd/hlcp-agent.service", "deploy/systemd/hlcp-agent-docker.conf", "deploy/debian/agent/preinst", "deploy/config/agent-podman.yaml", "deploy/config/agent-docker.yaml", "deploy/config/agent-user.yaml", "deploy/config/agent-system.yaml", "deploy/config/agent-script.yaml", "docs/14-cli-setup-and-agent-installation.md", "docs/17-generic-agent-profiles.md", "docs/15-onboarding-and-agent-profile-design-notes.md", "docs/16-plug-and-play-implementation-plan.md", "docs/18-script-resource-contract.md"} {
 		data, err := os.ReadFile(filepath.Join("..", "..", filepath.FromSlash(path)))
 		if err != nil {
 			t.Fatal(err)
@@ -51,7 +51,7 @@ func TestAgentPackageContentsAndReproducibility(t *testing.T) {
 		members := readDebMembers(t, data)
 		control := readDebTar(t, members["control.tar.gz"])
 		payload := readDebTar(t, members["data.tar.gz"])
-		if len(control) != 2 || len(payload) != 23 {
+		if len(control) != 2 || len(payload) != 25 {
 			t.Fatal("unexpected package files / maintainer scripts")
 		}
 		if !strings.Contains(string(control["control"].data), "Depends: systemd (>= 252)\n") || strings.Contains(string(control["control"].data), "podman") || strings.Contains(string(control["control"].data), "docker") || strings.Contains(string(control["control"].data), "uidmap") {

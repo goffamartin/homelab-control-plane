@@ -146,7 +146,7 @@ Akceptace: valid/invalid/duplicate YAML; custom diagnose/reload actions;
 
 Commit: `Define allow-listed local script resource configuration`.
 
-Stav P02 (2026-10-13): konfigurační kontrakt implementován; přesné mapování
+Stav při dokončení P02 (2026-10-13, před P03): konfigurační kontrakt implementován; přesné mapování
 actions/commands, lokální absolutní Linux cesty, bounded argv/environment a timeout,
 strict YAML, task/script capability resolver a konzervativní read_only klasifikace.
 Žádný nový wire frame ani runtime dependency. Podrobnosti a příklad jsou v
@@ -183,6 +183,19 @@ Akceptace: reálný dočasný Bash script bez runtime; exit/output/flood/timeout
   restart agenta/controlleru a žádný automatický replay. Docker/Podman regrese.
 
 Commit: `Execute bounded configured scripts through the command lifecycle`.
+
+Stav P03 (2026-10-13): implementován Linux script executor, přímé exec s pevnými
+argv/cwd, čistým environmentem a lokálními overrides. Společný stdout/stderr
+capture 4 KiB s UTF-8 a truncation markerem, process-group TERM/KILL a bounded
+wait. Nereaped proces drží execution slot, aby nevznikala neomezená řada procesů.
+Script status není read-only a tasks se nikdy nepollují. Použit stávající durable
+journal bez změny wire verze nebo replay semantics; balíčky obsahují neaktivní
+script příklad a provozní runbook. Windows test/vet a Linux race prošly; reálný
+Bash testuje output/flood/nonzero/signal/timeout/descendants/held pipes/env/cwd,
+mTLS e2e ověřuje heartbeat při floodu, ACK, ztracený výsledek, restart obou stran,
+shutdown i tvrdý pád procesu agenta a žádný replay. Checkpoint A ještě potřebuje
+čistý reproducible build/package release gate a operátorskou VM akceptaci;
+neprohlašovat container/parser testy za živý reboot nebo production containment.
 
 ## P04 — Sdílený non-destructive setup engine a doctor
 
