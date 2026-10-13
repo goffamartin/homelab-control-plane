@@ -4,7 +4,8 @@ The release builder now produces a local `hlcp-controller_VERSION_ARCH.deb`
 for each selected Linux target (amd64/arm64). This is a private homelab package,
 not a package submitted to Debian. Building does not upload anything to GitHub,
 create a tag, install a host service or provision production credentials.
-Agent, MCP and web packages are not implemented by this slice.
+The [rootless agent package and CLI setup](14-cli-setup-and-agent-installation.md)
+extend this workflow. MCP and web packages are not implemented yet.
 
 ## Contents and lifecycle
 

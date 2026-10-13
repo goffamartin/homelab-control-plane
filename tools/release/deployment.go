@@ -30,6 +30,7 @@ var deploymentFiles = []string{
 	"docs/11-bounded-diagnostics-api.md",
 	"docs/12-debian-management-deployment.md",
 	"docs/13-debian-controller-package.md",
+	"docs/14-cli-setup-and-agent-installation.md",
 }
 
 func writeDeployment(root string, output io.Writer) error {
