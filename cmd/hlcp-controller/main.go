@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hlcp/internal/buildinfo"
 	"hlcp/internal/controller"
+	"hlcp/internal/doctor"
 	"hlcp/internal/liveness"
 	"hlcp/internal/localapi"
 	"hlcp/internal/telemetry"
@@ -21,6 +22,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "doctor" {
+		os.Exit(doctor.CLI(os.Args[2:], "controller", os.Stdout))
+	}
 	version := flag.Bool("version", false, "print build metadata and exit")
 	checkConfig := flag.Bool("check-config", false, "validate configuration without binding sockets or opening the ledger")
 	nodesFile := flag.String("node-allowlist-file", "", "startup JSON array of admitted certificate node identities; restart to apply")

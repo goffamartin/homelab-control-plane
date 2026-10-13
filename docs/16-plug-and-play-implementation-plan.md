@@ -254,6 +254,12 @@ prošly, transakční testy prošly třikrát opakovaně a metadata fuzz prošel
 editor, explicitní účet, pády po exchange/commit markeru a během cleanup.
 P04c doctor/entrypoints a P05 wizard integrace zůstávají otevřené; preview.4 se nemění.
 
+P04c první blok: offline doctor entrypoints v hlcp/agent/controller, bounded
+read-only konfigurace/TLS soubory, key match/expiry/identity a configured executable
+lookup. Žádný API token, journal, ledger, execution ani síťové probe.
+Kompletní host/systemd/rootless readiness a opt-in peer probe zůstávají otevřené;
+P04 není uzavřené. Kontrakt a hranice: [offline doctor](22-offline-doctor.md).
+
 ## P05 — Imported TLS setup jako první použitelný průvodce
 
 - Controller setup importuje server cert/key + agent trust bundle, ověří key match,
