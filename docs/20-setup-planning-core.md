@@ -5,6 +5,10 @@ This is an internal implementation block, not an installation wizard. P04a adds
 certificate generation, filesystem Apply/rollback or a new release. P04 remains
 open until transactional application/recovery and diagnostics are implemented.
 
+Historical boundary: P04b now adds [confirmed transactions/recovery](21-setup-transactions.md).
+The no-write claim below applies to Build/Preview/Recheck and read-only input
+operations, not the newly confirmed Apply/Recover/DiscardBackup APIs.
+
 Local verification (2026-10-13): full Windows test/vet and Linux race/vet suites
 passed, followed by targeted tests after the final value/pointer redaction check.
 The final 10s bounded fuzz campaign passed 75,921 executions; earlier campaigns
