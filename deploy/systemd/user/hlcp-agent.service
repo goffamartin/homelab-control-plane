@@ -1,0 +1,18 @@
+[Unit]
+Description=HomeLab Control Plane user agent
+# Compatibility name is retained, but both units must never run one journal.
+Conflicts=hlcp-agent-podman.service
+After=hlcp-agent-podman.service
+
+[Service]
+Type=simple
+ExecStartPre=%h/.local/bin/hlcp-agent -config %h/.config/hlcp/agent.yaml -check-config
+ExecStart=%h/.local/bin/hlcp-agent -config %h/.config/hlcp/agent.yaml
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+# Runs as the user owning the resources. Rootless runtimes may require
+# privileged newuidmap/newgidmap; do not force NoNewPrivileges here.
+
+[Install]
+WantedBy=default.target

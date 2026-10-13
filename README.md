@@ -23,6 +23,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [CLI setup and rootless agent installation](docs/14-cli-setup-and-agent-installation.md)
 - [Onboarding and agent-profile design notes](docs/15-onboarding-and-agent-profile-design-notes.md)
 - [Plug-and-play onboarding implementation plan](docs/16-plug-and-play-implementation-plan.md)
+- [Generic agent execution profiles and migration](docs/17-generic-agent-profiles.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status
@@ -31,7 +32,7 @@ Build/test toolchain is pinned to Go 1.27.2 (`.go-version`, `go.mod`). All three
 binaries support `--version` without TLS/config/API setup; `hlcp --version --json`
 returns machine-readable metadata. From a clean checkout with cached modules,
 `go run ./tools/release -version v0.1.0 -out dist/v0.1.0` creates Linux amd64/arm64
-and Windows amd64 binaries, native controller .deb packages for Linux,
+and Windows amd64 binaries, native controller and runtime-independent agent .deb packages for Linux,
 a deterministic deployment archive, manifest and `SHA256SUMS`.
 This does not publish a GitHub release or install any service. See the build guide
 for local validation, reproducibility checks, artifact permissions and CI scope.

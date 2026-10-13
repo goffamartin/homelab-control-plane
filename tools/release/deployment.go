@@ -16,6 +16,7 @@ var deploymentFiles = []string{
 	"deploy/systemd/hlcp-agent.service",
 	"deploy/systemd/hlcp-agent-docker.conf",
 	"deploy/systemd/user/hlcp-agent-podman.service",
+	"deploy/systemd/user/hlcp-agent.service",
 	"deploy/systemd/hlcp-telemetry.conf",
 	"deploy/systemd/journald-hlcp-retention.conf",
 	"deploy/config/controller.env",
@@ -23,6 +24,8 @@ var deploymentFiles = []string{
 	"deploy/config/api-policy.json",
 	"deploy/config/agent-docker.yaml",
 	"deploy/config/agent-podman.yaml",
+	"deploy/config/agent-user.yaml",
+	"deploy/config/agent-system.yaml",
 	"examples/api-policy.json",
 	"docs/07-build-and-release.md",
 	"docs/09-telemetry-and-audit.md",
@@ -31,6 +34,9 @@ var deploymentFiles = []string{
 	"docs/12-debian-management-deployment.md",
 	"docs/13-debian-controller-package.md",
 	"docs/14-cli-setup-and-agent-installation.md",
+	"docs/17-generic-agent-profiles.md",
+	"docs/15-onboarding-and-agent-profile-design-notes.md",
+	"docs/16-plug-and-play-implementation-plan.md",
 }
 
 func writeDeployment(root string, output io.Writer) error {
