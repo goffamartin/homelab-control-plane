@@ -97,6 +97,9 @@ state and restore the backed-up unit deliberately; never erase journals.
 
 ## Remaining installation simplification
 
+See [onboarding and agent-profile design notes](15-onboarding-and-agent-profile-design-notes.md)
+for the agreed managed/imported certificate modes and open script/profile design.
+
 These are two focused steps, not a complete PKI installer. Next slices: verified
 release download/update helper (private GitHub auth and checksums), non-destructive
 controller/agent configuration wizard with CSR generation, and an explicit

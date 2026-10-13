@@ -248,7 +248,10 @@ pro souběh a změny lifecycle, podle povahy fuzz/protocol compatibility testy.
 Release změny navíc reprodukovatelnost a checksum/version smoke. Aktualizovat
 stav fáze až s konkrétním důkazem. Dokumentační blok: odkazy a `git diff --check`.
 
-Nejbližší implementace je **M1 — read-only MCP**, nikoli web nebo vzdálené nasazení.
+Aktuální onboarding prioritu určuje
+[plug-and-play implementační plán](16-plug-and-play-implementation-plan.md),
+který začíná obecným agentem a skriptovými adaptéry. M1 — read-only MCP zůstává
+samostatným navazujícím streamem; není součástí tohoto onboarding plánu.
 Volba skutečného MCP klienta/auth profilu je nutná před uzavřením M1; volba hostů
 a přístupů před F10E. Mutační oprávnění odložíme do samostatně schválené M3.
 
