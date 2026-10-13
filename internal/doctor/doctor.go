@@ -24,15 +24,16 @@ type Host interface {
 }
 
 type Options struct {
-	Role        string
-	Config      string
-	Certificate string
-	Key         string
-	CA          string
-	ServerName  string
-	HostChecks  bool
-	Scope       string
-	Unit        string
+	Role           string
+	Config         string
+	Certificate    string
+	Key            string
+	CA             string
+	ServerName     string
+	HostChecks     bool
+	Scope          string
+	Unit           string
+	SetupDirectory string
 }
 
 type Check struct {
@@ -71,6 +72,9 @@ func Run(host Host, options Options, now time.Time) Report {
 		add("role", "fail", "Select agent or controller diagnostics.")
 		return r
 	}
+	if options.SetupDirectory != "" {
+		checkTransaction(host, options.SetupDirectory, add)
+	}
 	nodeID := ""
 	podman := false
 	if options.Role == "agent" {
@@ -105,8 +109,11 @@ func Run(host Host, options Options, now time.Time) Report {
 			case "systemd":
 				required["systemctl"] = true
 			case "script":
-				for _, spec := range resource.Commands {
-					required[spec.Executable] = true
+				actions := append([]string(nil), resource.Actions...)
+				sort.Strings(actions)
+				for _, action := range actions {
+					spec := resource.Commands[action]
+					checkScript(host, spec.Executable, spec.WorkingDirectory, add)
 				}
 			}
 		}

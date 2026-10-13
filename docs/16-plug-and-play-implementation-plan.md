@@ -267,6 +267,13 @@ impersonation, aktivace, mapping-helper nebo container probe.
 Zbývají script/cwd readiness, explicit root-to-user inspekce, transaction inspect
 a peer TLS probe; P04/P05 a nový release tedy nadále nejsou uzavřené.
 
+Další P04c blok přidává statické Linux script executable/cwd/shebang kontroly
+(bez execution; env interpreter a loader/argv dependencies nejsou potvrzené)
+a explicitní --setup-dir napojený jen na read-only Planner.Inspect.
+Pending/corrupt state se neobnovuje ani nemaže. P04 nadále čeká na explicitní
+root-to-user inspekci a opt-in peer TLS probe; skutečná VM akceptace a P05
+wizard integrace zůstávají otevřené.
+
 ## P05 — Imported TLS setup jako první použitelný průvodce
 
 - Controller setup importuje server cert/key + agent trust bundle, ověří key match,

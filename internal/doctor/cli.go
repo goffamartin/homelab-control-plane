@@ -28,10 +28,11 @@ func runCLI(args []string, defaultRole string, out io.Writer, host Host, now tim
 	flags.BoolVar(&options.HostChecks, "host-checks", false, "read local clock and systemd readiness")
 	flags.StringVar(&options.Scope, "scope", "system", "system or current non-root user service")
 	flags.StringVar(&options.Unit, "unit", "", "hlcp-agent.service or legacy hlcp-agent-podman.service")
+	flags.StringVar(&options.SetupDirectory, "setup-dir", "", "inspect an existing private setup directory without recovery")
 	jsonOutput := flags.Bool("json", false, "JSON report")
 	if err := flags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
-			_, err = fmt.Fprintln(out, "Usage: doctor [--role agent|controller] [--config /absolute/agent.yaml]\n  [--cert /absolute/cert] [--key /absolute/key] [--ca /absolute/ca]\n  [--server-name name] [--json] [--host-checks --scope system|user]\n  [--unit hlcp-agent.service|hlcp-agent-podman.service]\nRead-only Linux diagnostics. No configuration, service activation, scripts or remote network operations.")
+			_, err = fmt.Fprintln(out, "Usage: doctor [--role agent|controller] [--config /absolute/agent.yaml]\n  [--cert /absolute/cert] [--key /absolute/key] [--ca /absolute/ca]\n  [--server-name name] [--json] [--host-checks --scope system|user]\n  [--unit hlcp-agent.service|hlcp-agent-podman.service] [--setup-dir /private/directory]\nRead-only Linux diagnostics. No configuration, recovery, service activation, scripts or remote network operations.")
 			if err != nil {
 				return 2
 			}
