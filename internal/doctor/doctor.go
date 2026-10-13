@@ -1,5 +1,6 @@
 // Package doctor performs offline diagnostics. Its host interface deliberately
-// offers no write, command execution, service control or network operations.
+// offers no writes, arbitrary command execution, service control or network operations.
+// Optional SystemHost diagnostics expose only predefined local property queries.
 package doctor
 
 import (
@@ -29,6 +30,9 @@ type Options struct {
 	Key         string
 	CA          string
 	ServerName  string
+	HostChecks  bool
+	Scope       string
+	Unit        string
 }
 
 type Check struct {
@@ -68,6 +72,7 @@ func Run(host Host, options Options, now time.Time) Report {
 		return r
 	}
 	nodeID := ""
+	podman := false
 	if options.Role == "agent" {
 		data, err := host.ReadFile(options.Config, true)
 		if err != nil || len(data) > MaximumFileSize {
@@ -91,6 +96,9 @@ func Run(host Host, options Options, now time.Time) Report {
 		}
 		required := map[string]bool{}
 		for _, resource := range config.Resources {
+			if resource.Adapter == "podman" {
+				podman = true
+			}
 			switch resource.Adapter {
 			case "docker", "podman":
 				required[resource.Adapter] = true
@@ -120,6 +128,9 @@ func Run(host Host, options Options, now time.Time) Report {
 			}
 		}
 		add("agent.state", "skip", "Journal and resource state were not opened.")
+	}
+	if options.HostChecks {
+		checkSystem(host, options, podman, add)
 	}
 	read := func(path, code string, private bool) []byte {
 		data, err := host.ReadFile(path, private)
@@ -197,7 +208,10 @@ func Run(host Host, options Options, now time.Time) Report {
 		}
 	}
 	add("tls.peer", "skip", "Peer handshake and remote chain trust were not tested.")
-	add("host.integration", "skip", "Clock synchronization, service state, runtime access and user-session prerequisites were not tested.")
+	if !options.HostChecks {
+		add("host.integration", "skip", "Host checks were not selected; use --host-checks with an explicit service scope.")
+	}
+	add("runtime.access", "skip", "Runtime sockets, containers, script execution and remote connectivity were not tested.")
 	return r
 }
 

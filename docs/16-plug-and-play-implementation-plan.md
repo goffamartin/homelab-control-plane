@@ -260,6 +260,13 @@ lookup. Žádný API token, journal, ledger, execution ani síťové probe.
 Kompletní host/systemd/rootless readiness a opt-in peer probe zůstávají otevřené;
 P04 není uzavřené. Kontrakt a hranice: [offline doctor](22-offline-doctor.md).
 
+Navazující P04c blok přidává opt-in --host-checks s kernel clock, ověřeným
+effective account, systemd properties/overrides, user manager/linger a Podman
+subordinate ranges. Jen pevné read queries s timeout/output limity, žádné
+impersonation, aktivace, mapping-helper nebo container probe.
+Zbývají script/cwd readiness, explicit root-to-user inspekce, transaction inspect
+a peer TLS probe; P04/P05 a nový release tedy nadále nejsou uzavřené.
+
 ## P05 — Imported TLS setup jako první použitelný průvodce
 
 - Controller setup importuje server cert/key + agent trust bundle, ověří key match,
