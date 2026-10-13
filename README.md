@@ -20,6 +20,9 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Bounded controller diagnostics API](docs/11-bounded-diagnostics-api.md)
 - [Debian management deployment and recovery](docs/12-debian-management-deployment.md)
 - [Native Debian controller package](docs/13-debian-controller-package.md)
+- [CLI setup and rootless agent installation](docs/14-cli-setup-and-agent-installation.md)
+- [Onboarding and agent-profile design notes](docs/15-onboarding-and-agent-profile-design-notes.md)
+- [Plug-and-play onboarding implementation plan](docs/16-plug-and-play-implementation-plan.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status
