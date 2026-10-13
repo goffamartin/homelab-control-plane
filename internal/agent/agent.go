@@ -26,17 +26,21 @@ const (
 )
 
 type ResourceConfig struct {
-	ID      string   `yaml:"id"`
-	Type    string   `yaml:"type"`
-	Adapter string   `yaml:"adapter"`
-	Target  string   `yaml:"target"`
-	Actions []string `yaml:"actions"`
+	ID       string                         `yaml:"id"`
+	Type     string                         `yaml:"type"`
+	Adapter  string                         `yaml:"adapter"`
+	Target   string                         `yaml:"target"`
+	Actions  []string                       `yaml:"actions"`
+	Commands map[string]ScriptCommandConfig `yaml:"commands"`
 }
 
 func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 	for _, resource := range config.Resources {
 		if err := resource.validate(); err != nil {
 			return nil, err
+		}
+		if resource.Adapter == "script" {
+			return nil, errors.New("script configuration is valid but execution is not available yet (P03)")
 		}
 	}
 	journal, err := command.OpenNodeJournal(config.JournalFile, config.JournalRetention, config.NodeID)
@@ -140,6 +144,12 @@ func (config Config) Validate() error {
 }
 
 func (resource ResourceConfig) validate() error {
+	if resource.Adapter == "script" {
+		return resource.validateScript()
+	}
+	if resource.Commands != nil {
+		return fmt.Errorf("resource %q: commands is only supported by the script adapter", resource.ID)
+	}
 	if resource.Target == "" || resource.Target != strings.TrimSpace(resource.Target) || strings.HasPrefix(resource.Target, "-") {
 		return fmt.Errorf("resource %q: target is invalid", resource.ID)
 	}

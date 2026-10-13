@@ -3,9 +3,40 @@ package protocol
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"testing"
 	"time"
 )
+
+func TestScriptInventoryUsesExistingWireContract(t *testing.T) {
+	want := InventorySnapshot{Revision: 1, Resources: []ResourceDescriptor{{ID: "diagnostics", Type: "task", Actions: []string{"diagnose", "reload", "status"}}}}
+	if err := want.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := EncodePayload(want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got InventorySnapshot
+	if err := DecodePayload(encoded, &got); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(want, got) {
+		t.Fatalf("wire changed: %+v", got)
+	}
+	command := CommandPayload{CommandID: "check", ResourceID: "diagnostics", Action: "diagnose"}
+	if err := command.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	encoded, err = EncodePayload(command)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded CommandPayload
+	if err := DecodePayload(encoded, &decoded); err != nil || decoded != command {
+		t.Fatalf("command=%+v err=%v", decoded, err)
+	}
+}
 
 func TestInventoryAndStateSnapshotValidate(t *testing.T) {
 	inventory := InventorySnapshot{
