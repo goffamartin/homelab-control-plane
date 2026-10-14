@@ -99,6 +99,21 @@ func LoadPolicy(path string) (*Policy, error) {
 	if err != nil || len(data) > maxPolicyBytes {
 		return nil, invalid
 	}
+	return ParsePolicy(data, func(credential string) (string, error) {
+		if !filepath.IsAbs(credential) {
+			credential = filepath.Join(filepath.Dir(path), credential)
+		}
+		return LoadToken(credential)
+	})
+}
+
+// ParsePolicy validates the same policy schema using a caller-supplied bounded
+// token snapshot resolver. It never opens files itself or retains bearer text.
+func ParsePolicy(data []byte, readToken func(string) (string, error)) (*Policy, error) {
+	invalid := errors.New("invalid local API policy or credential files")
+	if len(data) > maxPolicyBytes || readToken == nil {
+		return nil, invalid
+	}
 	// encoding/json normally accepts duplicate keys; policy must not.
 	if uniqueJSON(json.NewDecoder(strings.NewReader(string(data))), 0) != nil {
 		return nil, invalid
@@ -132,12 +147,8 @@ func LoadPolicy(path string) (*Policy, error) {
 				seen[resource] = true
 			}
 		}
-		credential := spec.TokenFile
-		if !filepath.IsAbs(credential) {
-			credential = filepath.Join(filepath.Dir(path), credential)
-		}
-		token, err := LoadToken(credential)
-		if err != nil {
+		token, err := readToken(spec.TokenFile)
+		if err != nil || !validToken(token) {
 			return nil, invalid
 		}
 		digest := sha256.Sum256([]byte(token))
