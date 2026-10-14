@@ -13,6 +13,30 @@ type directorySource interface {
 	close() error
 }
 
+// PlanChildDirectory pins an absent direct child to this planner's original
+// private directory descriptor. It cannot adopt a replacement parent by path.
+func (planner *Planner) PlanChildDirectory(name string) (*DirectoryPlan, error) {
+	planner.mutex.Lock()
+	defer planner.mutex.Unlock()
+	if planner.closed {
+		return nil, ErrClosed
+	}
+	if !validName(name) {
+		return nil, ErrInvalidInput
+	}
+	parent, ok := planner.source.(interface {
+		planChildDirectory(string) (directorySource, error)
+	})
+	if !ok {
+		return nil, ErrApplyUnavailable
+	}
+	source, err := parent.planChildDirectory(name)
+	if err != nil {
+		return nil, err
+	}
+	return &DirectoryPlan{source: source}, nil
+}
+
 // DirectoryPlan pins an existing safe parent. There is no recursive creation,
 // permission repair or implicit consent. Published targets and unknown staging
 // are retained; only a known empty pre-publish staging inode may be removed.

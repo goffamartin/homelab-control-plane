@@ -38,6 +38,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Native Debian controller activation CLI (P05g)](docs/29-controller-activation-cli.md)
 - [Private non-root client profile provisioning core (P05h)](docs/30-client-provisioning-core.md)
 - [Confirmed controller-to-user CLI access handoff (P05i)](docs/31-client-access-handoff.md)
+- [Fresh-user .config/hlcp bootstrap (P05j)](docs/32-client-config-parent-bootstrap.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status

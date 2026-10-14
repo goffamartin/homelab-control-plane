@@ -72,7 +72,30 @@ func planDirectory(path string, owner Owner) (directorySource, error) {
 	if err != nil {
 		return nil, err
 	}
-	name := filepath.Base(path)
+	return childDirectoryPlan(parent, parentPath, filepath.Base(path), owner)
+}
+
+func (source *nativeSource) planChildDirectory(name string) (directorySource, error) {
+	if uint32(os.Geteuid()) != source.owner.UID || uint32(os.Getegid()) != source.owner.GID {
+		return nil, ErrUnsafePath
+	}
+	if err := source.binding(); err != nil {
+		return nil, err
+	}
+	fd, _, errno := syscall.Syscall(syscall.SYS_FCNTL, source.directory.Fd(), syscall.F_DUPFD_CLOEXEC, 0)
+	if errno != 0 {
+		return nil, ErrReadFailed
+	}
+	return childDirectoryPlan(os.NewFile(fd, "setup-child-parent"), source.path, name, source.owner)
+}
+
+// Owns parent on success and closes it on all failed planning paths.
+func childDirectoryPlan(parent *os.File, parentPath, name string, owner Owner) (directorySource, error) {
+	path := filepath.Join(parentPath, name)
+	if len(path) > 4096 {
+		parent.Close()
+		return nil, ErrInvalidInput
+	}
 	if !absentChild(parent, name) {
 		parent.Close()
 		return nil, ErrStalePlan

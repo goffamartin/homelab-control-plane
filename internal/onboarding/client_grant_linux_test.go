@@ -99,8 +99,8 @@ func TestInstalledClientGrantEndToEnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	parent := filepath.Join(account.HomeDir, ".config")
-	if output, err := exec.Command("/usr/sbin/runuser", "-u", account.Username, "--", "/usr/bin/mkdir", "-m", "700", parent).CombinedOutput(); err != nil {
-		t.Fatalf("parent fixture: %v %s", err, output)
+	if _, err := os.Lstat(parent); !os.IsNotExist(err) {
+		t.Fatal("fresh fixture requires absent user .config")
 	}
 	path := filepath.Join(parent, "hlcp")
 	run := func(extra ...string) clientGrantReport {
@@ -117,12 +117,24 @@ func TestInstalledClientGrantEndToEnd(t *testing.T) {
 	if r.Status != "preview" || !r.ReadOnly {
 		t.Fatal(r.Status, r.Code)
 	}
+	if r.Preview == nil || len(r.Preview.Changes) != 4 {
+		t.Fatal("parent bootstrap absent from preview")
+	}
+	if _, err = os.Stat(parent); !os.IsNotExist(err) {
+		t.Fatal("preview wrote .config")
+	}
 	if _, err = os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("preview wrote or exported credential")
 	}
 	r = run("--apply", "--yes")
 	if r.Status != "applied" || r.Result == nil || r.Result.Changed != 2 {
 		t.Fatal(r.Status, r.Code)
+	}
+	for _, directory := range []string{parent, path} {
+		info, err := os.Stat(directory)
+		if err != nil || info.Mode().Perm() != 0700 || info.Sys().(*syscall.Stat_t).Uid == 0 {
+			t.Fatal("unsafe/root-owned bootstrap directory")
+		}
 	}
 	for _, file := range []string{"cli.json", "cli.token"} {
 		info, err := os.Stat(filepath.Join(path, file))

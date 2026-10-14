@@ -34,7 +34,7 @@ func runClientGrantCLI(args []string, out io.Writer, grant func(context.Context,
 	jsonOutput := f.Bool("json", false, "redacted JSON report")
 	if err := f.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			if _, err = fmt.Fprintln(out, "Usage: hlcp-controller configure-client --user account [--role operator|observer] [--json] [--apply --yes]\nDefault: preview without exporting the bearer; role defaults to operator. Writes run as the selected user only.\nRequires installed controller and an existing safe user .config parent. No overwrite, rotation, policy or service changes."); err == nil {
+			if _, err = fmt.Fprintln(out, "Usage: hlcp-controller configure-client --user account [--role operator|observer] [--json] [--apply --yes]\nDefault: preview without exporting the bearer; role defaults to operator. Writes run as the selected user only.\nRequires installed controller and an existing safe user home. Missing .config/hlcp directories are created only after consent. No overwrite, rotation, policy or service changes."); err == nil {
 				return 0
 			}
 		}

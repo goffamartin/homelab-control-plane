@@ -85,7 +85,7 @@ func ClientProvisionChild(input io.Reader, out io.Writer) int {
 	} else if !os.IsNotExist(err) && err != setup.ErrMissingDirectory {
 		return emit(grantFailure("PREVIEW_REFUSED", true))
 	}
-	p, err := PlanClient(context.Background(), metadata.Directory, owner, "http://127.0.0.1:9444", credential)
+	p, err := planGrantClient(context.Background(), metadata.Directory, owner, credential)
 	if err != nil {
 		return emit(grantFailure("PREVIEW_REFUSED", true))
 	}
@@ -107,35 +107,11 @@ func ClientProvisionChild(input io.Reader, out io.Writer) int {
 		return emit(grantFailure("GRANT_INPUT_INVALID", true))
 	}
 	ctx := context.Background()
-	if validateClientOwner(owner) != nil || p.plan.planner.Recheck(ctx, p.plan.plan) != nil {
-		return emit(grantFailure("STALE_PLAN", true))
-	}
-	intents, err := clientIntents(metadata.Directory, "http://127.0.0.1:9444", actual)
-	if err != nil {
-		return emit(grantFailure("GRANT_INPUT_INVALID", true))
-	}
-	final, err := p.plan.planner.Build(ctx, intents)
-	if err != nil || !sameGrantChanges(p.plan.plan.Preview(), final.Preview()) {
-		return emit(grantFailure("STALE_PLAN", true))
-	}
-	// Original pinned directory and planner; never apply the stand-in plan.
-	ready := &ClientSetup{owner: owner, plan: &AgentSetup{planner: p.plan.planner, plan: final, directory: p.plan.directory, intents: intents}}
-	r, err := ready.Apply(ctx, true)
+	r, err := p.Apply(ctx, true, actual)
 	if err != nil {
 		return emit(grantFailure("WRITE_INCOMPLETE", false))
 	}
 	return emit(clientGrantReport{Status: "applied", ReadOnly: false, Result: &r})
-}
-func sameGrantChanges(a, b setup.Preview) bool {
-	if len(a.Changes) != len(b.Changes) {
-		return false
-	}
-	for index := range a.Changes {
-		if a.Changes[index] != b.Changes[index] {
-			return false
-		}
-	}
-	return true
 }
 func safeGrantHome(home string) bool {
 	return filepath.IsAbs(home) && filepath.Clean(home) == home && home != "/" && len(home) < 3500 && !strings.ContainsRune(home, 0)
@@ -273,7 +249,7 @@ func validGrantPreview(report clientGrantReport) bool {
 		return false
 	}
 	changes := report.Preview.Changes
-	if len(changes) != 2 && len(changes) != 3 {
+	if len(changes) < 2 || len(changes) > 4 {
 		return false
 	}
 	seen := map[string]bool{}
@@ -282,7 +258,7 @@ func validGrantPreview(report clientGrantReport) bool {
 			return false
 		}
 		seen[c.Name] = true
-		if c.Name == "configuration-directory" {
+		if c.Name == "configuration-directory" || c.Name == "user-config-directory" {
 			if c.Action != "create-directory" || c.Mode != 0700 {
 				return false
 			}
@@ -299,7 +275,7 @@ func validGrantPreview(report clientGrantReport) bool {
 	for _, change := range changes {
 		actions[change.Name] = change.Action
 	}
-	return actions["cli.json"] == actions["cli.token"] && (!seen["configuration-directory"] || actions["cli.json"] == "create")
+	return actions["cli.json"] == actions["cli.token"] && (!seen["configuration-directory"] || actions["cli.json"] == "create") && (!seen["user-config-directory"] || seen["configuration-directory"])
 }
 
 func nativeClientGrant(parent context.Context, name, role string, apply bool) clientGrantReport {

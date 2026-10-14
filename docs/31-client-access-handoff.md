@@ -2,6 +2,8 @@
 
 Implementováno ve zdrojích od 2026-10-14. Nový příkaz není v publikovaném preview.4;
 nejde o update běžících VM. P05/checkpoint B zůstává otevřený.
+Navazující [P05j](32-client-config-parent-bootstrap.md) doplňuje potvrzené vytvoření
+chybějící `.config`; níže je tento rozšířený aktuální kontrakt.
 
 ## Příkaz
 
@@ -26,9 +28,9 @@ Role observer omezuje API podle existující policy, nikoli podle tohoto průvod
 
 Vyžaduje root UID/GID 0, běh důvěryhodné root-owned ELF binárky právě z
 `/usr/bin/hlcp-controller`, explicitní nerootový účet a bezpečný již existující
-rodič `~/.config`. Profil vzniká jen v registrovaném account home pod
+home. Chybějící `.config/hlcp` se vytvoří až po potvrzení. Profil vzniká v home pod
 `.config/hlcp`; žádný HOME/SUDO_USER/XDG odhad. Vlastní/XDG cesty a automatická
-tvorba chybějícího `.config` zatím nejsou podporované. Pro standardní default
+tvorba jiných parent directories nejsou podporované. Pro standardní default
 prostředí pak vybraný uživatel použije `hlcp -n` bez sudo/token argumentů.
 
 Existující profil vytvořený starším `hlcp configure` s jiným token filename nebo
@@ -105,7 +107,7 @@ Source tests ověřují role matching, stale source a zakázané externí token 
 CLI testy ověřují offline help, invalid options a samostatný consent.
 ARM64 compile-only prošel, nikoli live ARM/systemd/reboot acceptance.
 
-Navazuje bezpečný bootstrap chybějících user config parents, explicitní migrace
+Bootstrap známé dvojice `.config/hlcp` navazuje v P05j; zbývá explicitní migrace
 stávajících profilů podle potřeby, agent service integrace a booted Debian VM
 acceptance před release checkpoint B. Managed PKI/renewal a distribuční helper
 zůstávají pozdějšími etapami schváleného plánu.
