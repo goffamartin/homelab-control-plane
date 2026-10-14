@@ -23,12 +23,14 @@ samostatně požaduje persistent boot aktivaci. --json dává redigovaný report
 Help/neplatné options neprovádějí host inspection. Žádný restart aktivní služby,
 stop/reset peeru, automatický linger nebo account/config změna.
 
-Tento první native bridge záměrně vyžaduje prázdné resources/capabilities z
-fresh imported setup. Konfigurované Docker/Podman/script/systemd adaptéry vrátí
-RESOURCE_PREFLIGHT_REQUIRED bez aktivace: jejich skutečná runtime práva/readiness
-potřebují navazující kontrolu pod správným účtem/sandboxem. Není to zákaz resources
-v protokolu ani přepis existujícího agenta. Stávající služby mohou dál běžet
-dosavadním způsobem; tento příkaz je nepřestavuje.
+Původní P05l bridge vyžadoval prázdné resources/capabilities. Navazující P05n
+rozšiřuje user scope o read-only metadata preflight Docker/Podman/scripts a
+status-only systemd. System-scope resources a mutující user-scope systemd zůstávají
+RESOURCE_PREFLIGHT_REQUIRED: root práva nejsou práva sandboxu služby a neověřujeme
+polkit grants. Samotné capabilities bez resources nezavádějí runtime závislosti.
+[Přesný kontrakt a omezení P05n](36-native-resource-readiness.md).
+Metadata nejsou zárukou skutečného prostředí či úspěchu akce. Stávající služby
+mohou dál běžet dosavadním způsobem; tento příkaz je nepřestavuje.
 
 Podporuje jen odpovídající Debian package binary /usr/bin/hlcp-agent a pevné
 distribuované profily. Archivová/manual binary, custom unit/drop-ins a jiné config

@@ -91,6 +91,9 @@ func TestRuntimeEnablementIsNotPersistent(t *testing.T) {
 }
 func TestSubordinateBoundaries(t *testing.T) {
 	account := Account{"martin", "1000", "1000"}
+	if ValidSubordinateRange([]byte("martin:100000:65536\n"+strings.Repeat("x", MaximumFileSize)), account) {
+		t.Fatal("unbounded mapping accepted")
+	}
 	for _, row := range []struct {
 		data string
 		good bool

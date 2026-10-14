@@ -154,6 +154,14 @@ func (h nativeAgentServiceHost) InspectAgent(ctx context.Context, profile AgentS
 		return fail()
 	}
 	journal := "/var/lib/hlcp/command-journal.json"
+	parsed, err := agent.Parse(config[0].Data)
+	if err != nil {
+		return fail()
+	}
+	readiness, err := PlanResourceReadiness(ctx, nativeResourceHost{}, profile, parsed)
+	if err != nil {
+		return AgentActivationSnapshot{}, ErrAgentActivationResources
+	}
 	if profile.Scope == "user" {
 		journal = filepath.Join(home, ".local", "state", "hlcp", "command-journal.json")
 	}
@@ -170,7 +178,8 @@ func (h nativeAgentServiceHost) InspectAgent(ctx context.Context, profile AgentS
 		Groups                      []int
 		Binary, Manager, Unit, Peer setup.Snapshot
 		Runtime, Config             []setup.Snapshot
-	}{account, accountProof, groups, binary, manager, unit, peerUnit, runtimeProof, config}
+		Resources                   [32]byte
+	}{account, accountProof, groups, binary, manager, unit, peerUnit, runtimeProof, config, readiness.proof}
 	encoded, err := json.Marshal(evidence)
 	if err != nil {
 		return fail()
@@ -290,11 +299,6 @@ func agentServiceConfig(ctx context.Context, directory string, owner setup.Owner
 	}
 	if _, err = material.Validate(Identity{Role: "agent", NodeID: config.NodeID}, now); err != nil {
 		return nil, ErrAgentActivationProfile
-	}
-	// This initial service bridge deliberately accepts only fresh imported
-	// agents. Adapter/action readiness under the actual service account follows.
-	if len(config.Resources) != 0 || len(config.Capabilities) != 0 {
-		return nil, ErrAgentActivationResources
 	}
 	plan, err := p.Build(ctx, intents)
 	if err != nil || p.Recheck(ctx, plan) != nil {

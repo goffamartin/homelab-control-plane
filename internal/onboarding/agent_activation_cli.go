@@ -35,7 +35,7 @@ func runAgentActivationCLI(args []string, out io.Writer, host AgentActivationHos
 	jsonOutput := f.Bool("json", false, "redacted JSON report")
 	if err := f.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			if _, err = fmt.Fprintln(out, "Usage: hlcp-agent activate [--scope user|system] [--unit hlcp-agent.service|hlcp-agent-podman.service]\n  [--enable] [--json] [--apply --yes]\nDefault: user-scope read-only preview; run directly as the non-root resource owner.\nSystem scope requires root. Installed package profiles and validated imported setup only.\nInitial bridge requires empty resources/capabilities; configured adapters need separate readiness review.\nNo restart, implicit linger, account/config changes, recovery or resource execution during preview."); err == nil {
+			if _, err = fmt.Fprintln(out, "Usage: hlcp-agent activate [--scope user|system] [--unit hlcp-agent.service|hlcp-agent-podman.service]\n  [--enable] [--json] [--apply --yes]\nDefault: user-scope read-only preview; run directly as the non-root resource owner.\nSystem scope requires root. Installed package profiles and validated imported setup only.\nUser resources: bounded Docker/Podman/script metadata checks; systemd status only.\nSystem-scope resources still require separate service-sandbox readiness review.\nMetadata checks do not establish runtime health, service environment or resource execution success.\nNo restart, implicit linger, account/config changes, recovery or resource execution during preview."); err == nil {
 				return 0
 			}
 		}

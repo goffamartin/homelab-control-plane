@@ -2,7 +2,6 @@ package onboarding
 
 import (
 	"context"
-	"errors"
 	"go.yaml.in/yaml/v4"
 	"hlcp/internal/agent"
 	"hlcp/internal/setup"
@@ -96,8 +95,8 @@ func TestNativeAgentImportedConfigReadOnly(t *testing.T) {
 	config.Capabilities = []string{"resource.control", "podman"}
 	data, _ = yaml.Marshal(config)
 	os.WriteFile(filepath.Join(dir, "agent.yaml"), data, 0600)
-	if _, err = agentServiceConfig(context.Background(), dir, owner, profile, home, testNow); !errors.Is(err, ErrAgentActivationResources) {
-		t.Fatal("adapter readiness gate bypassed", err)
+	if _, err = agentServiceConfig(context.Background(), dir, owner, profile, home, testNow); err != nil {
+		t.Fatal("capabilities alone must not introduce resources", err)
 	}
 	after, _ := os.ReadFile(filepath.Join(dir, "agent.key"))
 	if string(after) != string(before) {
