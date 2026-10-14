@@ -426,6 +426,14 @@ Windows full test/vet, Linux full race/test/vet a ARM64 compile-only prošly.
 Live systemd/user bus/reboot, resource readiness a fresh package/VM/release gate
 zůstávají otevřené; P05/checkpoint B ani preview.4 se tímto neuzavírají.
 
+P05m resource readiness core: deterministické read-only kontroly závislostí pro
+user Docker/Podman/scripts a status-only systemd, bounded work, redacted preview
+a config/profile-bound fingerprint. System resources vyžadují skutečnou service
+sandbox inspekci, nikoli root permissions. Native Linux host a napojení do
+activation snapshotu teprve navazují; empty-only activation gate se nemění.
+[Kontrakt a otevřené brány](35-resource-readiness-core.md). P05/checkpoint B
+a preview.4 zůstávají otevřené/beze změny.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
