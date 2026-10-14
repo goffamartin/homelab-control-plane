@@ -468,6 +468,15 @@ Native fixed inspector/launcher/CLI a čerstvost activation evidence ještě nej
 napojené. System resource gate, booted VM/reboot a P05/checkpoint B otevřené;
 preview.4 se nemění.
 
+P05r fixed sandbox metadata inspector: early internal agent entrypoint bez
+agent.Load/Run/controller/journal/telemetry, bounded strict private JSON stdin/stdout,
+source/request/count identity binding, registered hlcp UID/GID + /proc NNP/capability
+kontrola a sdílené read-only script file fingerprints. [Kontrakt](40-fixed-sandbox-metadata-inspector.md).
+JSON output nenahrazuje process exit, unit cleanup ani mount sandbox attestation;
+response decoder nechává lifecycle flags false. Native launcher/explicit probe CLI,
+fresh activation evidence a VM sandbox akceptace ještě navazují. Gate/checkpoint B
+otevřené, preview.4 a VM beze změny.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
