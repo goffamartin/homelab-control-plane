@@ -3,6 +3,8 @@
 Interní jádro od 2026-10-14, zatím bez native systemd adaptéru a CLI příkazu.
 Nejde o hotové spuštění služby ani nový release. Imported setup nadále připravuje
 jen soubory; uživatelské CLI provisioning a VM acceptance jsou otevřené.
+Navazující [P05g](29-controller-activation-cli.md) přidává native Debian adapter a CLI;
+tento dokument popisuje samostatný core kontrakt.
 
 ## Oddělené potvrzení
 
