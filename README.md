@@ -34,6 +34,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Confirmed private config-directory provisioning (P05c)](docs/25-setup-directory-provisioning.md)
 - [Imported controller setup planning (P05d)](docs/26-imported-controller-setup-core.md)
 - [Imported controller setup CLI and deferred credentials (P05e)](docs/27-imported-controller-setup-cli.md)
+- [Controller service activation core and partial outcomes (P05f)](docs/28-controller-activation-core.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status

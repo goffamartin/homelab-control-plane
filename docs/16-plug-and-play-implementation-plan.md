@@ -356,6 +356,14 @@ Windows full test/vet, Linux full race/test/vet a následný native CLI race/vet
 prošly; arm64 compile-only. Service/account a user-CLI provisioning, booted VM
 acceptance a checkpoint B zůstávají otevřené. Preview.4 se nemění.
 
+P05f activation core: read-only controller service plán a oddělený confirmed Apply
+nad důvěryhodným host kontraktem. Start jen inactive, enable jen explicitně,
+active no-op bez restartu; stale evidence a failed/transitional stavy odmítnuté.
+Enable/start mají ověřované částečné výsledky, bez retry/disable/stop rollbacku.
+[Kontrakt a otevřený native adapter](28-controller-activation-core.md).
+Native preflight/systemd CLI, user CLI provisioning a VM acceptance zůstávají
+otevřené. Jde o interní zdrojové jádro, nikoli dokončený P05 či nové preview.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
