@@ -394,6 +394,16 @@ container workflow a ARM64 compile-only prošly. Chybějící `.config` bootstra
 legacy profile migration, agent service a booted VM/release acceptance zůstávají
 otevřené; checkpoint B ani preview.4 se nemění.
 
+P05j fresh-user bootstrap: chybějící `.config/hlcp` je součástí read-only preview
+a vzniká až po potvrzení pod cílovým uživatelem. Home zůstává existing safe parent;
+nové .config vrátí pinned planner a hlcp child se plánuje z původního deskriptoru,
+nikoli adoptovaným path reopen. Existující parent mode zůstává zachovaný.
+[Bootstrap a failure hranice](32-client-config-parent-bootstrap.md).
+Windows full test/vet, Linux full race/test/vet, skutečné nerootové bootstrap/race
+testy, installed parent/child fresh-account workflow a ARM64 compile-only prošly.
+Legacy profile migration, agent service a booted Debian package/VM/release gate
+zůstávají otevřené; P05/checkpoint B ani preview.4 nejsou uzavřené.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
