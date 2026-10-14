@@ -23,6 +23,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "activate" {
+		os.Exit(onboarding.ControllerActivationCLI(os.Args[2:], os.Stdout))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "setup" {
 		os.Exit(onboarding.ControllerCLI(os.Args[2:], os.Stdin, os.Stdout))
 	}

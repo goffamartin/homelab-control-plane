@@ -364,6 +364,15 @@ Enable/start mají ověřované částečné výsledky, bez retry/disable/stop r
 Native preflight/systemd CLI, user CLI provisioning a VM acceptance zůstávají
 otevřené. Jde o interní zdrojové jádro, nikoli dokončený P05 či nové preview.
 
+P05g native Debian controller activation: nový `hlcp-controller activate` má
+default preview, samostatné `--apply --yes` a opt-in `--enable`. Installed fixed
+profile/account/binary/config/TLS/transaction preflight, bounded systemctl bez
+shellu a redigované partial outcomes; žádný restart, repair či user CLI změna.
+[CLI a přesná acceptance hranice](29-controller-activation-cli.md).
+Windows full test/vet, Linux full race/test/vet, izolovaný package-account test
+a ARM64 compile-only prošly. Live systemd/reboot, user CLI a agent service integrace
+zůstávají otevřené; P05/checkpoint B ani preview.4 nejsou změnou uzavřené.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
