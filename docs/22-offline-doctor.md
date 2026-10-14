@@ -11,6 +11,7 @@ hlcp doctor --help
 hlcp-agent doctor --config /home/martin/.config/hlcp/agent.yaml --host-checks --scope user
 hlcp-agent doctor --config /home/martin/.config/hlcp/agent.yaml --host-checks --scope user --unit hlcp-agent-podman.service
 hlcp doctor --setup-dir /etc/hlcp/controller --json
+hlcp-agent doctor --config /home/martin/.config/hlcp/agent.yaml --probe --json
 ```
 
 Controller role standardně čte controller.crt/controller.key/ca.crt v
@@ -47,7 +48,8 @@ FIFO/device/symlink substituce se nepřečte jako běžná konfigurace.
 
 ## Výstup a návratový kód
 
-Text nebo --json: read_only=true, offline=true, checks s code/state/message.
+Text nebo --json: read_only=true, offline=true (false při explicitním TLS probe),
+checks s code/state/message.
 Stavy ok/warn/fail/skip. Výstup neobsahuje raw parser/OS chyby, config contents,
 PEM, tokeny, argv/env nebo nakonfigurované script cesty. Nepředávejte secrets
 v přepínačích; ty neslouží pro zadávání klíčového materiálu.
@@ -59,8 +61,8 @@ Help funguje bez konfigurace, API tokenu a běžící služby.
 ## Otevřené brány P04c/P05
 
 Tento blok není kompletní doctor ani hotové P04:
-explicitní jiný runtime účet při root inspekci a opt-in bounded network/TLS
-peer probe zatím chybí. Script interpreter/cwd a transaction inspect jsou níže;
+explicitní jiný runtime účet při root inspekci zatím chybí. Script interpreter/cwd,
+transaction inspect a opt-in TLS probe jsou níže;
 nejde o potvrzení skutečného script/runtime chování.
 Remote peer chain verification není nahrazena kontrolou lokálního CA bundle;
 issuer leafu může být jiný než trust pro peer a nebude se automaticky předpokládat
@@ -177,3 +179,47 @@ Lokální evidence tohoto bloku 2026-10-14: Windows full test/vet a Linux full
 race/test/vet prošly. Linux arm64 test binary compile-only prošel (ne live ARM).
 Skutečný hlcp doctor --help vstup prošel bez konfigurace/tokenu a bez inspekce.
 git diff --check čistý; VM se v tomto bloku neměnily.
+
+## Výslovný agent TLS probe
+
+--probe podporuje jen agent role. Cílová adresa, server_name a cert/key/trust
+pocházejí z validované konfigurace; žádný další remote endpoint se nehádá.
+Bez přepínače není žádný probe; help nečte ani síť ani konfiguraci.
+Jakýkoli lokální fail zabrání dialu. Unsupported probe provider je fail, ne OK.
+Sonda používá již bezpečně bounded načtené PEM snapshoty, neopakuje jejich čtení.
+
+ClientTLSConfigFromPEM sdílí konstruktor TLS politiky s běžným ClientTLSConfig:
+TLS >=1.3, hlcp/1 ALPN, předepsané server_name a vlastní CA (ne system trust
+fallback), verified chain a explicitní server-auth EKU. Standardní ověření
+certifikátu není vypnuté. Lokální doctor EKU/identity kontrola byla zároveň
+sjednocena s runtime: explicitní client/server-auth, AgentNodeID URI kontrakt,
+nikoli implicitní Any/no-EKU fallback.
+
+Celkem 3s context deadline omezuje dial/DNS/TLS, socket má stejnou deadline,
+žádné retry/scan/proxy ani application-level exchange. TLS validity v sondě se
+ověřuje k zachycenému doctor clock snapshotu. Po handshake se raw connection
+uzavře; nepošle se HELLO, inventory, heartbeat, API token ani command.
+read_only znamená bez změn HLCP config/state/operací: síťová sonda samozřejmě
+odešle TLS handshake včetně client certificate identity a může přidat audit/log
+záznamy na serveru (authenticated nebo registration rejected po close).
+Nenahrazuje ani nepřeruší registrovanou agentní session tím, že by poslala HELLO.
+
+tls.peer=ok potvrzuje server identity/trust/name/EKU/ALPN, nikoli přijetí našeho
+client certifikátu, allowlist, registry admission, resources či command oprávnění.
+TLS1.3 client handshake completion samo o sobě takové potvrzení nedává;
+tls.admission proto zůstává skip. Nedostupnost endpointu, timeout a TLS chyba
+mají kontrolované obecné messages, bez raw DNS/x509/socket chyb nebo secrets.
+offline=false označuje výslovnou sondu; pokud ji preflight zablokuje, zůstane true.
+
+Testy používají jen lokální loopback: valid peer, jiná CA/name, expired leaf,
+implicitní EKU, chybějící ALPN, TLS1.2-only server a silent TCP timeout.
+TLS test server nezaznamená žádné application bytes. Integrační test se skutečným
+controller.Server zachová existující node record beze změny, žádná registrace.
+Fake provider ověřuje opt-in, společnou TLS policy, deadline a redakci errors.
+Jde o lokální test evidence, nikoli spojení na uživatelovy VM nebo live ARM.
+
+Evidence TLS bloku 2026-10-14: Windows full test/vet a Linux full race/test/vet
+prošly; finální controller integration/snapshot test prošel na Windows a Linux
+race/vet. ARM64 doctor binary compile-only prošel, nikoli live ARM. Skutečný
+agent doctor --help funguje bez konfigurace a bez sondy. git diff --check čistý.
+Repo preview.4 se nemění; uživatelské VM ani jejich certifikáty se neměnily.

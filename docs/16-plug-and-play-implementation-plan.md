@@ -274,6 +274,12 @@ Pending/corrupt state se neobnovuje ani nemaže. P04 nadále čeká na explicitn
 root-to-user inspekci a opt-in peer TLS probe; skutečná VM akceptace a P05
 wizard integrace zůstávají otevřené.
 
+P04c TLS blok: výslovný agent --probe používá již validované PEM snapshoty a
+sdílenou runtime TLS politiku (TLS1.3, CA/name/explicit EKU/hlcp ALPN), bounded
+3s dial/handshake bez HELLO/registrace. Rozlišuje server identity success od
+neověřeného client admission/allowlist; síťové audit logs jsou možný side effect.
+Zbývá explicit root-to-user inspekce; P04/P05 ani nový release nejsou uzavřené.
+
 ## P05 — Imported TLS setup jako první použitelný průvodce
 
 - Controller setup importuje server cert/key + agent trust bundle, ověří key match,

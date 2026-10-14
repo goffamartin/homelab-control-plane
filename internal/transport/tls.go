@@ -60,14 +60,35 @@ func ClientTLSConfig(files TLSFiles) (*tls.Config, error) {
 		return nil, err
 	}
 
+	return clientTLSConfig(certificate, rootCAs, files.ServerName), nil
+}
+
+func clientTLSConfig(certificate tls.Certificate, rootCAs *x509.CertPool, serverName string) *tls.Config {
 	return &tls.Config{
 		MinVersion:       tls.VersionTLS13,
 		Certificates:     []tls.Certificate{certificate},
 		RootCAs:          rootCAs,
-		ServerName:       files.ServerName,
+		ServerName:       serverName,
 		NextProtos:       []string{ALPN},
 		VerifyConnection: verifyController,
-	}, nil
+	}
+}
+
+// ClientTLSConfigFromPEM uses an already-read snapshot with the same peer
+// verification policy as ClientTLSConfig. It never reopens deployment files.
+func ClientTLSConfigFromPEM(certificatePEM, keyPEM, caPEM []byte, serverName string) (*tls.Config, error) {
+	if serverName == "" {
+		return nil, errors.New("hlcp transport: client server name is required")
+	}
+	certificate, err := tls.X509KeyPair(certificatePEM, keyPEM)
+	if err != nil {
+		return nil, errors.New("hlcp transport: invalid certificate snapshot")
+	}
+	rootCAs := x509.NewCertPool()
+	if !rootCAs.AppendCertsFromPEM(caPEM) {
+		return nil, ErrEmptyTrustBundle
+	}
+	return clientTLSConfig(certificate, rootCAs, serverName), nil
 }
 
 func loadCertificate(files TLSFiles) (tls.Certificate, error) {
