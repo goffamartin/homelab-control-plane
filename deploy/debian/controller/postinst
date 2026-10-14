@@ -12,7 +12,8 @@ case "$1" in
     if [ -d /run/systemd/system ]; then
       systemctl daemon-reload
     fi
-    echo "HLCP installed. Provision /etc/hlcp/controller, then explicitly enable/start or restart the service."
+    echo "HLCP installed. Use hlcp-controller setup --help to provision /etc/hlcp/controller, then explicitly activate the service."
+    echo "Public configuration examples are in /usr/share/hlcp-controller; existing configuration is not modified."
     echo "No credentials were generated and no service was started or restarted."
     ;;
 esac

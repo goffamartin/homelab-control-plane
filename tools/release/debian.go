@@ -126,7 +126,7 @@ func packageControllerDeb(out, version, revision, arch string) (artifact, error)
 	}
 	var data []debEntry
 	for _, dir := range []string{"etc/", "etc/hlcp/", "usr/", "usr/bin/", "usr/lib/", "usr/lib/systemd/",
-		"usr/lib/systemd/system/", "usr/share/", "usr/share/doc/", "usr/share/doc/hlcp-controller/"} {
+		"usr/lib/systemd/system/", "usr/share/", "usr/share/hlcp-controller/", "usr/share/doc/", "usr/share/doc/hlcp-controller/"} {
 		data = append(data, debEntry{dir, 0755, nil})
 	}
 	data = append(data, debEntry{"etc/hlcp/controller/", 0700, nil})
@@ -143,16 +143,17 @@ func packageControllerDeb(out, version, revision, arch string) (artifact, error)
 	}
 	unit = bytes.ReplaceAll(unit, []byte("/usr/local/bin/hlcp-controller"), []byte("/usr/bin/hlcp-controller"))
 	data = append(data, debEntry{"usr/lib/systemd/system/hlcp-controller.service", 0644, unit})
-	// Configuration is packaged as conffiles; production credentials never are.
-	data = append(data, debEntry{"etc/hlcp/controller/controller.env", 0600, []byte("HLCP_AGENT_LISTEN=127.0.0.1:9443\n")},
-		debEntry{"etc/hlcp/controller/nodes.json", 0600, []byte("[]\n")})
+	// Package examples, not live configuration: a confirmed setup owns /etc.
+	// Shipping defaults there conflicts with the wizard's no-overwrite contract.
+	data = append(data, debEntry{"usr/share/hlcp-controller/controller.env", 0644, []byte("HLCP_AGENT_LISTEN=127.0.0.1:9443\n")},
+		debEntry{"usr/share/hlcp-controller/nodes.json", 0644, []byte("[]\n")})
 	policy, err := debSource("deploy/config/api-policy.json", true)
 	if err != nil {
 		return artifact{}, err
 	}
-	data = append(data, debEntry{"etc/hlcp/controller/api-policy.json", 0600, policy})
+	data = append(data, debEntry{"usr/share/hlcp-controller/api-policy.json", 0644, policy})
 	for _, name := range []string{"07-build-and-release.md", "09-telemetry-and-audit.md", "10-scoped-api-credentials.md",
-		"11-bounded-diagnostics-api.md", "12-debian-management-deployment.md", "13-debian-controller-package.md", "14-cli-setup-and-agent-installation.md", "17-generic-agent-profiles.md", "15-onboarding-and-agent-profile-design-notes.md", "16-plug-and-play-implementation-plan.md", "18-script-resource-contract.md"} {
+		"11-bounded-diagnostics-api.md", "12-debian-management-deployment.md", "13-debian-controller-package.md", "14-cli-setup-and-agent-installation.md", "17-generic-agent-profiles.md", "15-onboarding-and-agent-profile-design-notes.md", "16-plug-and-play-implementation-plan.md", "18-script-resource-contract.md", "37-controller-package-setup.md"} {
 		contents, err := debSource(filepath.Join("docs", name), true)
 		if err != nil {
 			return artifact{}, err
@@ -164,8 +165,7 @@ func packageControllerDeb(out, version, revision, arch string) (artifact, error)
 		installedSize += (len(entry.data) + 1023) / 1024
 	}
 	controlText := fmt.Sprintf("Package: hlcp-controller\nVersion: %s\nArchitecture: %s\nMaintainer: Martin Goffa <goffamartin@gmail.com>\nSection: admin\nPriority: optional\nInstalled-Size: %d\nDepends: adduser, systemd (>= 252)\nHomepage: https://github.com/goffamartin/homelab-control-plane\nDescription: HomeLab controller and local CLI\n Native mTLS control plane. Credentials must be provisioned before startup.\n", packageVersion, arch, installedSize)
-	control := []debEntry{{"control", 0644, []byte(controlText)},
-		{"conffiles", 0644, []byte("/etc/hlcp/controller/controller.env\n/etc/hlcp/controller/nodes.json\n/etc/hlcp/controller/api-policy.json\n")}}
+	control := []debEntry{{"control", 0644, []byte(controlText)}}
 	for _, name := range []string{"preinst", "postinst", "prerm", "postrm"} {
 		script, err := debSource(filepath.Join("deploy/debian/controller", name), true)
 		if err != nil {

@@ -11,17 +11,22 @@ extend this workflow. MCP and web packages are not implemented yet.
 
 - /usr/bin/hlcp-controller and /usr/bin/hlcp (local CLI).
 - /usr/lib/systemd/system/hlcp-controller.service, with /usr/bin executable paths.
-- Private /etc/hlcp/controller directory (0700) and three dpkg conffiles:
-  controller.env, nodes.json and api-policy.json (0600).
-- Initial agent listener is loopback; initial node allowlist is [] (deny all).
-  Change both during provisioning, not by editing the packaged systemd unit.
+- Private /etc/hlcp/controller directory (0700), initially without live files.
+- Public examples in /usr/share/hlcp-controller: controller.env, nodes.json and
+  api-policy.json (0644). These are not active configuration or credentials.
+  The listener example is loopback and its node allowlist is [] (deny all).
+- Confirmed hlcp-controller setup provisions live configuration (0600) and
+  imported TLS; default preview does not write or generate tokens. See
+  [fresh package setup acceptance](37-controller-package-setup.md).
 - Installation creates a non-root hlcp-controller system account when absent.
   Existing accounts are not repurposed; inspect any existing account's rights.
 - No service auto-enable/start/restart, no CA/leaf keys or bearer tokens,
   no firewall changes, no downloads in maintainer scripts.
 - Removal stops the systemd service on a booted host. Removal/purge preserve
   runtime ledger, unmanaged credentials and the service account. Purge removes
-  dpkg-owned configuration files; back them up first. Neither operation is a
+  legacy dpkg-owned configuration files, including obsolete conffiles retained
+  from previous versions; back them up first. Fresh wizard-created configuration
+  is not dpkg-owned and is retained. Neither operation is a
   secure secret wipe or a safe substitute for credential revocation.
 
 Installation/update require operator authorization and root via sudo.
@@ -129,8 +134,11 @@ service on the VM. Keep the existing configuration, CA, leaf key and API tokens.
 
 Back up consistent state/configuration first; preserve original command IDs.
 Install a verified newer package with sudo apt install ./NEW_PACKAGE.deb.
-Modified dpkg conffiles are preserved subject to the usual conffile prompt:
-review differences, do not blindly choose maintainer versions or force overwrite.
+Current packages do not deliver live files into /etc/hlcp/controller and leave
+existing configuration unchanged. Legacy conffiles remain in dpkg's database as
+obsolete after upgrade: they survive upgrade but may be removed on purge.
+A rollback to an older package delivering conffiles can still prompt; review
+differences, do not blindly choose maintainer versions or force overwrite.
 The running service is not automatically restarted; after reviewing compatibility
 and provisioning, explicitly restart it in a maintenance window and verify
 /usr/bin/hlcp-controller --version and systemctl status.
@@ -154,7 +162,8 @@ remains separate from isolated package lifecycle tests.
 ## Verification evidence
 
 Portable Go tests cover ar member layout/padding, tar ownership/permissions,
-deterministic bytes, version mapping, conffiles, source allowlisting and output
+deterministic bytes, version mapping, an empty live configuration namespace,
+public examples, source allowlisting and output
 overwrite refusal. Native tests/vet and Linux race remain part of the release gate.
 The guarded deploy/debian/test-controller-package.sh runs only in an explicitly
 marked disposable Docker container, never on the management VM. It covers manual
