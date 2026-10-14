@@ -38,6 +38,7 @@ type Options struct {
 	Unit           string
 	SetupDirectory string
 	Probe          bool
+	User           string
 }
 
 type Check struct {

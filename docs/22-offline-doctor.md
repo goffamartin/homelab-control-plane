@@ -12,6 +12,7 @@ hlcp-agent doctor --config /home/martin/.config/hlcp/agent.yaml --host-checks --
 hlcp-agent doctor --config /home/martin/.config/hlcp/agent.yaml --host-checks --scope user --unit hlcp-agent-podman.service
 hlcp doctor --setup-dir /etc/hlcp/controller --json
 hlcp-agent doctor --config /home/martin/.config/hlcp/agent.yaml --probe --json
+sudo hlcp-agent doctor --user martin --scope user --config /home/martin/.config/hlcp/agent.yaml --host-checks --json
 ```
 
 Controller role standardně čte controller.crt/controller.key/ca.crt v
@@ -61,7 +62,7 @@ Help funguje bez konfigurace, API tokenu a běžící služby.
 ## Otevřené brány P04c/P05
 
 Tento blok není kompletní doctor ani hotové P04:
-explicitní jiný runtime účet při root inspekci zatím chybí. Script interpreter/cwd,
+Explicitní účet pod rootem je nyní dostupný přes --user (kontrakt níže). Script interpreter/cwd,
 transaction inspect a opt-in TLS probe jsou níže;
 nejde o potvrzení skutečného script/runtime chování.
 Remote peer chain verification není nahrazena kontrolou lokálního CA bundle;
@@ -86,11 +87,11 @@ vstupy prošly bez načtení tokenu/konfigurace; git diff --check čistý.
 Standardní invocation zůstává čistě souborová. --host-checks výslovně povolí
 kernel clock query a pevně vymezené lokální systemd property dotazy.
 --scope system je default; controller podporuje pouze system scope.
---scope user spouštějte přímo jako runtime uživatel, nikdy přes sudo.
+--scope user bez --user spouštějte přímo jako runtime uživatel, nikoli přes sudo.
 Effective UID a primární GID se ověří přes OS account lookup; HOME/SUDO_USER
 nejsou zdrojem identity. NSS lookup respektuje OS konfiguraci (např. vzdálený
 directory provider); offline zde znamená bez remote HLCP probe, ne potlačení NSS.
-Jiný účet pomocí root impersonation tento blok nepodporuje.
+Samotný --scope user účet nepřepíná; root vyžaduje explicitní --user (viz níže).
 
 Clock query používá Linux adjtimex s Modes=0, bez změny času a bez aktivace
 timedated. Kontroluje kernel STA_UNSYNC; nejde o potvrzení dostupnosti NTP serveru.
@@ -159,7 +160,7 @@ Native filesystem readiness je Linux-only; jiný OS nepotvrdí úspěch.
 není to journal/ledger cesta a není to oprávnění k recovery. Existující adresář
 musí splnit stejný kontrakt setup.OpenPlanner: mode 0700, effective UID a jeho
 registrovaný primary GID, bezpečné ancestors, Linux descriptor-relative reads.
-Root zatím neinspektuje user-owned setup pod odhadnutým jiným účtem.
+Root neodhadne jiný účet; pro user-owned setup vyberte explicitně --user.
 
 Příkaz volá výhradně Planner.Inspect: žádný Build/Apply/Recover/DiscardBackup,
 flock, vytvoření adresáře, přepis souborů ani cleanup. None je ok, committed backup
@@ -223,3 +224,51 @@ prošly; finální controller integration/snapshot test prošel na Windows a Lin
 race/vet. ARM64 doctor binary compile-only prošel, nikoli live ARM. Skutečný
 agent doctor --help funguje bez konfigurace a bez sondy. git diff --check čistý.
 Repo preview.4 se nemění; uživatelské VM ani jejich certifikáty se neměnily.
+
+## Explicitní --user při root inspekci
+
+Pouze agent role + --scope user. --user je účet z OS account databáze,
+nikoli cesta, script, UID odhadnuté z prostředí nebo oprávnění ke změně účtu.
+Root target, neznámý/nekonzistentní účet a výběr jiného UID neprivilegovaným
+callerem jsou odmítnuty. Původní default agent config zůstává /etc/hlcp/agent.yaml:
+user config cestu zadejte výslovně přes --config; HOME discovery se nepřidává.
+
+Root validuje UID, primary GID, reverse UID lookup a nejvýše 128 supplementary
+group IDs. Poté spustí vlastní root-owned instalovanou binárku s Credential
+UID/GID/groups vybraného účtu; rodič předtím nečte agent YAML, TLS, scripts
+ani setup directory. Žádné globální setuid změny procesu nebo simulace permissions
+pod rootem. Native path/owner/mode kontroly tak používají skutečné child credentials.
+Registrovaná členství skupin mohou sama mít privilegované dopady (např. Docker);
+doctor je nepřidává ani nepřejímá rootovy skupiny.
+
+Stejný již neprivilegovaný UID může --user použít bez re-exec; zachovává svá
+aktuální skutečná process credentials. Pro user-scope root bez --user platí
+původní fail, ne implicitní root-to-user inference.
+
+Pro root re-exec musí vlastní executable i jeho resolved ancestors splnit
+root-owned/non-writable/no-special-bits kontrolu. Zdrojové go run/test binárky
+v /tmp nebo user-writable checkout nejsou trusted installed path a odmítnou se.
+Předává se jen sestavený allow-list doctor options, vždy --json, nikdy --user
+(žádná rekurze), shell nebo obecná command line. Child environment obsahuje jen
+pevný PATH=/usr/bin:/bin a C locale, bez HOME/SUDO_USER/LD_PRELOAD/API credentials.
+User bus adresu případně sestaví až child z vlastního ověřeného UID.
+Proto nejde ani o přesnou simulaci libovolného interaktivního PATH/environment.
+
+Child má 20s total deadline, samostatnou process group pro timeout kill a 250ms
+wait-delay; stdout je omezen na 256KiB, stderr na 4KiB a nikdy se nepřeposílá.
+Rodič ověří JSON report shape/read_only/check states a soulad exit 0/1 s fail
+stavem; timeout/start/output/lookup problém znamená sanitizovaný diagnostic fail.
+OS NSS lookup před spuštěním child respektuje vlastní provider a může čekat
+podle jeho policy; neslibujeme 20s limit celé NSS resolution fáze. Reader/mount,
+ACL a same-UID/root attacker omezení ostatních doctor kontrol platí dál.
+Jde o snížení credentials, nikoli nový sandbox proti nepřátelskému local account.
+
+Evidence 2026-10-14: Windows full test/vet a Linux full race/test/vet prošly.
+Root-only Linux test přes id/env potvrzuje UID/GID, úplné nahrazení groups a
+odstranění zděděného prostředí. Další explicitní container gate přeloží vlastní
+CLI do /usr/local/bin a ověří celý root-to-user re-exec: private root config
+selže, následná config vlastněná nobody projde čtením, setup inspection zůstane
+read-only a snapshot bytes/modes/mtimes/struktury se nemění.
+Bez HLCP_DOCTOR_TEST_BINARY tento installed-binary test záměrně skipuje;
+uvedená samostatná Linux gate jej skutečně spustila. Arm64 compile-only prošel,
+nikoli živá ARM/user-systemd VM akceptace. Preview.4 se nemění.
