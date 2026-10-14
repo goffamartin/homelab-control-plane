@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -58,5 +59,19 @@ resources:
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Fatalf("check-config touched %s: %v", path, err)
 		}
+	}
+}
+
+func TestInternalSandboxInspectorDoesNotLoadAgent(t *testing.T) {
+	if os.Getenv("HLCP_INSPECTOR_MAIN_HELPER") == "1" {
+		os.Args = []string{"hlcp-agent", "--internal-sandbox-inspector", "--config", "SECRET"}
+		main()
+		return
+	}
+	command := exec.Command(os.Args[0], "-test.run=^TestInternalSandboxInspectorDoesNotLoadAgent$")
+	command.Env = append(os.Environ(), "HLCP_INSPECTOR_MAIN_HELPER=1")
+	output, err := command.CombinedOutput()
+	if err == nil || !strings.Contains(string(output), "INVALID_OPTIONS") || strings.Contains(string(output), "SECRET") || strings.Contains(string(output), "agent.yaml") {
+		t.Fatalf("wrong inspector entrypoint: %v %s", err, output)
 	}
 }
