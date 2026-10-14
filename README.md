@@ -36,6 +36,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Imported controller setup CLI and deferred credentials (P05e)](docs/27-imported-controller-setup-cli.md)
 - [Controller service activation core and partial outcomes (P05f)](docs/28-controller-activation-core.md)
 - [Native Debian controller activation CLI (P05g)](docs/29-controller-activation-cli.md)
+- [Private non-root client profile provisioning core (P05h)](docs/30-client-provisioning-core.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status

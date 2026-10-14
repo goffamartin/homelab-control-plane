@@ -14,11 +14,7 @@ import (
 	"strings"
 )
 
-type clientConfig struct {
-	Version   int    `json:"version"`
-	API       string `json:"api"`
-	TokenFile string `json:"api_token_file"`
-}
+type clientConfig = cli.ClientConfig
 
 func clientConfigPath() (string, error) {
 	dir, err := os.UserConfigDir()
@@ -40,41 +36,13 @@ func loadClientConfig(path string) (clientConfig, error) {
 	if err != nil || !info.Mode().IsRegular() || info.Size() > 8192 || (runtime.GOOS != "windows" && info.Mode().Perm()&0077 != 0) {
 		return config, invalid
 	}
-	decoder := json.NewDecoder(io.LimitReader(file, 8193))
-	start, err := decoder.Token()
-	if err != nil || start != json.Delim('{') {
+	data, err := io.ReadAll(io.LimitReader(file, 8193))
+	if err != nil {
 		return config, invalid
 	}
-	seen := map[string]bool{}
-	for decoder.More() {
-		key, err := decoder.Token()
-		name, ok := key.(string)
-		if err != nil || !ok || seen[name] {
-			return config, invalid
-		}
-		seen[name] = true
-		switch name {
-		case "version":
-			err = decoder.Decode(&config.Version)
-		case "api":
-			err = decoder.Decode(&config.API)
-		case "api_token_file":
-			err = decoder.Decode(&config.TokenFile)
-		default:
-			return config, invalid
-		}
-		if err != nil {
-			return config, invalid
-		}
-	}
-	if end, err := decoder.Token(); err != nil || end != json.Delim('}') {
-		return config, invalid
-	}
-	if decoder.Decode(new(any)) != io.EOF || config.Version != 1 || config.TokenFile == "" || localapi.ValidateURL(config.API) != nil {
-		return config, invalid
-	}
-	if !filepath.IsAbs(config.TokenFile) {
-		config.TokenFile = filepath.Join(filepath.Dir(path), config.TokenFile)
+	config, err = cli.ParseClientConfig(data, path)
+	if err != nil {
+		return clientConfig{}, invalid
 	}
 	return config, nil
 }
@@ -190,7 +158,7 @@ func configure(args []string, input io.Reader, output io.Writer) error {
 		}
 		*tokenFile = createdToken
 	}
-	data, _ := json.MarshalIndent(clientConfig{1, *api, *tokenFile}, "", "  ")
+	data, _ := json.MarshalIndent(clientConfig{Version: 1, API: *api, TokenFile: *tokenFile}, "", "  ")
 	file, err := os.OpenFile(configPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 	if err != nil {
 		if createdToken != "" {
