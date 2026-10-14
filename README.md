@@ -40,6 +40,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Confirmed controller-to-user CLI access handoff (P05i)](docs/31-client-access-handoff.md)
 - [Fresh-user .config/hlcp bootstrap (P05j)](docs/32-client-config-parent-bootstrap.md)
 - [Agent service activation core and system credential paths (P05k)](docs/33-agent-service-activation-core.md)
+- [Native agent activation CLI for initial imported setup (P05l)](docs/34-native-agent-activation-cli.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status

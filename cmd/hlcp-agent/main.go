@@ -16,6 +16,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "activate" {
+		os.Exit(onboarding.AgentActivationCLI(os.Args[2:], os.Stdout))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "setup" {
 		os.Exit(onboarding.AgentCLI(os.Args[2:], os.Stdin, os.Stdout))
 	}

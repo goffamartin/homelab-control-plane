@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	ErrAgentActivationProfile = errors.New("agent activation profile is invalid")
-	ErrAgentActivationPeer    = errors.New("other agent service must be inactive and disabled")
-	ErrAgentActivationLinger  = errors.New("persistent user agent activation requires explicit linger provisioning")
+	ErrAgentActivationProfile   = errors.New("agent activation profile is invalid")
+	ErrAgentActivationPeer      = errors.New("other agent service must be inactive and disabled")
+	ErrAgentActivationLinger    = errors.New("persistent user agent activation requires explicit linger provisioning")
+	ErrAgentActivationResources = errors.New("configured resources require runtime-specific activation preflight")
 )
 
 type AgentServiceProfile struct{ Scope, Unit string }
@@ -83,6 +84,9 @@ func (a agentActivationAdapter) Inspect(ctx context.Context) (ControllerActivati
 		return ControllerActivationSnapshot{}, ErrAgentActivationProfile
 	}
 	snapshot, err := a.host.InspectAgent(ctx, a.profile)
+	if errors.Is(err, ErrAgentActivationResources) {
+		return ControllerActivationSnapshot{}, err
+	}
 	if err != nil || snapshot.CallerUID != uid || snapshot.CallerGID != gid || !validActivationSnapshot(snapshot.Service) {
 		return ControllerActivationSnapshot{}, ErrAgentActivationProfile
 	}

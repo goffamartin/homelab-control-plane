@@ -415,6 +415,17 @@ Windows full test/vet, Linux full race/test/vet a ARM64 compile-only prošly;
 native agent activation CLI, service/account/state readiness a booted Debian
 package/VM/release acceptance zůstávají otevřené. Preview.4 se nemění.
 
+P05l native agent activation CLI: `hlcp-agent activate` má default user preview,
+system scope root, fixed generic/compatibility profily, explicitní enable/apply,
+local user manager/bus/linger/peer a imported config/TLS/journal-metadata preflight.
+Žádný restart, account/permission repair, journal read/reset či implicitní linger.
+První bridge podporuje empty resources/capabilities; configured resources vrací
+RESOURCE_PREFLIGHT_REQUIRED bez aktivace, runtime-specific readiness navazuje.
+[CLI kontrakt a acceptance hranice](34-native-agent-activation-cli.md).
+Windows full test/vet, Linux full race/test/vet a ARM64 compile-only prošly.
+Live systemd/user bus/reboot, resource readiness a fresh package/VM/release gate
+zůstávají otevřené; P05/checkpoint B ani preview.4 se tímto neuzavírají.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.

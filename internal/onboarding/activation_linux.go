@@ -207,8 +207,14 @@ func activationConfig(ctx context.Context, directory, name string, now time.Time
 }
 
 func activationAccount() (string, error) {
-	account, err := user.Lookup("hlcp-controller")
-	if err != nil {
+	return serviceActivationAccount("hlcp-controller")
+}
+func serviceActivationAccount(name string) (string, error) {
+	if name != "hlcp-controller" && name != "hlcp" {
+		return "", ErrActivationInvalid
+	}
+	account, err := user.Lookup(name)
+	if err != nil || account.Username != name {
 		return "", ErrActivationInvalid
 	}
 	uid, e1 := strconv.ParseUint(account.Uid, 10, 32)
@@ -221,7 +227,7 @@ func activationAccount() (string, error) {
 		return "", ErrActivationInvalid
 	}
 	group, err := user.LookupGroupId(account.Gid)
-	if err != nil || group.Name != "hlcp-controller" {
+	if err != nil || group.Name != name {
 		return "", ErrActivationInvalid
 	}
 	groups, err := account.GroupIds()
@@ -235,7 +241,7 @@ func activationAccount() (string, error) {
 	found := ""
 	for _, line := range strings.Split(string(passwd.Data), "\n") {
 		fields := strings.Split(line, ":")
-		if len(fields) > 0 && fields[0] == "hlcp-controller" {
+		if len(fields) > 0 && fields[0] == name {
 			if found != "" || len(fields) != 7 || fields[2] != account.Uid || fields[3] != account.Gid || fields[5] != "/nonexistent" || (fields[6] != "/usr/sbin/nologin" && fields[6] != "/bin/false") {
 				return "", ErrActivationInvalid
 			}
