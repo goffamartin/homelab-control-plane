@@ -1,0 +1,129 @@
+package onboarding
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"go.yaml.in/yaml/v4"
+	"hlcp/internal/agent"
+	"hlcp/internal/setup"
+	"net"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"time"
+)
+
+var ErrAgentOptions = errors.New("onboarding: agent setup options are invalid")
+
+type AgentOptions struct{ NodeID, ControllerAddress, ServerName, JournalFile, AgentVersion string }
+
+// AgentSetup contains a private transaction plan. It cannot start services or
+// admit a node, and never writes a journal or enables resources.
+type AgentSetup struct {
+	planner *setup.Planner
+	plan    *setup.Plan
+}
+
+func (s *AgentSetup) Preview() setup.Preview {
+	if s == nil {
+		return setup.Preview{ReadOnly: true}
+	}
+	return s.plan.Preview()
+}
+func (s AgentSetup) MarshalJSON() ([]byte, error) { return json.Marshal(s.Preview()) }
+func (s AgentSetup) String() string               { data, _ := s.MarshalJSON(); return string(data) }
+func (s AgentSetup) GoString() string             { return s.String() }
+func (s *AgentSetup) Close() error {
+	if s == nil || s.planner == nil {
+		return nil
+	}
+	return s.planner.Close()
+}
+func (s *AgentSetup) Apply(ctx context.Context, confirmed bool) (setup.ApplyResult, error) {
+	if s == nil || s.planner == nil || s.plan == nil {
+		return setup.ApplyResult{}, ErrAgentOptions
+	}
+	return s.planner.Apply(ctx, s.plan, confirmed)
+}
+
+// PlanAgent binds generated TLS paths to the exact target planner directory.
+// The directory must already exist with the setup engine's private owner/mode.
+// Existing different config is a conflict: this fresh-install core has no force.
+func PlanAgent(ctx context.Context, directory string, owner setup.Owner, options AgentOptions, material ImportedTLS, now time.Time) (*AgentSetup, error) {
+	if !filepath.IsAbs(directory) || filepath.Clean(directory) != directory || directory == "/" ||
+		len(directory) > 4096 || strings.ContainsRune(directory, 0) || !filepath.IsAbs(options.JournalFile) ||
+		filepath.Clean(options.JournalFile) != options.JournalFile || options.JournalFile == "/" ||
+		len(options.JournalFile) > 4096 || strings.ContainsRune(options.JournalFile, 0) {
+		return nil, ErrAgentOptions
+	}
+	relative, err := filepath.Rel(directory, options.JournalFile)
+	if err != nil || relative == "." || !strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+		return nil, ErrAgentOptions
+	}
+	host, port, err := net.SplitHostPort(options.ControllerAddress)
+	number, portErr := strconv.Atoi(port)
+	if err != nil || !validHost(host) || !validHost(options.ServerName) || portErr != nil || number < 1 || number > 65535 {
+		return nil, ErrAgentOptions
+	}
+	identity := Identity{Role: "agent", NodeID: options.NodeID}
+	if _, err := material.Validate(identity, now); err != nil {
+		return nil, err
+	}
+	config := agent.Config{ControllerAddress: options.ControllerAddress, ServerName: options.ServerName, NodeID: options.NodeID,
+		CertificateFile: filepath.Join(directory, "agent.crt"), PrivateKeyFile: filepath.Join(directory, "agent.key"),
+		CAFile: filepath.Join(directory, "ca.crt"), JournalFile: options.JournalFile, AgentVersion: options.AgentVersion,
+		Capabilities: []string{}, Resources: []agent.ResourceConfig{}}
+	if config.Validate() != nil {
+		return nil, ErrAgentOptions
+	}
+	data, err := yaml.Marshal(config)
+	if err != nil {
+		return nil, ErrAgentOptions
+	}
+	validateCert := func(data []byte) error {
+		certs, err := parseCertificates(data)
+		if err != nil {
+			return err
+		}
+		return validateLeaf(certs[0], identity, now)
+	}
+	validateCA := func(data []byte) error { _, err := validCA(data, now); return err }
+	intents := []setup.Intent{
+		{Name: "agent.yaml", Data: data, Mode: 0600, Validate: func(data []byte) error { _, err := agent.Parse(data); return err }},
+		{Name: "agent.crt", Data: material.certificate, Mode: 0600, Validate: validateCert},
+		{Name: "agent.key", Data: material.key, Mode: 0600, Validate: validatePrivateKey},
+		{Name: "ca.crt", Data: material.peerTrust, Mode: 0600, Validate: validateCA},
+		{Name: "issuer-ca.crt", Data: material.issuerTrust, Mode: 0600, Validate: validateCA},
+	}
+	planner, err := setup.OpenPlanner(directory, owner)
+	if err != nil {
+		return nil, err
+	}
+	plan, err := planner.Build(ctx, intents)
+	if err != nil {
+		planner.Close()
+		return nil, err
+	}
+	return &AgentSetup{planner: planner, plan: plan}, nil
+}
+
+func validHost(value string) bool {
+	if net.ParseIP(value) != nil {
+		return true
+	}
+	if len(value) == 0 || len(value) > 253 {
+		return false
+	}
+	for _, label := range strings.Split(strings.TrimSuffix(value, "."), ".") {
+		if len(label) == 0 || len(label) > 63 || label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, ch := range label {
+			if !((ch >= 'a' && ch <= 'z') || (ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9') || ch == '-') {
+				return false
+			}
+		}
+	}
+	return true
+}
