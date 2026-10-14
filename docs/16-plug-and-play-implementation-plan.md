@@ -477,6 +477,15 @@ response decoder nechává lifecycle flags false. Native launcher/explicit probe
 fresh activation evidence a VM sandbox akceptace ještě navazují. Gate/checkpoint B
 otevřené, preview.4 a VM beze změny.
 
+P05s native launcher/transport komponenta: fixed systemd-run inspector, withheld
+stdin do actual unit sandbox validation, bounded pipe/wait/exit/response a následné
+read-only ověření collection. Service start/runtime/stop limity, bez restart/grants
+nebo stop/reset cizích jednotek. [Kontrakt a evidence](41-native-sandbox-launcher.md).
+Pipe subprocess/fake transport a Debian 13 unit syntax prošly lokálně; skutečné
+booted systemd/VM spuštění není otestované. Native source snapshot host/confirmed
+probe CLI a čerstvá activation evidence ještě navazují; gate/checkpoint B otevřené,
+preview.4 a VM beze změny.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
