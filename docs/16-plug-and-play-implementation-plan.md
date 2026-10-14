@@ -495,6 +495,15 @@ Lokální CLI/core a Linux refusal testy nejsou booted systemd akceptace.
 Čerstvá activation evidence a booted Debian/reboot acceptance stále navazují;
 P05/checkpoint B otevřené, preview.4 a VM beze změny.
 
+P05u process-local jednorázový readiness handoff: jen úspěšný probe, maximální
+stáří 2 minuty, read-only plán a explicitní nový sandbox probe při Apply.
+Source/identity i dependency digest musí být shodné; nejistý průběh spotřebuje
+handoff bez retry, kopie/souběžné plány nemohou revalidation opakovat.
+[Kontrakt](43-sandbox-readiness-revalidation.md). Evidence se nepersistuje a není
+activation grant. Native start adapter/CLI orchestrace, TOCTOU hranice a booted VM
+acceptance navazují; system resource gate/P05/checkpoint B stále otevřené.
+Preview.4 ani VM se nemění.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.

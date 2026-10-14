@@ -84,6 +84,9 @@ type sandboxProbeState struct {
 	inputs          SandboxProbeInputs
 	used            bool
 	dependencyProof [32]byte
+	completedAt     time.Time
+	handoffUsed     bool
+	clock           func() time.Time
 }
 
 // Planning only reads host evidence. Probe success does not open the system
@@ -109,7 +112,7 @@ func PlanSandboxProbe(ctx context.Context, host SandboxProbeHost, config agent.C
 	if err != nil || inspectCtx.Err() != nil || !validSandboxProbeSnapshot(snapshot) || snapshot.ConfigProof != inputs.configProof {
 		return nil, ErrSandboxProbeInvalid
 	}
-	return &SandboxProbe{&sandboxProbeState{host: host, snapshot: snapshot, inputs: inputs}}, nil
+	return &SandboxProbe{&sandboxProbeState{host: host, snapshot: snapshot, inputs: inputs, clock: time.Now}}, nil
 }
 func validSandboxProbeSnapshot(s SandboxProbeSnapshot) bool {
 	return s.SourceProof != [32]byte{} && s.ConfigProof != [32]byte{} && s.UID != 0 && s.GID != 0 && s.AgentInactive && s.ProbeAbsent
@@ -224,6 +227,7 @@ func (p *SandboxProbe) Apply(ctx context.Context, confirmed bool) (SandboxProbeR
 		return result, ErrSandboxProbeIncomplete
 	}
 	p.dependencyProof = evidence.DependencyProof
+	p.completedAt = p.clock()
 	result.Completed = true
 	return result, nil
 }
