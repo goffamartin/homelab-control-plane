@@ -45,6 +45,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Native Linux user resource metadata preflight (P05n)](docs/36-native-resource-readiness.md)
 - [Fresh Debian controller package and imported setup acceptance (P05o)](docs/37-controller-package-setup.md)
 - [System resource sandbox constraints and controlled refusal (P05p)](docs/38-system-resource-sandbox-constraints.md)
+- [Explicit-consent system sandbox probe lifecycle core (P05q)](docs/39-system-sandbox-probe-core.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status

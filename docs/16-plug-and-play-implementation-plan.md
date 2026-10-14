@@ -459,6 +459,15 @@ a neuvolňuje activation gate. [Kontrakt](38-system-resource-sandbox-constraints
 Skutečný sandbox probe potřebuje explicitní návrh/souhlas, pokud vytváří transient
 unit či namespace; nelze ho schovat do read-only preview. VM/checkpoint B otevřené.
 
+P05q sandbox probe lifecycle core: oddělený read-only plán a confirmed single-use
+Apply; script-only metadata inputs bez argv/env/PEM/journal, root/service identity,
+inactive/absent unit gates, config/source/request bindings, bounded host context,
+exit+cleanup evidence a post-check. Dispatch failure/cancel/cleanup mismatch je
+uncertain bez auto retry/rollback. [Kontrakt](39-system-sandbox-probe-core.md).
+Native fixed inspector/launcher/CLI a čerstvost activation evidence ještě nejsou
+napojené. System resource gate, booted VM/reboot a P05/checkpoint B otevřené;
+preview.4 se nemění.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
