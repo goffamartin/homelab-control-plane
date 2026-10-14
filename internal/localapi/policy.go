@@ -40,6 +40,22 @@ type principal struct {
 
 // Policy is an immutable, fully validated snapshot. It never stores bearer text.
 type Policy struct{ principals []principal }
+
+// RoleForToken inspects this validated immutable snapshot without granting new
+// permissions or retaining plaintext. Used before explicitly exporting access.
+func (p *Policy) RoleForToken(token string) (string, error) {
+	if p == nil || !validToken(token) {
+		return "", ErrForbidden
+	}
+	digest := sha256.Sum256([]byte(token))
+	for _, principal := range p.principals {
+		if subtle.ConstantTimeCompare(principal.digest[:], digest[:]) == 1 {
+			return principal.role, nil
+		}
+	}
+	return "", ErrForbidden
+}
+
 type Authorizer struct {
 	mutex  sync.RWMutex
 	policy *Policy

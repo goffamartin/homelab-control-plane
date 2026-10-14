@@ -382,6 +382,18 @@ Windows full test/vet, Linux full race/test/vet, native nerootový account/conta
 test a ARM64 compile-only prošly. Root-to-user source/transfer/CLI orchestrace,
 agent service a VM/release acceptance zůstávají otevřené; preview.4 se nemění.
 
+P05i potvrzený user access handoff: `hlcp-controller configure-client --user`
+má default preview bez bearer exportu a samostatné `--apply --yes`. Root validuje
+fixed policy/token source a skutečnou role, child běží s nahrazeným UID/GID/groups,
+plán zůstává pinned a token přichází jen private pipe po source/account/binary
+recheck. Repeat zachová přístup, conflict odmítne rotaci; neznámý post-export
+výsledek nepředstírá non-execution ani automatický retry.
+[Příkaz a přesné hranice](31-client-access-handoff.md).
+Windows full test/vet, Linux full race/test/vet, skutečný installed parent/child
+container workflow a ARM64 compile-only prošly. Chybějící `.config` bootstrap,
+legacy profile migration, agent service a booted VM/release acceptance zůstávají
+otevřené; checkpoint B ani preview.4 se nemění.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.

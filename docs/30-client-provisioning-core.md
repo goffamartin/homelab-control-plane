@@ -3,6 +3,8 @@
 Interní zdrojové jádro od 2026-10-14. Zatím nejde o nový uživatelský příkaz ani
 automatický root-to-user přenos tokenu. Tyto části navazují samostatně; preview.4
 a běžící homelab se nemění, P05/checkpoint B zůstává otevřený.
+Navazující [P05i](31-client-access-handoff.md) přidává potvrzený native transfer
+a příkaz configure-client; tento dokument popisuje samostatné provisioning jádro.
 
 ## Sdílený runtime kontrakt
 
