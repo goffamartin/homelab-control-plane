@@ -117,11 +117,16 @@ func trustedProbeExecutable(path string) bool {
 type boundedProbeWriter struct {
 	data     []byte
 	overflow bool
+	limit    int
 }
 
 func (w *boundedProbeWriter) Write(p []byte) (int, error) {
 	count := len(p)
-	remaining := maximumProbeOutput - len(w.data)
+	limit := w.limit
+	if limit == 0 {
+		limit = maximumProbeOutput
+	}
+	remaining := limit - len(w.data)
 	if len(p) > remaining {
 		w.overflow = true
 		p = p[:remaining]

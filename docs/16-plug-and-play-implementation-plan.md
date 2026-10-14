@@ -280,6 +280,16 @@ sdílenou runtime TLS politiku (TLS1.3, CA/name/explicit EKU/hlcp ALPN), bounded
 neověřeného client admission/allowlist; síťové audit logs jsou možný side effect.
 Zbývá explicit root-to-user inspekce; P04/P05 ani nový release nejsou uzavřené.
 
+P04c account blok: výslovný agent --user + --scope user validuje OS účet a
+root provede read-only diagnostiku vlastní trusted installed binárkou s
+nahrazenými UID/GID/supplementary groups. Parent nečte user config/secrets/state;
+žádný HOME/SUDO_USER odhad, account změna nebo obecné run-as command.
+Child timeout/output/env/report kontrakt je bounded/sanitizovaný; account NSS
+lookup má vlastní OS policy. Lokální credential a installed CLI container gate
+prošly včetně preservation evidence. P04c plánované diagnostické bloky jsou ve
+zdrojích; integrace P05 wizard, konkrétní user-systemd VM a release checkpoint B
+zůstávají otevřené. Není to nové preview nebo managed onboarding.
+
 ## P05 — Imported TLS setup jako první použitelný průvodce
 
 - Controller setup importuje server cert/key + agent trust bundle, ověří key match,
