@@ -319,6 +319,15 @@ sémantika zachovává existující manuální config a provozní historii.
 CLI/TTY průvodci, controller provisioning a service orchestrace zůstávají
 otevřené; P05 není uzavřené a preview.4 se nemění.
 
+P05b agent CLI: hlcp-agent setup má parametrický default preview, explicitní
+--apply --yes a skutečný TTY --interactive (metadata/path prompts, žádné secret
+contents). Obě cesty sdílejí bounded read, P05a validaci a P04b Apply; TLS se
+znovu ověří těsně před zápisem. Vyžaduje již existující private directory a
+aktuální ověřený účet, žádná service/resource/admission aktivace.
+[CLI kontrakt](24-imported-agent-setup-cli.md). Directory provisioning,
+controller wizard a explicitní service orchestrace zůstávají další bloky;
+P05/release checkpoint B nejsou uzavřené.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.

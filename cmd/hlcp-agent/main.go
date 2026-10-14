@@ -7,6 +7,7 @@ import (
 	"hlcp/internal/agent"
 	"hlcp/internal/buildinfo"
 	"hlcp/internal/doctor"
+	"hlcp/internal/onboarding"
 	"hlcp/internal/telemetry"
 	"os"
 	"os/signal"
@@ -15,6 +16,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "setup" {
+		os.Exit(onboarding.AgentCLI(os.Args[2:], os.Stdin, os.Stdout))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "doctor" {
 		os.Exit(doctor.CLI(os.Args[2:], "agent", os.Stdout))
 	}
