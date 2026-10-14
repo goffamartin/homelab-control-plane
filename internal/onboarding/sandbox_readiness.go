@@ -13,7 +13,8 @@ const sandboxReadinessMaximumAge = 2 * time.Minute
 // A process-local handoff, not a persistable receipt or an activation grant.
 // Only a completed probe can produce a plan; Apply must repeat the sandbox
 // inspection and match dependency evidence before a future start adapter may
-// consider it. No native activation or CLI path consumes this evidence yet.
+// consider it. Start couples revalidation and the fixed native start adapter;
+// no CLI path consumes this evidence yet.
 type SandboxReadiness struct{ *sandboxReadinessState }
 
 type sandboxReadinessState struct {
@@ -80,12 +81,16 @@ func (p SandboxReadiness) GoString() string             { return p.String() }
 // Apply only repeats the fixed metadata probe. It never starts/enables the
 // agent. A dispatched failure consumes the handoff and is uncertain; no retry.
 func (p *SandboxReadiness) Apply(ctx context.Context, confirmed bool) (SandboxProbeResult, error) {
-	r := SandboxProbeResult{}
 	if p == nil || p.sandboxReadinessState == nil || p.probe == nil {
-		return r, ErrSandboxProbeInvalid
+		return SandboxProbeResult{}, ErrSandboxProbeInvalid
 	}
 	p.mutex.Lock()
 	defer p.mutex.Unlock()
+	return p.applyLocked(ctx, confirmed)
+}
+
+func (p *SandboxReadiness) applyLocked(ctx context.Context, confirmed bool) (SandboxProbeResult, error) {
+	r := SandboxProbeResult{}
 	source := p.probe
 	source.mutex.Lock()
 	defer source.mutex.Unlock()

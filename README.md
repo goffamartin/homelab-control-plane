@@ -50,6 +50,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Bounded native sandbox launcher and verified cleanup contract (P05s)](docs/41-native-sandbox-launcher.md)
 - [Native source-bound resource probe CLI (P05t)](docs/42-native-resource-probe-cli.md)
 - [One-shot sandbox readiness revalidation core (P05u)](docs/43-sandbox-readiness-revalidation.md)
+- [Source-bound one-shot system agent start adapter (P05v)](docs/44-sandbox-verified-agent-start.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status
