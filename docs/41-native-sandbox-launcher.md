@@ -1,7 +1,7 @@
 # P05s — Bounded native sandbox launcher
 
-Stav: implementovaná launcher/transport komponenta, zatím **bez napojení na native
-source snapshot host a veřejný probe CLI**. Na VM ani v booted systemd nebyla
+Stav P05s: implementovaná launcher/transport komponenta. Native source host a
+veřejný probe CLI navazují v [P05t](42-native-resource-probe-cli.md). Na VM ani v booted systemd nebyla
 spuštěná. System resource activation gate a P05/checkpoint B zůstávají otevřené;
 preview.4 se nemění. Tento blok nedokazuje live sandbox ani cleanup akceptaci.
 

@@ -75,3 +75,17 @@ func TestInternalSandboxInspectorDoesNotLoadAgent(t *testing.T) {
 		t.Fatalf("wrong inspector entrypoint: %v %s", err, output)
 	}
 }
+
+func TestResourceProbeHelpDoesNotLoadAgent(t *testing.T) {
+	if os.Getenv("HLCP_PROBE_MAIN_HELPER") == "1" {
+		os.Args = []string{"hlcp-agent", "probe-resources", "--help"}
+		main()
+		return
+	}
+	command := exec.Command(os.Args[0], "-test.run=^TestResourceProbeHelpDoesNotLoadAgent$")
+	command.Env = append(os.Environ(), "HLCP_PROBE_MAIN_HELPER=1")
+	output, err := command.CombinedOutput()
+	if err != nil || !strings.Contains(string(output), "Usage: hlcp-agent probe-resources") || strings.Contains(string(output), "agent.yaml") {
+		t.Fatalf("wrong probe entrypoint: %v %s", err, output)
+	}
+}
