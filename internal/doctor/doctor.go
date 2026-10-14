@@ -1,6 +1,8 @@
-// Package doctor performs offline diagnostics. Its host interface deliberately
+// Package doctor performs diagnostics, offline unless a TLS probe is selected.
+// Its base host interface deliberately
 // offers no writes, arbitrary command execution, service control or network operations.
 // Optional SystemHost diagnostics expose only predefined local property queries.
+// Optional ProbeHost performs an explicitly selected TLS-only connection.
 package doctor
 
 import (
@@ -8,6 +10,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"hlcp/internal/agent"
+	"hlcp/internal/transport"
 	"net"
 	"sort"
 	"strconv"
@@ -34,6 +37,7 @@ type Options struct {
 	Scope          string
 	Unit           string
 	SetupDirectory string
+	Probe          bool
 }
 
 type Check struct {
@@ -76,6 +80,7 @@ func Run(host Host, options Options, now time.Time) Report {
 		checkTransaction(host, options.SetupDirectory, add)
 	}
 	nodeID := ""
+	endpoint := ""
 	podman := false
 	if options.Role == "agent" {
 		data, err := host.ReadFile(options.Config, true)
@@ -91,6 +96,7 @@ func Run(host Host, options Options, now time.Time) Report {
 		add("agent.config", "ok", "Agent configuration is valid.")
 		options.Certificate, options.Key, options.CA = config.CertificateFile, config.PrivateKeyFile, config.CAFile
 		options.ServerName, nodeID = config.ServerName, config.NodeID
+		endpoint = config.ControllerAddress
 		hostName, port, err := net.SplitHostPort(config.ControllerAddress)
 		portNumber, portErr := strconv.Atoi(port)
 		if err != nil || hostName == "" || portErr != nil || portNumber < 1 || portNumber > 65535 {
@@ -171,11 +177,12 @@ func Run(host Host, options Options, now time.Time) Report {
 				usage := x509.ExtKeyUsageServerAuth
 				if options.Role == "agent" {
 					usage = x509.ExtKeyUsageClientAuth
-					matching := len(leaf.URIs) == 1 && leaf.URIs[0].String() == "urn:hlcp:node:"+nodeID
+					certNodeID, identityErr := transport.AgentNodeID(leaf)
+					matching := identityErr == nil && certNodeID == nodeID
 					if matching {
 						add("tls.node_identity", "ok", "Certificate URI matches the configured node.")
 					} else {
-						add("tls.node_identity", "fail", "Certificate must contain exactly the configured node URI.")
+						add("tls.node_identity", "fail", "Certificate must contain one unambiguous matching HLCP node URI and explicit client-auth EKU.")
 					}
 				} else if options.ServerName != "" {
 					if leaf.VerifyHostname(options.ServerName) != nil {
@@ -188,17 +195,14 @@ func Run(host Host, options Options, now time.Time) Report {
 				}
 				validUsage := false
 				for _, eku := range leaf.ExtKeyUsage {
-					if eku == usage || eku == x509.ExtKeyUsageAny {
+					if eku == usage {
 						validUsage = true
 					}
-				}
-				if len(leaf.ExtKeyUsage) == 0 {
-					validUsage = true
 				}
 				if validUsage {
 					add("tls.usage", "ok", "Leaf permits the required TLS role.")
 				} else {
-					add("tls.usage", "fail", "Leaf does not permit the required TLS role.")
+					add("tls.usage", "fail", "Leaf must explicitly permit the required TLS role.")
 				}
 			}
 		}
@@ -214,11 +218,27 @@ func Run(host Host, options Options, now time.Time) Report {
 			}
 		}
 	}
-	add("tls.peer", "skip", "Peer handshake and remote chain trust were not tested.")
+	if options.Probe {
+		if options.Role != "agent" {
+			add("tls.peer", "fail", "TLS probe is available only for the agent role.")
+		} else if r.Failed() {
+			add("tls.peer", "skip", "TLS probe was not attempted because local diagnostics failed.")
+		} else {
+			probe, ok := host.(ProbeHost)
+			if !ok {
+				add("tls.peer", "fail", "TLS probe is unavailable on this host.")
+			} else {
+				r.Offline = false
+				checkPeer(probe, endpoint, options.ServerName, certData, keyData, caData, now, add)
+			}
+		}
+	} else {
+		add("tls.peer", "skip", "Peer handshake and remote chain trust were not tested.")
+	}
 	if !options.HostChecks {
 		add("host.integration", "skip", "Host checks were not selected; use --host-checks with an explicit service scope.")
 	}
-	add("runtime.access", "skip", "Runtime sockets, containers, script execution and remote connectivity were not tested.")
+	add("runtime.access", "skip", "Runtime sockets, containers, script execution and HLCP registration were not tested.")
 	return r
 }
 

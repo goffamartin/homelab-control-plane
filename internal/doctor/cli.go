@@ -29,10 +29,11 @@ func runCLI(args []string, defaultRole string, out io.Writer, host Host, now tim
 	flags.StringVar(&options.Scope, "scope", "system", "system or current non-root user service")
 	flags.StringVar(&options.Unit, "unit", "", "hlcp-agent.service or legacy hlcp-agent-podman.service")
 	flags.StringVar(&options.SetupDirectory, "setup-dir", "", "inspect an existing private setup directory without recovery")
+	flags.BoolVar(&options.Probe, "probe", false, "explicit agent TLS handshake only; no HLCP registration")
 	jsonOutput := flags.Bool("json", false, "JSON report")
 	if err := flags.Parse(args); err != nil {
 		if err == flag.ErrHelp {
-			_, err = fmt.Fprintln(out, "Usage: doctor [--role agent|controller] [--config /absolute/agent.yaml]\n  [--cert /absolute/cert] [--key /absolute/key] [--ca /absolute/ca]\n  [--server-name name] [--json] [--host-checks --scope system|user]\n  [--unit hlcp-agent.service|hlcp-agent-podman.service] [--setup-dir /private/directory]\nRead-only Linux diagnostics. No configuration, recovery, service activation, scripts or remote network operations.")
+			_, err = fmt.Fprintln(out, "Usage: doctor [--role agent|controller] [--config /absolute/agent.yaml]\n  [--cert /absolute/cert] [--key /absolute/key] [--ca /absolute/ca]\n  [--server-name name] [--json] [--host-checks --scope system|user]\n  [--unit hlcp-agent.service|hlcp-agent-podman.service] [--setup-dir /private/directory]\n  [--probe (agent role only: TLS handshake, 3s deadline, may create remote logs)]\nRead-only diagnostics. No configuration, recovery, service activation, scripts or HLCP registration.")
 			if err != nil {
 				return 2
 			}
@@ -44,6 +45,7 @@ func runCLI(args []string, defaultRole string, out io.Writer, host Host, now tim
 	if flags.NArg() != 0 || (options.Role != "agent" && options.Role != "controller") ||
 		(options.Scope != "system" && options.Scope != "user") ||
 		(options.Role == "controller" && (options.Scope != "system" || options.Unit != "")) ||
+		(options.Probe && options.Role != "agent") ||
 		(options.Unit != "" && options.Unit != "hlcp-agent.service" && options.Unit != "hlcp-agent-podman.service") {
 		fmt.Fprintln(out, "Invalid doctor options. Use doctor --help.")
 		return 2
@@ -54,7 +56,11 @@ func runCLI(args []string, defaultRole string, out io.Writer, host Host, now tim
 			return 2
 		}
 	} else {
-		if _, err := fmt.Fprintln(out, "HLCP doctor (read-only, offline; skips are not verified readiness)"); err != nil {
+		mode := "offline"
+		if !report.Offline {
+			mode = "explicit TLS probe attempted"
+		}
+		if _, err := fmt.Fprintf(out, "HLCP doctor (read-only, %s; skips are not verified readiness)\n", mode); err != nil {
 			return 2
 		}
 		for _, check := range report.Checks {
