@@ -49,6 +49,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Fixed sandbox metadata inspector and strict private IPC (P05r)](docs/40-fixed-sandbox-metadata-inspector.md)
 - [Bounded native sandbox launcher and verified cleanup contract (P05s)](docs/41-native-sandbox-launcher.md)
 - [Native source-bound resource probe CLI (P05t)](docs/42-native-resource-probe-cli.md)
+- [One-shot sandbox readiness revalidation core (P05u)](docs/43-sandbox-readiness-revalidation.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status
