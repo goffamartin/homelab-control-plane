@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type nativeSandboxProbeHost struct{}
@@ -22,6 +23,16 @@ func (nativeSandboxProbeHost) Caller(ctx context.Context) (uint32, uint32, error
 // No resource executable is inspected as root. Source config/TLS validation is
 // shared with activation, but script metadata is checked only in the sandbox.
 func (nativeSandboxProbeHost) source(ctx context.Context) (SandboxProbeSnapshot, agent.Config, error) {
+	snapshot, config, err := inspectNativeSandboxSource(ctx)
+	if err == nil && !snapshot.AgentInactive {
+		return SandboxProbeSnapshot{}, agent.Config{}, ErrSandboxProbeInvalid
+	}
+	return snapshot, config, err
+}
+
+// Post-start inspection may observe active; all probe callers still require
+// inactive through source(). Normalize only that expected lifecycle transition.
+func inspectNativeSandboxSource(ctx context.Context) (SandboxProbeSnapshot, agent.Config, error) {
 	fail := func() (SandboxProbeSnapshot, agent.Config, error) {
 		return SandboxProbeSnapshot{}, agent.Config{}, ErrSandboxProbeInvalid
 	}
@@ -43,9 +54,8 @@ func (nativeSandboxProbeHost) source(ctx context.Context) (SandboxProbeSnapshot,
 		}
 		return fail()
 	}
-	if source.Service.Active != "inactive" {
-		return fail()
-	}
+	inactive := source.Service.Active == "inactive"
+	source.Service.Active = "inactive"
 	account, err := serviceActivationAccount("hlcp")
 	if err != nil {
 		return fail()
@@ -77,7 +87,7 @@ func (nativeSandboxProbeHost) source(ctx context.Context) (SandboxProbeSnapshot,
 		return fail()
 	}
 	return SandboxProbeSnapshot{SourceProof: sha256.Sum256(evidence), ConfigProof: inputs.configProof,
-		UID: uint32(uid), GID: uint32(gid), AgentInactive: true, ProbeAbsent: true}, config, nil
+		UID: uint32(uid), GID: uint32(gid), AgentInactive: inactive, ProbeAbsent: true}, config, nil
 }
 
 func (h nativeSandboxProbeHost) Config(ctx context.Context) (agent.Config, error) {
@@ -98,4 +108,23 @@ func (h nativeSandboxProbeHost) RunProbe(ctx context.Context, snapshot SandboxPr
 		return SandboxProbeEvidence{}, ErrSandboxProbeInvalid
 	}
 	return launchSandboxInspector(ctx, nativeSandboxLaunchTransport{}, snapshot, inputs)
+}
+
+func (h nativeSandboxProbeHost) startVerifiedSandboxAgent(ctx context.Context, snapshot SandboxProbeSnapshot, proof [32]byte, expiresAt time.Time) error {
+	if proof == [32]byte{} || !validSandboxProbeSnapshot(snapshot) || expiresAt.IsZero() || !time.Now().Before(expiresAt) {
+		return ErrSandboxProbeInvalid
+	}
+	current, _, err := h.source(ctx)
+	if err != nil || current != snapshot || ctx.Err() != nil || expiresAt.IsZero() || !time.Now().Before(expiresAt) {
+		return ErrSandboxProbeStale
+	}
+	profile := AgentServiceProfile{Scope: "system", Unit: "hlcp-agent.service"}
+	if _, err = agentServiceProcess(ctx, profile, "start", profile.Unit, 20*time.Second); err != nil {
+		return ErrSandboxProbeIncomplete
+	}
+	after, _, err := inspectNativeSandboxSource(ctx)
+	if err != nil || ctx.Err() != nil || !sandboxStartedSourceMatches(snapshot, after) {
+		return ErrSandboxProbeIncomplete
+	}
+	return nil
 }

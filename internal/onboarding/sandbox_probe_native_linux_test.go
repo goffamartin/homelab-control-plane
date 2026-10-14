@@ -5,6 +5,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestNativeSandboxProbeRefusesWithoutInstalledBootedHost(t *testing.T) {
@@ -23,5 +24,18 @@ func TestNativeSandboxProbeRefusesWithoutInstalledBootedHost(t *testing.T) {
 	}
 	if _, err := h.RunProbe(context.Background(), SandboxProbeSnapshot{}, SandboxProbeInputs{}); err == nil {
 		t.Fatal("run accepted")
+	}
+}
+
+func TestNativeSandboxStartRefusesTestExecutable(t *testing.T) {
+	// The current executable is a test binary, never the installed agent. The
+	// adapter must refuse before dispatch even on a booted root test host.
+	h := nativeSandboxProbeHost{}
+	snapshot := freshProbeFake(t).snapshot
+	if err := h.startVerifiedSandboxAgent(context.Background(), snapshot, [32]byte{}, time.Now().Add(time.Minute)); err == nil {
+		t.Fatal("zero proof accepted")
+	}
+	if err := h.startVerifiedSandboxAgent(context.Background(), snapshot, [32]byte{1}, time.Now().Add(time.Minute)); err == nil {
+		t.Fatal("test executable dispatched a service start")
 	}
 }

@@ -504,6 +504,14 @@ activation grant. Native start adapter/CLI orchestrace, TOCTOU hranice a booted 
 acceptance navazují; system resource gate/P05/checkpoint B stále otevřené.
 Preview.4 ani VM se nemění.
 
+P05v `SandboxReadiness.Start` propojuje consent, nový matching sandbox probe,
+poslední source/age kontrolu a fixed native start neaktivního system agenta.
+Native adapter ověřuje config/TLS/profile/account před i po startu; očekává jen
+inactive → active, nikoli změnu enabled/source. Bez enable/restart/reset/grants.
+[Kontrakt](44-sandbox-verified-agent-start.md). CLI zatím tento adapter nepoužívá;
+booted VM/cleanup/reboot akceptace navazuje. P05/checkpoint B a veřejná system
+resource activation gate otevřené; preview.4 a VM beze změn.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
