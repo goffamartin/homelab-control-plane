@@ -373,6 +373,15 @@ Windows full test/vet, Linux full race/test/vet, izolovaný package-account test
 a ARM64 compile-only prošly. Live systemd/reboot, user CLI a agent service integrace
 zůstávají otevřené; P05/checkpoint B ani preview.4 nejsou změnou uzavřené.
 
+P05h user CLI core: shared strict version-1 parser je nyní používán runtime i
+onboarding. PlanClient připravuje pouze private cli.json/cli.token pod skutečným
+nerootovým account/primary GID, s odděleným Apply consent, fresh/repeat/conflict
+a partial pair refusal; bez token generation, policy nebo service změny.
+[Kontrakt a navazující privátní transfer](30-client-provisioning-core.md).
+Windows full test/vet, Linux full race/test/vet, native nerootový account/container
+test a ARM64 compile-only prošly. Root-to-user source/transfer/CLI orchestrace,
+agent service a VM/release acceptance zůstávají otevřené; preview.4 se nemění.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
