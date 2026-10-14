@@ -486,6 +486,15 @@ booted systemd/VM spuštění není otestované. Native source snapshot host/con
 probe CLI a čerstvá activation evidence ještě navazují; gate/checkpoint B otevřené,
 preview.4 a VM beze změny.
 
+P05t native source host + `hlcp-agent probe-resources`: read-only výchozí preview,
+fixed system scope, validated imported configuration/TLS, inactive main agent a
+absent probe. `--apply --yes` spustí pouze fixed metadata inspector, nikoli akce.
+Source/config/account/installed binaries bindings se ověřují před i po běhu;
+bez persisted activation receipt. [Kontrakt](42-native-resource-probe-cli.md).
+Lokální CLI/core a Linux refusal testy nejsou booted systemd akceptace.
+Čerstvá activation evidence a booted Debian/reboot acceptance stále navazují;
+P05/checkpoint B otevřené, preview.4 a VM beze změny.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.

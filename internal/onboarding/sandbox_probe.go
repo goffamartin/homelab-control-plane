@@ -86,8 +86,8 @@ type sandboxProbeState struct {
 	dependencyProof [32]byte
 }
 
-// Planning only reads host evidence. No native host or CLI is wired yet: this
-// core does not open the system resource activation gate or prove VM readiness.
+// Planning only reads host evidence. Probe success does not open the system
+// resource activation gate or establish resource execution/VM readiness.
 func PlanSandboxProbe(ctx context.Context, host SandboxProbeHost, config agent.Config) (*SandboxProbe, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

@@ -32,6 +32,21 @@ func (nativeAgentServiceHost) Caller(ctx context.Context) (uint32, uint32, error
 	return owner.UID, owner.GID, err
 }
 func (h nativeAgentServiceHost) InspectAgent(ctx context.Context, profile AgentServiceProfile) (AgentActivationSnapshot, error) {
+	return h.inspectAgentSource(ctx, profile, func(config agent.Config) ([32]byte, error) {
+		readiness, err := PlanResourceReadiness(ctx, nativeResourceHost{}, profile, config)
+		if err != nil {
+			if errors.Is(err, ErrAgentActivationResources) {
+				return [32]byte{}, err
+			}
+			return [32]byte{}, ErrAgentActivationResources
+		}
+		return readiness.proof, nil
+	})
+}
+
+// Shared source validation; each caller supplies its own resource evidence.
+// Activation always uses PlanResourceReadiness and cannot adopt probe evidence.
+func (h nativeAgentServiceHost) inspectAgentSource(ctx context.Context, profile AgentServiceProfile, resources func(agent.Config) ([32]byte, error)) (AgentActivationSnapshot, error) {
 	fail := func() (AgentActivationSnapshot, error) { return AgentActivationSnapshot{}, ErrAgentActivationProfile }
 	uid, gid, err := h.Caller(ctx)
 	if err != nil || !validAgentServiceProfile(profile) || (profile.Scope == "user" && (uid == 0 || gid == 0)) || (profile.Scope == "system" && (uid != 0 || gid != 0)) {
@@ -158,12 +173,9 @@ func (h nativeAgentServiceHost) InspectAgent(ctx context.Context, profile AgentS
 	if err != nil {
 		return fail()
 	}
-	readiness, err := PlanResourceReadiness(ctx, nativeResourceHost{}, profile, parsed)
+	resourceProof, err := resources(parsed)
 	if err != nil {
-		if errors.Is(err, ErrAgentActivationResources) {
-			return AgentActivationSnapshot{}, err
-		}
-		return AgentActivationSnapshot{}, ErrAgentActivationResources
+		return AgentActivationSnapshot{}, err
 	}
 	if profile.Scope == "user" {
 		journal = filepath.Join(home, ".local", "state", "hlcp", "command-journal.json")
@@ -182,7 +194,7 @@ func (h nativeAgentServiceHost) InspectAgent(ctx context.Context, profile AgentS
 		Binary, Manager, Unit, Peer setup.Snapshot
 		Runtime, Config             []setup.Snapshot
 		Resources                   [32]byte
-	}{account, accountProof, groups, binary, manager, unit, peerUnit, runtimeProof, config, readiness.proof}
+	}{account, accountProof, groups, binary, manager, unit, peerUnit, runtimeProof, config, resourceProof}
 	encoded, err := json.Marshal(evidence)
 	if err != nil {
 		return fail()

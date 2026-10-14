@@ -1,0 +1,101 @@
+package onboarding
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"hlcp/internal/agent"
+	"hlcp/internal/setup"
+	"reflect"
+	"strconv"
+	"strings"
+)
+
+type nativeSandboxProbeHost struct{}
+
+var nativeProbeCLIHost sandboxProbeCLIHost = nativeSandboxProbeHost{}
+
+func (nativeSandboxProbeHost) Caller(ctx context.Context) (uint32, uint32, error) {
+	return (nativeAgentServiceHost{}).Caller(ctx)
+}
+
+// No resource executable is inspected as root. Source config/TLS validation is
+// shared with activation, but script metadata is checked only in the sandbox.
+func (nativeSandboxProbeHost) source(ctx context.Context) (SandboxProbeSnapshot, agent.Config, error) {
+	fail := func() (SandboxProbeSnapshot, agent.Config, error) {
+		return SandboxProbeSnapshot{}, agent.Config{}, ErrSandboxProbeInvalid
+	}
+	if nativeSandboxLauncherReady(ctx) != nil {
+		return fail()
+	}
+	var config agent.Config
+	var inputs SandboxProbeInputs
+	profile := AgentServiceProfile{Scope: "system", Unit: "hlcp-agent.service"}
+	source, err := (nativeAgentServiceHost{}).inspectAgentSource(ctx, profile, func(c agent.Config) ([32]byte, error) {
+		var e error
+		inputs, e = sandboxProbeInputs(c)
+		config = c
+		return inputs.configProof, e
+	})
+	if err != nil {
+		if err == ErrSandboxProbeUnsupported {
+			return SandboxProbeSnapshot{}, agent.Config{}, err
+		}
+		return fail()
+	}
+	if source.Service.Active != "inactive" {
+		return fail()
+	}
+	account, err := serviceActivationAccount("hlcp")
+	if err != nil {
+		return fail()
+	}
+	fields := strings.Split(account, ":")
+	uid, e1 := strconv.ParseUint(fields[2], 10, 32)
+	gid, e2 := strconv.ParseUint(fields[3], 10, 32)
+	if e1 != nil || e2 != nil || uid == 0 || gid == 0 {
+		return fail()
+	}
+	runner, err := activationFile("/usr/bin/systemd-run", 64<<20, true)
+	if err != nil {
+		return fail()
+	}
+	data, err := (nativeSandboxLaunchTransport{}).Unit(ctx)
+	if err != nil {
+		return fail()
+	}
+	properties, err := sandboxUnitProperties(data)
+	if err != nil || !sandboxUnitAbsent(properties) {
+		return fail()
+	}
+	evidence, err := json.Marshal(struct {
+		Source  ControllerActivationSnapshot
+		Account string
+		Runner  setup.Snapshot
+	}{source.Service, account, runner})
+	if err != nil || ctx.Err() != nil {
+		return fail()
+	}
+	return SandboxProbeSnapshot{SourceProof: sha256.Sum256(evidence), ConfigProof: inputs.configProof,
+		UID: uint32(uid), GID: uint32(gid), AgentInactive: true, ProbeAbsent: true}, config, nil
+}
+
+func (h nativeSandboxProbeHost) Config(ctx context.Context) (agent.Config, error) {
+	_, config, err := h.source(ctx)
+	return config, err
+}
+func (h nativeSandboxProbeHost) InspectProbe(ctx context.Context) (SandboxProbeSnapshot, error) {
+	snapshot, _, err := h.source(ctx)
+	return snapshot, err
+}
+func (h nativeSandboxProbeHost) RunProbe(ctx context.Context, snapshot SandboxProbeSnapshot, inputs SandboxProbeInputs) (SandboxProbeEvidence, error) {
+	current, config, err := h.source(ctx)
+	if err != nil || current != snapshot {
+		return SandboxProbeEvidence{}, ErrSandboxProbeStale
+	}
+	expected, err := sandboxProbeInputs(config)
+	if err != nil || expected.binding != inputs.binding || expected.configProof != inputs.configProof || !reflect.DeepEqual(expected.files, inputs.files) {
+		return SandboxProbeEvidence{}, ErrSandboxProbeInvalid
+	}
+	return launchSandboxInspector(ctx, nativeSandboxLaunchTransport{}, snapshot, inputs)
+}
