@@ -61,7 +61,7 @@ func runAgentCLIClock(args []string, input io.Reader, out io.Writer, host setupH
 	flags.StringVar(&options.ControllerAddress, "controller", "", "controller host:port")
 	flags.StringVar(&options.ServerName, "server-name", "", "expected controller DNS/IP")
 	flags.StringVar(&options.JournalFile, "journal", "", "absolute journal path outside config directory")
-	flags.StringVar(&directory, "directory", "", "existing private configuration directory")
+	flags.StringVar(&directory, "directory", "", "private configuration directory; safe parent must exist")
 	flags.StringVar(&cert, "cert", "", "absolute client cert-chain PEM path")
 	flags.StringVar(&key, "key", "", "absolute private client key PEM path")
 	flags.StringVar(&peerCA, "peer-ca", "", "absolute controller trust PEM path")
@@ -73,7 +73,7 @@ func runAgentCLIClock(args []string, input io.Reader, out io.Writer, host setupH
 	jsonOutput := flags.Bool("json", false, "JSON report")
 	if err := flags.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			_, err = fmt.Fprintln(out, "Usage: hlcp-agent setup --node ID --controller host:port --server-name DNS/IP\n  --directory /existing/private/config --journal /separate/state/journal.json\n  --cert /client-chain.pem --key /private/client.key\n  --peer-ca /controller-trust.pem --issuer-ca /client-issuer-trust.pem\n  [--scope user|system] [--json] [--apply --yes]\n  Or: hlcp-agent setup --interactive [--scope user|system]\nDefault is read-only preview. Directory must already exist, mode 0700.\nNo service activation, resources, admission, journal writes or certificate generation.")
+			_, err = fmt.Fprintln(out, "Usage: hlcp-agent setup --node ID --controller host:port --server-name DNS/IP\n  --directory /private/config --journal /separate/state/journal.json\n  --cert /client-chain.pem --key /private/client.key\n  --peer-ca /controller-trust.pem --issuer-ca /client-issuer-trust.pem\n  [--scope user|system] [--json] [--apply --yes]\n  Or: hlcp-agent setup --interactive [--scope user|system]\nDefault is read-only preview. A missing final directory is created only after consent; its safe parent must exist.\nExisting target requires mode 0700; permissions are never repaired.\nNo service activation, resources, admission, journal writes or certificate generation.")
 			if err != nil {
 				return 2
 			}
@@ -114,7 +114,7 @@ func runAgentCLIClock(args []string, input io.Reader, out io.Writer, host setupH
 			value *string
 		}{
 			{"Node ID", &options.NodeID}, {"Controller host:port", &options.ControllerAddress},
-			{"Controller DNS/IP", &options.ServerName}, {"Existing config directory", &directory},
+			{"Controller DNS/IP", &options.ServerName}, {"Config directory (safe parent must exist)", &directory},
 			{"Journal path outside config directory", &options.JournalFile}, {"Client cert-chain PEM path", &cert},
 			{"Private client key PEM path", &key}, {"Controller trust PEM path", &peerCA}, {"Client issuer trust PEM path", &issuerCA},
 		} {
@@ -160,6 +160,10 @@ func runAgentCLIClock(args []string, input io.Reader, out io.Writer, host setupH
 			code = "INVALID_TLS"
 		case errors.Is(err, setup.ErrMissingDirectory):
 			code = "DIRECTORY_REQUIRED"
+		case errors.Is(err, setup.ErrMissingParent):
+			code = "PARENT_DIRECTORY_REQUIRED"
+		case errors.Is(err, setup.ErrRecoveryRequired):
+			code = "DIRECTORY_RECOVERY_REQUIRED"
 		case errors.Is(err, setup.ErrExistingConflict):
 			code = "EXISTING_CONFLICT"
 		case errors.Is(err, setup.ErrInvalidExisting):

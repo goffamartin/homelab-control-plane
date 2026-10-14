@@ -7,10 +7,13 @@ Pro dnešní existující Podman konfiguraci nejde o migration/force update.
 ## Parametrická cesta
 
 Spouštějte přímo pod runtime účtem; user scope nepoužívá sudo. V následujícím
-příkladu musí cílový adresář už existovat, být vlastněný aktuálním registrovaným
-UID/primary GID a mít mode 0700. PEM input paths jsou absolutní, bezpečné
+příkladu musí rodič cílového adresáře bezpečně existovat. Existující cílový
+adresář musí být vlastněný aktuálním registrovaným UID/primary GID a mít
+mode 0700; chybějící poslední adresář je nově součást potvrzeného plánu.
+PEM input paths jsou absolutní, bezpečné
 regular single-link soubory bez symlinků/unsafe parentů; key má private mode.
-Directory provisioning zatím není implementováno, neprovádí se implicitní mkdir.
+[Directory provisioning kontrakt](25-setup-directory-provisioning.md);
+žádné recursive mkdir nebo oprava existujících práv se neprovádí.
 
 ```sh
 hlcp-agent setup \
@@ -87,7 +90,7 @@ po potvrzení. Linux native CLI test: preview bez writes, skutečný confirmed
 Apply, repeat changed=0 při backup retention, resources [], zachovaný journal
 a odmítnutí public-readable private key input.
 
-Zbývá directory provisioning, controller env/policy/tokens/allowlist/CLI wizard,
+Zbývá recursive parent bootstrap, controller env/policy/tokens/allowlist/CLI wizard,
 explicitní unit/start/enable orchestrace a booted VM acceptance. Žádná implicitní
 node admission, service activation nebo package install není tímto commandem
 schválená/provedená. P05 ani release checkpoint B tím nejsou dokončené.

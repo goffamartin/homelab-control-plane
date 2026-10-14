@@ -1,6 +1,7 @@
 package onboarding
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -21,15 +22,21 @@ type AgentOptions struct{ NodeID, ControllerAddress, ServerName, JournalFile, Ag
 // AgentSetup contains a private transaction plan. It cannot start services or
 // admit a node, and never writes a journal or enables resources.
 type AgentSetup struct {
-	planner *setup.Planner
-	plan    *setup.Plan
+	planner   *setup.Planner
+	plan      *setup.Plan
+	directory *setup.DirectoryPlan
+	intents   []setup.Intent
 }
 
 func (s *AgentSetup) Preview() setup.Preview {
 	if s == nil {
 		return setup.Preview{ReadOnly: true}
 	}
-	return s.plan.Preview()
+	preview := s.plan.Preview()
+	if s.directory != nil {
+		preview.Changes = append([]setup.Change{{Name: "configuration-directory", Action: "create-directory", Mode: 0700}}, preview.Changes...)
+	}
+	return preview
 }
 func (s AgentSetup) MarshalJSON() ([]byte, error) { return json.Marshal(s.Preview()) }
 func (s AgentSetup) String() string               { data, _ := s.MarshalJSON(); return string(data) }
@@ -38,17 +45,41 @@ func (s *AgentSetup) Close() error {
 	if s == nil || s.planner == nil {
 		return nil
 	}
-	return s.planner.Close()
+	err := s.planner.Close()
+	if s.directory != nil {
+		if other := s.directory.Close(); err == nil {
+			err = other
+		}
+	}
+	return err
 }
 func (s *AgentSetup) Apply(ctx context.Context, confirmed bool) (setup.ApplyResult, error) {
 	if s == nil || s.planner == nil || s.plan == nil {
 		return setup.ApplyResult{}, ErrAgentOptions
 	}
+	if s.directory != nil {
+		planner, err := s.directory.Create(ctx, confirmed)
+		if err != nil {
+			return setup.ApplyResult{}, err
+		}
+		defer planner.Close()
+		plan, err := planner.Build(ctx, s.intents)
+		if err != nil {
+			return setup.ApplyResult{}, err
+		}
+		for _, change := range plan.Preview().Changes {
+			if change.Action != "create" {
+				return setup.ApplyResult{}, setup.ErrStalePlan
+			}
+		}
+		return planner.Apply(ctx, plan, true)
+	}
 	return s.planner.Apply(ctx, s.plan, confirmed)
 }
 
 // PlanAgent binds generated TLS paths to the exact target planner directory.
-// The directory must already exist with the setup engine's private owner/mode.
+// Existing directories require private owner/mode; a missing final directory
+// is previewed and created only on confirmed Apply under an existing safe parent.
 // Existing different config is a conflict: this fresh-install core has no force.
 func PlanAgent(ctx context.Context, directory string, owner setup.Owner, options AgentOptions, material ImportedTLS, now time.Time) (*AgentSetup, error) {
 	if !filepath.IsAbs(directory) || filepath.Clean(directory) != directory || directory == "/" ||
@@ -98,7 +129,28 @@ func PlanAgent(ctx context.Context, directory string, owner setup.Owner, options
 	}
 	planner, err := setup.OpenPlanner(directory, owner)
 	if err != nil {
-		return nil, err
+		if !errors.Is(err, setup.ErrMissingDirectory) {
+			return nil, err
+		}
+		directoryPlan, err := setup.PlanDirectory(directory, owner)
+		if err != nil {
+			return nil, err
+		}
+		previewPlanner, err := setup.NewPlanner(absentAgentSource{owner})
+		if err != nil {
+			directoryPlan.Close()
+			return nil, err
+		}
+		preview, err := previewPlanner.Build(ctx, intents)
+		if err != nil {
+			previewPlanner.Close()
+			directoryPlan.Close()
+			return nil, err
+		}
+		for index := range intents {
+			intents[index].Data = bytes.Clone(intents[index].Data)
+		}
+		return &AgentSetup{planner: previewPlanner, plan: preview, directory: directoryPlan, intents: intents}, nil
 	}
 	plan, err := planner.Build(ctx, intents)
 	if err != nil {
@@ -107,6 +159,12 @@ func PlanAgent(ctx context.Context, directory string, owner setup.Owner, options
 	}
 	return &AgentSetup{planner: planner, plan: plan}, nil
 }
+
+type absentAgentSource struct{ owner setup.Owner }
+
+func (s absentAgentSource) Owner() setup.Owner                       { return s.owner }
+func (absentAgentSource) Read(string, int64) (setup.Snapshot, error) { return setup.Snapshot{}, nil }
+func (absentAgentSource) Close() error                               { return nil }
 
 func validHost(value string) bool {
 	if net.ParseIP(value) != nil {

@@ -31,6 +31,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Offline read-only doctor (first P04c block)](docs/22-offline-doctor.md)
 - [Imported TLS validation and generic agent setup planning (P05a)](docs/23-imported-agent-setup-core.md)
 - [Imported agent setup CLI (P05b, preview and confirmed apply)](docs/24-imported-agent-setup-cli.md)
+- [Confirmed private config-directory provisioning (P05c)](docs/25-setup-directory-provisioning.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status
