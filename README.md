@@ -39,6 +39,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Private non-root client profile provisioning core (P05h)](docs/30-client-provisioning-core.md)
 - [Confirmed controller-to-user CLI access handoff (P05i)](docs/31-client-access-handoff.md)
 - [Fresh-user .config/hlcp bootstrap (P05j)](docs/32-client-config-parent-bootstrap.md)
+- [Agent service activation core and system credential paths (P05k)](docs/33-agent-service-activation-core.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status

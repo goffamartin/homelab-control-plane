@@ -404,6 +404,17 @@ testy, installed parent/child fresh-account workflow a ARM64 compile-only prošl
 Legacy profile migration, agent service a booted Debian package/VM/release gate
 zůstávají otevřené; P05/checkpoint B ani preview.4 nejsou uzavřené.
 
+P05k agent activation core: fixed system/user/generic/compatibility profily nad
+sdíleným consent/stale/partial lifecycle jádrem. User scope nesmí přes root;
+peer musí být inactive+disabled/absent, explicitní persistent enable vyžaduje
+linger bez jeho implicitní změny. Proof zahrnuje peer/linger/caller metadata.
+System imported setup nyní generuje správné LoadCredential TLS cesty pro účet
+hlcp, nikoli nečitelné root provisioning paths; existující config se nepřepisuje.
+[Kontrakt a native adapter brána](33-agent-service-activation-core.md).
+Windows full test/vet, Linux full race/test/vet a ARM64 compile-only prošly;
+native agent activation CLI, service/account/state readiness a booted Debian
+package/VM/release acceptance zůstávají otevřené. Preview.4 se nemění.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
