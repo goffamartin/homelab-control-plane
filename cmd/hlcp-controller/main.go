@@ -10,6 +10,7 @@ import (
 	"hlcp/internal/doctor"
 	"hlcp/internal/liveness"
 	"hlcp/internal/localapi"
+	"hlcp/internal/onboarding"
 	"hlcp/internal/telemetry"
 	"hlcp/internal/transport"
 	"net"
@@ -22,6 +23,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "setup" {
+		os.Exit(onboarding.ControllerCLI(os.Args[2:], os.Stdin, os.Stdout))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "doctor" {
 		os.Exit(doctor.CLI(os.Args[2:], "controller", os.Stdout))
 	}

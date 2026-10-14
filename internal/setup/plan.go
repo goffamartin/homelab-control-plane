@@ -234,7 +234,24 @@ func (planner *Planner) recheck(ctx context.Context, plan *Plan) error {
 }
 
 func (planner *Planner) read(name string) (Snapshot, error) {
-	snapshot, err := planner.source.Read(name, MaximumFileBytes)
+	return planner.readLimit(name, MaximumFileBytes)
+}
+
+// Snapshot returns private bounded local source bytes, never a public report.
+func (planner *Planner) Snapshot(name string, limit int64) (Snapshot, error) {
+	planner.mutex.Lock()
+	defer planner.mutex.Unlock()
+	if planner.closed {
+		return Snapshot{}, ErrClosed
+	}
+	if !validName(name) || limit <= 0 || limit > MaximumFileBytes {
+		return Snapshot{}, ErrInvalidInput
+	}
+	return planner.readLimit(name, limit)
+}
+
+func (planner *Planner) readLimit(name string, limit int64) (Snapshot, error) {
+	snapshot, err := planner.source.Read(name, limit)
 	if err != nil {
 		if errors.Is(err, ErrUnsafePath) {
 			return Snapshot{}, ErrUnsafePath
@@ -253,7 +270,7 @@ func (planner *Planner) read(name string) (Snapshot, error) {
 	if snapshot.Owner != planner.owner || snapshot.Mode&^fs.ModePerm != 0 || snapshot.Mode&0o022 != 0 {
 		return Snapshot{}, ErrUnsafePath
 	}
-	if len(snapshot.Data) > MaximumFileBytes {
+	if int64(len(snapshot.Data)) > limit {
 		return Snapshot{}, ErrInvalidExisting
 	}
 	snapshot.Data = bytes.Clone(snapshot.Data)
