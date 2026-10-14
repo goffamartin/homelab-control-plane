@@ -346,6 +346,16 @@ admission; ledger ani user CLI nejsou dotčené.
 Controller CLI/TTY wizard s post-consent credential creation/reuse, explicitní
 service/user-CLI provisioning a VM/release gate zůstávají otevřené.
 
+P05e controller CLI: `hlcp-controller setup` nabízí default preview, `--apply --yes`
+a TTY `--interactive`. Nové operator/observer tokeny vznikají až po potvrzení;
+existující platná dvojice se zachová a neúplná dvojice vyžaduje inspekci.
+Vynechané `--admit` zachová existující admission, při fresh setup znamená deny-all.
+Před apply proběhne nový TLS/snapshot check; finální plán nepřevezme raced target.
+[CLI kontrakt/evidence](27-imported-controller-setup-cli.md).
+Windows full test/vet, Linux full race/test/vet a následný native CLI race/vet
+prošly; arm64 compile-only. Service/account a user-CLI provisioning, booted VM
+acceptance a checkpoint B zůstávají otevřené. Preview.4 se nemění.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.

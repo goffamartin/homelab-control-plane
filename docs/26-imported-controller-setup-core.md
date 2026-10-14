@@ -2,6 +2,7 @@
 
 Interní knihovna od 2026-10-14. CLI hlcp-controller setup ani automatická
 generace tokenů ještě nejsou součástí tohoto bloku; preview.4 se nemění.
+Navazující P05e je implementuje v [controller CLI](27-imported-controller-setup-cli.md).
 
 ## Vstupy a bezpečné defaults
 

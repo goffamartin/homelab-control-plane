@@ -40,7 +40,10 @@ func (ControllerCredentials) MarshalJSON() ([]byte, error) {
 func (c ControllerCredentials) String() string   { data, _ := c.MarshalJSON(); return string(data) }
 func (c ControllerCredentials) GoString() string { return c.String() }
 
-type ControllerSetup struct{ plan *AgentSetup }
+type ControllerSetup struct {
+	plan        *AgentSetup
+	previewOnly bool
+}
 
 func (s *ControllerSetup) Preview() setup.Preview {
 	if s == nil || s.plan == nil {
@@ -61,6 +64,9 @@ func (s *ControllerSetup) Apply(ctx context.Context, confirmed bool) (setup.Appl
 	if s == nil || s.plan == nil {
 		return setup.ApplyResult{}, ErrControllerOptions
 	}
+	if s.previewOnly {
+		return setup.ApplyResult{}, ErrControllerOptions
+	}
 	return s.plan.Apply(ctx, confirmed)
 }
 
@@ -68,6 +74,18 @@ const controllerPolicy = `{"version":1,"principals":[{"id":"operator","role":"op
 `
 
 func PlanController(ctx context.Context, directory string, owner setup.Owner, options ControllerOptions, material ImportedTLS, credentials ControllerCredentials, now time.Time) (*ControllerSetup, error) {
+	intents, err := controllerIntents(directory, options, material, credentials, now)
+	if err != nil {
+		return nil, err
+	}
+	plan, err := planFiles(ctx, directory, owner, intents)
+	if err != nil {
+		return nil, err
+	}
+	return &ControllerSetup{plan: plan}, nil
+}
+
+func controllerIntents(directory string, options ControllerOptions, material ImportedTLS, credentials ControllerCredentials, now time.Time) ([]setup.Intent, error) {
 	if !filepath.IsAbs(directory) || filepath.Clean(directory) != directory || directory == "/" || len(directory) > 4096 ||
 		strings.ContainsRune(directory, 0) || !validControllerListen(options.ListenAddress) {
 		return nil, ErrControllerOptions
@@ -125,11 +143,7 @@ func PlanController(ctx context.Context, directory string, owner setup.Owner, op
 		{Name: "observer.token", Data: tokens.observer, Mode: 0600, Validate: validateToken},
 		{Name: "nodes.json", Data: nodeData, Mode: 0600, Validate: func(data []byte) error { _, err := transport.ParseAllowedNodes(data); return err }},
 	}
-	plan, err := planFiles(ctx, directory, owner, intents)
-	if err != nil {
-		return nil, err
-	}
-	return &ControllerSetup{plan}, nil
+	return intents, nil
 }
 
 func validControllerListen(value string) bool {
