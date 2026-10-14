@@ -13,11 +13,12 @@ import (
 )
 
 type agentActivationReport struct {
-	Status   string                      `json:"status"`
-	Code     string                      `json:"code,omitempty"`
-	ReadOnly bool                        `json:"read_only"`
-	Preview  *AgentActivationPreview     `json:"preview,omitempty"`
-	Result   *ControllerActivationResult `json:"result,omitempty"`
+	Status      string                      `json:"status"`
+	Code        string                      `json:"code,omitempty"`
+	ReadOnly    bool                        `json:"read_only"`
+	Preview     *AgentActivationPreview     `json:"preview,omitempty"`
+	Result      *ControllerActivationResult `json:"result,omitempty"`
+	Constraints []string                    `json:"constraints,omitempty"`
 }
 
 func AgentActivationCLI(args []string, out io.Writer) int {
@@ -64,6 +65,13 @@ func runAgentActivationCLI(args []string, out io.Writer, host AgentActivationHos
 			if err == nil && report.Result != nil {
 				_, err = fmt.Fprintf(out, "Verified completed: %v; uncertain: %t. Inspect actual state before retry.\n", report.Result.Completed, report.Result.Uncertain)
 			}
+			if err == nil {
+				for _, code := range report.Constraints {
+					if _, err = fmt.Fprintln(out, "Constraint:", code); err != nil {
+						break
+					}
+				}
+			}
 		}
 		if err != nil {
 			return 2
@@ -92,7 +100,12 @@ func runAgentActivationCLI(args []string, out io.Writer, host AgentActivationHos
 		if errors.Is(err, ErrAgentActivationResources) {
 			code = "RESOURCE_PREFLIGHT_REQUIRED"
 		}
-		if emit(agentActivationReport{Status: "failed", Code: code, ReadOnly: true}) != 0 {
+		var constraints []string
+		var refusal *systemResourceRefusal
+		if errors.As(err, &refusal) {
+			constraints = refusal.Constraints()
+		}
+		if emit(agentActivationReport{Status: "failed", Code: code, ReadOnly: true, Constraints: constraints}) != 0 {
 			return 2
 		}
 		return 1

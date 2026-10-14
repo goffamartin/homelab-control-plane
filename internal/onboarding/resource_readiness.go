@@ -46,7 +46,10 @@ func PlanResourceReadiness(ctx context.Context, host ResourceReadinessHost, prof
 	if len(config.Resources) == 0 {
 		return r, nil
 	}
-	if profile.Scope != "user" || host == nil {
+	if profile.Scope == "system" {
+		return r, systemResourceConstraints(config)
+	}
+	if host == nil {
 		return r, ErrAgentActivationResources
 	}
 	required := map[string]bool{}

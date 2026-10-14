@@ -160,6 +160,9 @@ func (h nativeAgentServiceHost) InspectAgent(ctx context.Context, profile AgentS
 	}
 	readiness, err := PlanResourceReadiness(ctx, nativeResourceHost{}, profile, parsed)
 	if err != nil {
+		if errors.Is(err, ErrAgentActivationResources) {
+			return AgentActivationSnapshot{}, err
+		}
 		return AgentActivationSnapshot{}, ErrAgentActivationResources
 	}
 	if profile.Scope == "user" {
