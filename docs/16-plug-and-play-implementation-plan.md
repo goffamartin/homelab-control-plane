@@ -519,6 +519,15 @@ není hlášená jako read-only. [Postup](45-confirmed-sandbox-start-cli.md).
 Původní activate gate se nemění; explicit enable a booted Debian registration/
 reboot acceptance navazují. P05/checkpoint B otevřené, preview.4 a VM beze změn.
 
+P05x explicit `--start --enable`: matching revalidation, ověřený start, teprve
+potom fixed enable a active/enabled postcheck. Bez flagu se enable nemění;
+již enabled unit je ověřená bez dalšího enable commandu. Partial enable failure
+zachovává verified started a uncertain, žádný stop/disable rollback.
+[Kontrakt](46-explicit-sandbox-agent-enable.md). Source fingerprint normalizuje
+lifecycle properties, jejich actual flags zůstávají odděleně strict-bound.
+Booted Debian cleanup/registration/reboot acceptance navazuje; P05/checkpoint B
+otevřené, preview.4 a VM beze změn.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.

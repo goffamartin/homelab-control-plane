@@ -20,13 +20,14 @@ type sandboxProbeCLIHost interface {
 }
 
 type sandboxProbeReport struct {
-	Status         string               `json:"status"`
-	Code           string               `json:"code,omitempty"`
-	ReadOnly       bool                 `json:"read_only"`
-	Preview        *SandboxProbePreview `json:"preview,omitempty"`
-	Result         *SandboxProbeResult  `json:"result,omitempty"`
-	StartRequested bool                 `json:"start_requested,omitempty"`
-	Start          *SandboxStartResult  `json:"start,omitempty"`
+	Status          string               `json:"status"`
+	Code            string               `json:"code,omitempty"`
+	ReadOnly        bool                 `json:"read_only"`
+	Preview         *SandboxProbePreview `json:"preview,omitempty"`
+	Result          *SandboxProbeResult  `json:"result,omitempty"`
+	StartRequested  bool                 `json:"start_requested,omitempty"`
+	Start           *SandboxStartResult  `json:"start,omitempty"`
+	EnableRequested bool                 `json:"enable_requested,omitempty"`
 }
 
 func SandboxProbeCLI(args []string, out io.Writer) int {
@@ -39,10 +40,11 @@ func runSandboxProbeCLI(args []string, out io.Writer, host sandboxProbeCLIHost) 
 	apply := f.Bool("apply", false, "launch fixed metadata inspector")
 	yes := f.Bool("yes", false, "separate probe consent")
 	start := f.Bool("start", false, "after a matching fresh probe, start the inactive system agent")
+	enable := f.Bool("enable", false, "after verified start, explicitly enable boot-time activation")
 	jsonOutput := f.Bool("json", false, "redacted JSON report")
 	if err := f.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			if _, e := fmt.Fprintln(out, "Usage: hlcp-agent probe-resources [--start] [--json] [--apply --yes]\nDefault: read-only preview. Requires root, installed package and local booted Linux systemd.\nFixed system profile and /etc/hlcp/agent configuration; inactive agent, absent probe.\nOnly script executable/workdir metadata is inspected; no configured actions run by probes.\nApply creates a transient sandbox and may create its StateDirectory.\n--start with --apply --yes repeats the sandbox check and starts the inactive agent.\nAgent start opens its normal journal/runtime and outbound controller connection.\nWithout --start, no main-agent start. No enable/restart/reset or persisted receipt.\n--start alone is still read-only preview. Live Debian acceptance remains pending.\nAfter uncertain outcome inspect actual state before retry."); e == nil {
+			if _, e := fmt.Fprintln(out, "Usage: hlcp-agent probe-resources [--start [--enable]] [--json] [--apply --yes]\nDefault: read-only preview. Requires root, installed package and local booted Linux systemd.\nFixed system profile and /etc/hlcp/agent configuration; inactive agent, absent probe.\nOnly script executable/workdir metadata is inspected; no configured actions run by probes.\nApply creates a transient sandbox and may create its StateDirectory.\n--start with --apply --yes repeats the sandbox check and starts the inactive agent.\n--enable requires --start and enables boot activation only AFTER verified start.\nAgent start opens its normal journal/runtime and outbound controller connection.\nWithout --start, no main-agent start. No implicit enable/restart/reset or persisted receipt.\n--start --enable alone is still read-only preview. Live Debian acceptance remains pending.\nAfter uncertain outcome inspect actual state before retry; no stop/disable rollback."); e == nil {
 				return 0
 			}
 		}
@@ -52,6 +54,7 @@ func runSandboxProbeCLI(args []string, out io.Writer, host sandboxProbeCLIHost) 
 	var startResult *SandboxStartResult
 	emit := func(report sandboxProbeReport) int {
 		report.StartRequested = *start
+		report.EnableRequested = *enable
 		report.Start = startResult
 		var err error
 		if *jsonOutput {
@@ -65,10 +68,10 @@ func runSandboxProbeCLI(args []string, out io.Writer, host sandboxProbeCLIHost) 
 				_, err = fmt.Fprintf(out, "Completed: %t; uncertain: %t. No activation receipt stored.\n", report.Result.Completed, report.Result.Uncertain)
 			}
 			if err == nil && *start {
-				_, err = fmt.Fprintln(out, "Planned: fresh matching sandbox check, then start inactive system agent (no enable/restart).")
+				_, err = fmt.Fprintf(out, "Planned: fresh matching sandbox check, start inactive system agent; explicit boot enable: %t (no restart).\n", *enable)
 			}
 			if err == nil && report.Start != nil {
-				_, err = fmt.Fprintf(out, "Verified started: %t; uncertain: %t. Active state is not controller registration/health.\n", report.Start.Started, report.Start.Uncertain)
+				_, err = fmt.Fprintf(out, "Verified started: %t; verified enabled: %t; uncertain: %t. Active state is not controller registration/health.\n", report.Start.Started, report.Start.Enabled, report.Start.Uncertain)
 			}
 		}
 		if err != nil {
@@ -76,7 +79,7 @@ func runSandboxProbeCLI(args []string, out io.Writer, host sandboxProbeCLIHost) 
 		}
 		return 0
 	}
-	if f.NArg() != 0 || *apply != *yes {
+	if f.NArg() != 0 || *apply != *yes || (*enable && !*start) {
 		emit(sandboxProbeReport{Status: "failed", Code: "INVALID_OPTIONS", ReadOnly: true})
 		return 2
 	}
@@ -115,6 +118,14 @@ func runSandboxProbeCLI(args []string, out io.Writer, host sandboxProbeCLIHost) 
 		}
 	}
 	uid, gid, err := host.Caller(preflight)
+	if *enable {
+		if _, ok := host.(sandboxEnableHost); !ok {
+			if emit(sandboxProbeReport{Status: "failed", Code: "ENABLE_UNAVAILABLE", ReadOnly: true}) != 0 {
+				return 2
+			}
+			return 1
+		}
+	}
 	if err != nil || uid != 0 || gid != 0 {
 		return failure(ErrSandboxProbeInvalid, true, nil, nil)
 	}
@@ -141,7 +152,12 @@ func runSandboxProbeCLI(args []string, out io.Writer, host sandboxProbeCLIHost) 
 		if err != nil {
 			return failure(err, false, &preview, &result)
 		}
-		r, err := ready.Start(workflow, true)
+		var r SandboxStartResult
+		if *enable {
+			r, err = ready.StartPersistent(workflow, true)
+		} else {
+			r, err = ready.Start(workflow, true)
+		}
 		startResult = &r
 		if err != nil {
 			return failure(err, false, &preview, &result)

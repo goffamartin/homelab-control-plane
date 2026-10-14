@@ -120,7 +120,7 @@ func TestSandboxStartedSourceMatchesOnlyActiveTransition(t *testing.T) {
 	if !sandboxStartedSourceMatches(before, after) {
 		t.Fatal("active transition refused")
 	}
-	for _, kind := range []string{"source", "config", "uid", "gid", "probe", "inactive"} {
+	for _, kind := range []string{"source", "config", "uid", "gid", "probe", "inactive", "enabled"} {
 		modified := after
 		switch kind {
 		case "source":
@@ -135,6 +135,8 @@ func TestSandboxStartedSourceMatchesOnlyActiveTransition(t *testing.T) {
 			modified.ProbeAbsent = false
 		case "inactive":
 			modified.AgentInactive = true
+		case "enabled":
+			modified.AgentEnabled = true
 		}
 		if sandboxStartedSourceMatches(before, modified) {
 			t.Fatal(kind)

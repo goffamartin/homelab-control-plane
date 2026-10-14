@@ -35,15 +35,15 @@ func (h *startCLIFake) startVerifiedSandboxAgent(ctx context.Context, snapshot S
 }
 
 func TestSandboxStartCLIOptionsAndPreview(t *testing.T) {
-	for _, args := range [][]string{{"--start"}, {"--start", "--apply"}, {"--start", "--yes"}, {"--start", "--enable"}, {"--start", "extra"}, {"--start", "--help"}} {
+	for _, args := range [][]string{{"--start"}, {"--start", "--apply"}, {"--start", "--yes"}, {"--enable"}, {"--start", "extra"}, {"--start", "--help"}} {
 		h := &startCLIFake{probeCLIFake: newProbeCLIFake(t)}
 		var out bytes.Buffer
 		exit := runSandboxProbeCLI(args, &out, h)
-		if len(args) == 1 {
+		if len(args) == 1 && args[0] == "--start" {
 			if exit != 0 || h.configs != 1 || h.inspects != 1 {
 				t.Fatal(exit, out.String())
 			}
-		} else if args[1] == "--help" {
+		} else if len(args) > 1 && args[1] == "--help" {
 			if exit != 0 || h.configs != 0 {
 				t.Fatal(exit)
 			}
