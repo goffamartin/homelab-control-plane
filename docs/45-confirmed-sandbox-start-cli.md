@@ -1,5 +1,8 @@
 # P05w — Confirmed sandbox probe-and-start CLI workflow
 
+Volitelný explicit enable navazuje v [P05x](46-explicit-sandbox-agent-enable.md).
+P05w bez --enable dál reboot nastavení nemění.
+
 Stav: implementováno ve zdrojích, zatím nepublikováno v preview.4 a neověřeno
 v booted Debian systemd. VM beze změn. P05/checkpoint B a live acceptance jsou
 stále otevřené. Původní `activate` se nemění a nepřijímá uložené probe proof.

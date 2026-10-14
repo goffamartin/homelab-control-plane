@@ -39,3 +39,15 @@ func TestNativeSandboxStartRefusesTestExecutable(t *testing.T) {
 		t.Fatal("test executable dispatched a service start")
 	}
 }
+
+func TestNativeSandboxEnableRefusesTestExecutable(t *testing.T) {
+	h := nativeSandboxProbeHost{}
+	snapshot := freshProbeFake(t).snapshot
+	snapshot.AgentInactive = false
+	if err := h.enableVerifiedSandboxAgent(context.Background(), snapshot, [32]byte{1}, time.Now().Add(time.Minute)); err == nil {
+		t.Fatal("test executable dispatched enable")
+	}
+	if err := h.enableVerifiedSandboxAgent(context.Background(), snapshot, [32]byte{}, time.Now().Add(time.Minute)); err == nil {
+		t.Fatal("zero proof enabled service")
+	}
+}

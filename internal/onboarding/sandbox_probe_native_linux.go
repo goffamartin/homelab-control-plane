@@ -31,7 +31,8 @@ func (nativeSandboxProbeHost) source(ctx context.Context) (SandboxProbeSnapshot,
 }
 
 // Post-start inspection may observe active; all probe callers still require
-// inactive through source(). Normalize only that expected lifecycle transition.
+// inactive through source(). Normalize lifecycle values in the fingerprint;
+// actual flags remain separately bound in every snapshot comparison.
 func inspectNativeSandboxSource(ctx context.Context) (SandboxProbeSnapshot, agent.Config, error) {
 	fail := func() (SandboxProbeSnapshot, agent.Config, error) {
 		return SandboxProbeSnapshot{}, agent.Config{}, ErrSandboxProbeInvalid
@@ -55,7 +56,9 @@ func inspectNativeSandboxSource(ctx context.Context) (SandboxProbeSnapshot, agen
 		return fail()
 	}
 	inactive := source.Service.Active == "inactive"
+	enabled := source.Service.Enabled
 	source.Service.Active = "inactive"
+	source.Service.Enabled = false
 	account, err := serviceActivationAccount("hlcp")
 	if err != nil {
 		return fail()
@@ -87,7 +90,7 @@ func inspectNativeSandboxSource(ctx context.Context) (SandboxProbeSnapshot, agen
 		return fail()
 	}
 	return SandboxProbeSnapshot{SourceProof: sha256.Sum256(evidence), ConfigProof: inputs.configProof,
-		UID: uint32(uid), GID: uint32(gid), AgentInactive: inactive, ProbeAbsent: true}, config, nil
+		UID: uint32(uid), GID: uint32(gid), AgentInactive: inactive, ProbeAbsent: true, AgentEnabled: enabled}, config, nil
 }
 
 func (h nativeSandboxProbeHost) Config(ctx context.Context) (agent.Config, error) {
@@ -124,6 +127,30 @@ func (h nativeSandboxProbeHost) startVerifiedSandboxAgent(ctx context.Context, s
 	}
 	after, _, err := inspectNativeSandboxSource(ctx)
 	if err != nil || ctx.Err() != nil || !sandboxStartedSourceMatches(snapshot, after) {
+		return ErrSandboxProbeIncomplete
+	}
+	return nil
+}
+
+func (nativeSandboxProbeHost) enableVerifiedSandboxAgent(ctx context.Context, snapshot SandboxProbeSnapshot, proof [32]byte, expiresAt time.Time) error {
+	inactive := snapshot
+	inactive.AgentInactive = true
+	if snapshot.AgentInactive || !validSandboxProbeSnapshot(inactive) || proof == [32]byte{} || expiresAt.IsZero() || !time.Now().Before(expiresAt) {
+		return ErrSandboxProbeInvalid
+	}
+	current, _, err := inspectNativeSandboxSource(ctx)
+	if err != nil || current != snapshot || ctx.Err() != nil || !time.Now().Before(expiresAt) {
+		return ErrSandboxProbeStale
+	}
+	if current.AgentEnabled {
+		return nil
+	}
+	profile := AgentServiceProfile{Scope: "system", Unit: "hlcp-agent.service"}
+	if _, err = agentServiceProcess(ctx, profile, "enable", profile.Unit, 10*time.Second); err != nil {
+		return ErrSandboxProbeIncomplete
+	}
+	after, _, err := inspectNativeSandboxSource(ctx)
+	if err != nil || ctx.Err() != nil || !sandboxEnabledSourceMatches(snapshot, after) {
 		return ErrSandboxProbeIncomplete
 	}
 	return nil

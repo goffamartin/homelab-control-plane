@@ -14,6 +14,7 @@ type sandboxStartHost interface {
 type SandboxStartResult struct {
 	Probe     SandboxProbeResult `json:"probe"`
 	Started   bool               `json:"started"`
+	Enabled   bool               `json:"enabled"`
 	Uncertain bool               `json:"uncertain"`
 }
 
@@ -21,6 +22,19 @@ type SandboxStartResult struct {
 // serialized or applied readiness proof. It repeats the sandbox check under
 // consent, then starts only the inactive system agent. No enable/restart/reset.
 func (p *SandboxReadiness) Start(ctx context.Context, confirmed bool) (SandboxStartResult, error) {
+	return p.start(ctx, confirmed, false)
+}
+
+type sandboxEnableHost interface {
+	enableVerifiedSandboxAgent(context.Context, SandboxProbeSnapshot, [32]byte, time.Time) error
+}
+
+// Enable is explicit and follows verified start; no rollback on partial failure.
+func (p *SandboxReadiness) StartPersistent(ctx context.Context, confirmed bool) (SandboxStartResult, error) {
+	return p.start(ctx, confirmed, true)
+}
+
+func (p *SandboxReadiness) start(ctx context.Context, confirmed, enable bool) (SandboxStartResult, error) {
 	r := SandboxStartResult{}
 	if p == nil || p.sandboxReadinessState == nil || p.probe == nil {
 		return r, ErrSandboxProbeInvalid
@@ -35,6 +49,13 @@ func (p *SandboxReadiness) Start(ctx context.Context, confirmed bool) (SandboxSt
 		return r, ErrSandboxProbeUnsupported
 	}
 	var err error
+	var persistent sandboxEnableHost
+	if enable {
+		persistent, ok = p.probe.host.(sandboxEnableHost)
+		if !ok {
+			return r, ErrSandboxProbeUnsupported
+		}
+	}
 	r.Probe, err = p.applyLocked(ctx, true)
 	if err != nil {
 		r.Uncertain = r.Probe.Uncertain
@@ -42,7 +63,7 @@ func (p *SandboxReadiness) Start(ctx context.Context, confirmed bool) (SandboxSt
 	}
 	// A source/expiry failure here occurs after a probe mutation, but before
 	// start dispatch. Do not report a wholly read-only failed operation.
-	bounded, cancel := context.WithTimeout(ctx, 30*time.Second)
+	bounded, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
 	source := p.probe
 	source.mutex.Lock()
@@ -63,6 +84,16 @@ func (p *SandboxReadiness) Start(ctx context.Context, confirmed bool) (SandboxSt
 		return r, ErrSandboxProbeIncomplete
 	}
 	r.Started = true
+	r.Enabled = source.snapshot.AgentEnabled
+	if enable {
+		expected := source.snapshot
+		expected.AgentInactive = false
+		if persistent.enableVerifiedSandboxAgent(bounded, expected, p.proof, source.completedAt.Add(sandboxReadinessMaximumAge)) != nil || bounded.Err() != nil {
+			r.Uncertain = true
+			return r, ErrSandboxProbeIncomplete
+		}
+		r.Enabled = true
+	}
 	return r, nil
 }
 
@@ -72,5 +103,16 @@ func sandboxStartedSourceMatches(before, after SandboxProbeSnapshot) bool {
 	}
 	expected := before
 	expected.AgentInactive = false
+	return after == expected
+}
+
+func sandboxEnabledSourceMatches(before, after SandboxProbeSnapshot) bool {
+	inactive := before
+	inactive.AgentInactive = true
+	if before.AgentInactive || !validSandboxProbeSnapshot(inactive) {
+		return false
+	}
+	expected := before
+	expected.AgentEnabled = true
 	return after == expected
 }

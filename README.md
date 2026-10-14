@@ -52,6 +52,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [One-shot sandbox readiness revalidation core (P05u)](docs/43-sandbox-readiness-revalidation.md)
 - [Source-bound one-shot system agent start adapter (P05v)](docs/44-sandbox-verified-agent-start.md)
 - [Confirmed sandbox probe-and-start CLI workflow (P05w)](docs/45-confirmed-sandbox-start-cli.md)
+- [Explicit boot enable after verified sandbox start (P05x)](docs/46-explicit-sandbox-agent-enable.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status

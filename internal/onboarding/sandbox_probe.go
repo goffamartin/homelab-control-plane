@@ -32,6 +32,7 @@ type SandboxProbeSnapshot struct {
 	ConfigProof                [32]byte
 	UID, GID                   uint32
 	AgentInactive, ProbeAbsent bool
+	AgentEnabled               bool
 }
 type sandboxProbeFile struct{ Executable, WorkingDirectory string }
 
