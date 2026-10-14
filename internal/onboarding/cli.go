@@ -103,7 +103,7 @@ func runAgentCLIClock(args []string, input io.Reader, out io.Writer, host setupH
 		return fail("TTY_REQUIRED", true)
 	}
 	owner, err := host.Owner()
-	if err != nil || (scope == "user" && owner.UID == 0) || (scope == "system" && owner.UID != 0) {
+	if err != nil || (scope == "user" && (owner.UID == 0 || owner.GID == 0)) || (scope == "system" && (owner.UID != 0 || owner.GID != 0)) {
 		return fail("ACCOUNT_SCOPE", true)
 	}
 	var reader *bufio.Reader
@@ -132,6 +132,7 @@ func runAgentCLIClock(args []string, input io.Reader, out io.Writer, host setupH
 		}
 	}
 	options.AgentVersion = buildinfo.Current().Version
+	options.Scope = scope
 	for _, value := range []string{options.NodeID, options.ControllerAddress, options.ServerName, options.JournalFile, directory, cert, key, peerCA, issuerCA} {
 		if value == "" {
 			return fail("MISSING_OPTIONS", true)

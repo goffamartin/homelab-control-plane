@@ -32,7 +32,9 @@ hlcp-agent setup \
 Default je pouze náhled pěti souborů. Po jeho kontrole stejné options doplňte
 o --apply --yes. --json nabízí strojový report preview nebo applied.
 --apply bez --yes a samotné --yes jsou usage error, nikoli implicitní consent.
-System scope vyžaduje skutečné root UID a explicitní --scope system.
+System scope vyžaduje skutečné root UID/GID 0 a explicitní --scope system.
+Od P05k generuje runtime TLS cesty do systemd LoadCredential, nikoli root private
+provisioning directory; viz [agent service kontrakt](33-agent-service-activation-core.md).
 Root se --scope user odmítne; account není odhadnutý z HOME/SUDO_USER.
 Setup zatím nepodporuje root --user run-as z doctoru, aby nezapisoval pod
 odhadnutým uživatelem. Všechny paths jsou explicitní, žádná home auto-discovery.

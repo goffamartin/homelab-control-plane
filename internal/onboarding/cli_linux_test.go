@@ -47,6 +47,12 @@ func TestNativeSetupCLIWritesOnlyConfirmedPlan(t *testing.T) {
 	if err != nil || len(config.Resources) != 0 {
 		t.Fatal("generated config")
 	}
+	if scope == "system" && (config.CertificateFile != "/run/credentials/hlcp-agent.service/agent.crt" || config.PrivateKeyFile != "/run/credentials/hlcp-agent.service/agent.key" || config.CAFile != "/run/credentials/hlcp-agent.service/ca.crt") {
+		t.Fatal("system service would read inaccessible root provisioning paths")
+	}
+	if scope == "user" && config.CertificateFile != filepath.Join(target, "agent.crt") {
+		t.Fatal("user profile incorrectly uses system credentials")
+	}
 	out.Reset()
 	if runAgentCLI(append(args, "--apply", "--yes"), nil, &out, nativeSetupHost{}, false, testNow) != 0 ||
 		!strings.Contains(out.String(), `"changed":0`) {

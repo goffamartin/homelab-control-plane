@@ -17,7 +17,7 @@ import (
 
 var ErrAgentOptions = errors.New("onboarding: agent setup options are invalid")
 
-type AgentOptions struct{ NodeID, ControllerAddress, ServerName, JournalFile, AgentVersion string }
+type AgentOptions struct{ NodeID, ControllerAddress, ServerName, JournalFile, AgentVersion, Scope string }
 
 // AgentSetup contains a private transaction plan. It cannot start services or
 // admit a node, and never writes a journal or enables resources.
@@ -82,6 +82,12 @@ func (s *AgentSetup) Apply(ctx context.Context, confirmed bool) (setup.ApplyResu
 // is previewed and created only on confirmed Apply under an existing safe parent.
 // Existing different config is a conflict: this fresh-install core has no force.
 func PlanAgent(ctx context.Context, directory string, owner setup.Owner, options AgentOptions, material ImportedTLS, now time.Time) (*AgentSetup, error) {
+	if options.Scope != "" && options.Scope != "user" && options.Scope != "system" {
+		return nil, ErrAgentOptions
+	}
+	if (options.Scope == "system" && (owner.UID != 0 || owner.GID != 0)) || (options.Scope == "user" && (owner.UID == 0 || owner.GID == 0)) {
+		return nil, ErrAgentOptions
+	}
 	if !filepath.IsAbs(directory) || filepath.Clean(directory) != directory || directory == "/" ||
 		len(directory) > 4096 || strings.ContainsRune(directory, 0) || !filepath.IsAbs(options.JournalFile) ||
 		filepath.Clean(options.JournalFile) != options.JournalFile || options.JournalFile == "/" ||
@@ -105,6 +111,13 @@ func PlanAgent(ctx context.Context, directory string, owner setup.Owner, options
 		CertificateFile: filepath.Join(directory, "agent.crt"), PrivateKeyFile: filepath.Join(directory, "agent.key"),
 		CAFile: filepath.Join(directory, "ca.crt"), JournalFile: options.JournalFile, AgentVersion: options.AgentVersion,
 		Capabilities: []string{}, Resources: []agent.ResourceConfig{}}
+	if options.Scope == "system" {
+		// The dedicated service account cannot read root's mode-0700 provisioning
+		// directory; systemd supplies independent credential snapshots instead.
+		config.CertificateFile = "/run/credentials/hlcp-agent.service/agent.crt"
+		config.PrivateKeyFile = "/run/credentials/hlcp-agent.service/agent.key"
+		config.CAFile = "/run/credentials/hlcp-agent.service/ca.crt"
+	}
 	if config.Validate() != nil {
 		return nil, ErrAgentOptions
 	}
