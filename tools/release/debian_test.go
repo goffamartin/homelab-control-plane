@@ -127,6 +127,7 @@ func TestControllerPackageContents(t *testing.T) {
 		"docs/17-generic-agent-profiles.md",
 		"docs/15-onboarding-and-agent-profile-design-notes.md", "docs/16-plug-and-play-implementation-plan.md",
 		"docs/18-script-resource-contract.md",
+		"docs/37-controller-package-setup.md",
 	} {
 		contents, err := os.ReadFile(filepath.Join("..", "..", filepath.FromSlash(name)))
 		if err != nil {
@@ -177,21 +178,31 @@ func TestControllerPackageContents(t *testing.T) {
 			t.Fatal("script permissions/LF")
 		}
 	}
-	if len(payload) != 28 {
+	if len(payload) != 30 {
 		t.Fatalf("unexpected files: %v", payload)
 	}
-	if string(payload["etc/hlcp/controller/nodes.json"].data) != "[]\n" {
+	if string(payload["usr/share/hlcp-controller/nodes.json"].data) != "[]\n" {
 		t.Fatal("non-empty default allowlist")
 	}
-	if payload["etc/hlcp/controller/controller.env"].mode != 0600 {
-		t.Fatal("public configuration")
+	if payload["etc/hlcp/controller/"].mode != 0700 || payload["usr/share/hlcp-controller/controller.env"].mode != 0644 {
+		t.Fatal("directory or example mode")
 	}
 	unit := string(payload["usr/lib/systemd/system/hlcp-controller.service"].data)
 	if strings.Contains(unit, "/usr/local/bin/") || !strings.Contains(unit, "/usr/bin/hlcp-controller") {
 		t.Fatal("wrong packaged executable")
 	}
-	if !strings.Contains(string(control["conffiles"].data), "/etc/hlcp/controller/api-policy.json\n") {
-		t.Fatal("missing conffile")
+	if _, exists := control["conffiles"]; exists {
+		t.Fatal("live configuration must not be dpkg-owned")
+	}
+	for name := range payload {
+		if strings.HasPrefix(name, "etc/hlcp/controller/") && name != "etc/hlcp/controller/" {
+			t.Fatal("package occupies wizard namespace", name)
+		}
+	}
+	for _, name := range []string{"controller.env", "nodes.json", "api-policy.json"} {
+		if payload["usr/share/hlcp-controller/"+name].mode != 0644 {
+			t.Fatal("missing public example", name)
+		}
 	}
 	if bytes.Contains(contents, []byte("SECRET")) {
 		t.Fatal("packaged secret")

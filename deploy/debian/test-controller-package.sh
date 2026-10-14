@@ -23,8 +23,10 @@ test "$(readlink /etc/systemd/system/hlcp-controller.service)" = /dev/null
 rm /etc/systemd/system/hlcp-controller.service
 apt-get install -y "$first"
 test "$(stat -c %a /etc/hlcp/controller)" = 700
-test "$(stat -c %a /etc/hlcp/controller/controller.env)" = 600
-test "$(cat /etc/hlcp/controller/nodes.json)" = "[]"
+test ! -e /etc/hlcp/controller/controller.env
+test ! -e /etc/hlcp/controller/nodes.json
+test ! -e /etc/hlcp/controller/api-policy.json
+test "$(cat /usr/share/hlcp-controller/nodes.json)" = "[]"
 test "$(id -u hlcp-controller)" != 0
 test ! -e /var/lib/hlcp-controller/controller-operations.json
 test ! -e /etc/hlcp/controller/controller.key
@@ -41,6 +43,7 @@ install -o hlcp-controller -g hlcp-controller -m 0600 /bin/true /var/lib/hlcp-co
 install -o root -g root -m 0600 /bin/true /etc/hlcp/controller/controller.key
 ledger_hash=$(sha256sum /var/lib/hlcp-controller/controller-operations.json)
 key_hash=$(sha256sum /etc/hlcp/controller/controller.key)
+install -o root -g root -m 0600 /usr/share/hlcp-controller/controller.env /etc/hlcp/controller/controller.env
 sed -i 's/127.0.0.1/192.0.2.44/' /etc/hlcp/controller/controller.env
 config_hash=$(sha256sum /etc/hlcp/controller/controller.env)
 apt-get install -y "$upgrade"
@@ -57,7 +60,7 @@ dpkg --remove hlcp-controller
 test ! -e /usr/bin/hlcp-controller
 test -f /etc/hlcp/controller/controller.env
 dpkg --purge hlcp-controller
-test ! -e /etc/hlcp/controller/controller.env
+test "$config_hash" = "$(sha256sum /etc/hlcp/controller/controller.env)"
 test "$ledger_hash" = "$(sha256sum /var/lib/hlcp-controller/controller-operations.json)"
 test "$key_hash" = "$(sha256sum /etc/hlcp/controller/controller.key)"
 test "$uid" = "$(id -u hlcp-controller)"

@@ -442,6 +442,15 @@ odmítnuté do ověření service sandboxu. Metadata nejsou záruka prostředí 
 health či existence resource. [Kontrakt a acceptance](36-native-resource-readiness.md).
 P05/checkpoint B a vydané preview.4 se tímto neuzavírají/nemění.
 
+P05o fresh controller package/setup: public defaults přesunuté do /usr/share,
+live /etc namespace je prázdný a vzniká až confirmed wizardem. Debian 13 amd64
+install + skutečný setup/preview/repeat/conflict prošly v izolovaném kontejneru;
+package upgrade/downgrade/remove/purge zachovává fresh unmanaged config/state.
+Legacy conffiles přežijí upgrade jako obsolete, ale purge je podle dpkg evidence
+může odstranit; žádná tichá změna databáze či legacy config migrace.
+[Kontrakt a evidence](37-controller-package-setup.md). Booted VM/reboot,
+system resource sandbox a celý checkpoint B zůstávají otevřené; preview.4 beze změny.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
