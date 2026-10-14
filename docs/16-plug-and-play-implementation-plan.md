@@ -336,6 +336,16 @@ File apply zůstává P04b transakce, journal nedotčený.
 [Creation/persistence kontrakt](25-setup-directory-provisioning.md).
 Controller wizard, service orchestrace a VM/release acceptance zůstávají otevřené.
 
+P05d controller core: PlanController má shared imported server PKI validation,
+literal explicit management bind a canonical explicit admission (default []).
+Devět private files, importované odlišné operator/observer token snapshots,
+runtime-shared bounded policy/token/allowlist validators, preview bez RNG/writes
+a confirmed P04/P05c Apply. Repeat/conflict neprovádí token rotation nebo reset
+admission; ledger ani user CLI nejsou dotčené.
+[Core kontrakt/evidence](26-imported-controller-setup-core.md).
+Controller CLI/TTY wizard s post-consent credential creation/reuse, explicitní
+service/user-CLI provisioning a VM/release gate zůstávají otevřené.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.

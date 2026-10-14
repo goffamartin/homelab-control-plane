@@ -1,6 +1,7 @@
 package transport
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"io"
@@ -22,8 +23,20 @@ func LoadAllowedNodes(path string) (map[string]bool, error) {
 	if err != nil || !info.Mode().IsRegular() || info.Size() > 64*1024 {
 		return nil, errors.New("node allowlist must be a regular file of at most 64 KiB")
 	}
+	data, err := io.ReadAll(io.LimitReader(file, 64*1024+1))
+	if err != nil {
+		return nil, errors.New("cannot read node allowlist")
+	}
+	return ParseAllowedNodes(data)
+}
+
+// ParseAllowedNodes validates a bounded admission snapshot without file I/O.
+func ParseAllowedNodes(data []byte) (map[string]bool, error) {
+	if len(data) > 64*1024 {
+		return nil, errors.New("node allowlist exceeds 64 KiB")
+	}
 	var nodes []string
-	decoder := json.NewDecoder(io.LimitReader(file, 64*1024+1))
+	decoder := json.NewDecoder(bytes.NewReader(data))
 	if err := decoder.Decode(&nodes); err != nil || nodes == nil || len(nodes) > 1024 {
 		return nil, errors.New("node allowlist must be a JSON array of at most 1024 identities")
 	}

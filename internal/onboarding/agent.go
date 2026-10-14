@@ -127,6 +127,11 @@ func PlanAgent(ctx context.Context, directory string, owner setup.Owner, options
 		{Name: "ca.crt", Data: material.peerTrust, Mode: 0600, Validate: validateCA},
 		{Name: "issuer-ca.crt", Data: material.issuerTrust, Mode: 0600, Validate: validateCA},
 	}
+	return planFiles(ctx, directory, owner, intents)
+}
+
+// Shared confirmed file/directory application, independent of runtime role.
+func planFiles(ctx context.Context, directory string, owner setup.Owner, intents []setup.Intent) (*AgentSetup, error) {
 	planner, err := setup.OpenPlanner(directory, owner)
 	if err != nil {
 		if !errors.Is(err, setup.ErrMissingDirectory) {

@@ -32,6 +32,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Imported TLS validation and generic agent setup planning (P05a)](docs/23-imported-agent-setup-core.md)
 - [Imported agent setup CLI (P05b, preview and confirmed apply)](docs/24-imported-agent-setup-cli.md)
 - [Confirmed private config-directory provisioning (P05c)](docs/25-setup-directory-provisioning.md)
+- [Imported controller setup planning (P05d)](docs/26-imported-controller-setup-core.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status

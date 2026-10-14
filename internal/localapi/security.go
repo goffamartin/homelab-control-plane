@@ -52,6 +52,14 @@ func LoadToken(path string) (string, error) {
 	if err != nil {
 		return "", errors.New("cannot read local API token file")
 	}
+	return ParseToken(data)
+}
+
+// ParseToken validates a bounded in-memory credential snapshot without file I/O.
+func ParseToken(data []byte) (string, error) {
+	if len(data) > 257 {
+		return "", errors.New("invalid local API token")
+	}
 	token := strings.TrimSuffix(strings.TrimSuffix(string(data), "\n"), "\r")
 	if len(token) < 32 || len(token) > 256 {
 		return "", errors.New("API token must contain 32 to 256 characters")
