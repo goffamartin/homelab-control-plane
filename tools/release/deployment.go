@@ -12,6 +12,7 @@ import (
 
 // Explicit source allowlist: never package a directory walk or local secrets.
 var deploymentFiles = []string{
+	"deploy/debian/inspect-onboarding-host.sh",
 	"deploy/systemd/hlcp-controller.service",
 	"deploy/systemd/hlcp-agent.service",
 	"deploy/systemd/hlcp-agent-docker.conf",
@@ -39,6 +40,7 @@ var deploymentFiles = []string{
 	"docs/15-onboarding-and-agent-profile-design-notes.md",
 	"docs/16-plug-and-play-implementation-plan.md",
 	"docs/18-script-resource-contract.md",
+	"docs/47-debian-onboarding-acceptance.md",
 }
 
 func writeDeployment(root string, output io.Writer) error {

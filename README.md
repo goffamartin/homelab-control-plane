@@ -53,6 +53,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Source-bound one-shot system agent start adapter (P05v)](docs/44-sandbox-verified-agent-start.md)
 - [Confirmed sandbox probe-and-start CLI workflow (P05w)](docs/45-confirmed-sandbox-start-cli.md)
 - [Explicit boot enable after verified sandbox start (P05x)](docs/46-explicit-sandbox-agent-enable.md)
+- [Booted Debian onboarding acceptance runbook and read-only collector (P05y)](docs/47-debian-onboarding-acceptance.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status

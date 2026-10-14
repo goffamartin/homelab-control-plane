@@ -528,6 +528,14 @@ lifecycle properties, jejich actual flags zůstávají odděleně strict-bound.
 Booted Debian cleanup/registration/reboot acceptance navazuje; P05/checkpoint B
 otevřené, preview.4 a VM beze změn.
 
+P05y booted Debian acceptance runbook: dvě oddělené test VM, exact-SHA fresh
+candidate builds, imported setup/script fixture, preview/probe/start/enable,
+controller registration/action a reboot bez loginu. Read-only fixed-role collector
+je v deployment allowlistu, nečte secrets/config/logs a nic nestartuje.
+[Postup a evidence](47-debian-onboarding-acceptance.md). Local shell syntax/early
+refusal + deployment reproducibility nejsou live akceptace; live položky NOT RUN.
+P05/checkpoint B otevřené, preview.4 a produkční homelab beze změn.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
