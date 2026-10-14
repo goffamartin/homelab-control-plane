@@ -1,7 +1,8 @@
 # P05v — Source-bound one-shot system agent start adapter
 
 Stav: implementovaný composite lifecycle core a Linux native start adapter ve
-zdrojích. Veřejný `activate` ani `probe-resources` jej zatím nevolají. Nejde o
+zdrojích. Původně bez veřejného CLI; confirmed `probe-resources --start` navazuje
+v [P05w](45-confirmed-sandbox-start-cli.md). Původní `activate` se nemění. Nejde o
 nový release ani ověřený běh v booted systemd; preview.4 a VM jsou beze změn.
 P05/checkpoint B a veřejná system resource activation gate zůstávají otevřené.
 

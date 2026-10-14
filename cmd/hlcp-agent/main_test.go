@@ -78,7 +78,7 @@ func TestInternalSandboxInspectorDoesNotLoadAgent(t *testing.T) {
 
 func TestResourceProbeHelpDoesNotLoadAgent(t *testing.T) {
 	if os.Getenv("HLCP_PROBE_MAIN_HELPER") == "1" {
-		os.Args = []string{"hlcp-agent", "probe-resources", "--help"}
+		os.Args = []string{"hlcp-agent", "probe-resources", "--start", "--help"}
 		main()
 		return
 	}
