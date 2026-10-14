@@ -29,6 +29,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Read-only setup planning core (P04a, internal foundation)](docs/20-setup-planning-core.md)
 - [Confirmed local setup transactions and recovery (P04b)](docs/21-setup-transactions.md)
 - [Offline read-only doctor (first P04c block)](docs/22-offline-doctor.md)
+- [Imported TLS validation and generic agent setup planning (P05a)](docs/23-imported-agent-setup-core.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status

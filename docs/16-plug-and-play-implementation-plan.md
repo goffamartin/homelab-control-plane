@@ -310,6 +310,15 @@ Akceptace: první fresh booted controller + script-only agent s externí PKI bez
 
 Commity: `Add imported-certificate controller setup`; `Add imported-certificate agent setup`.
 
+P05a stav: interní onboarding jádro sdílí imported TLS role/identity/EKU/chain
+validaci s explicitně odděleným issuer a peer trust. Generic agent setup factory
+připraví private transakční plán konfigurace/TLS, resources [], journal mimo
+config directory a žádné service/admission operace. Fresh/repeat/conflict
+sémantika zachovává existující manuální config a provozní historii.
+[P05a kontrakt a lokální evidence](23-imported-agent-setup-core.md).
+CLI/TTY průvodci, controller provisioning a service orchestrace zůstávají
+otevřené; P05 není uzavřené a preview.4 se nemění.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
