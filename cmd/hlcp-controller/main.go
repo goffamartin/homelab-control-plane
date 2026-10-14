@@ -23,6 +23,12 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "configure-client" {
+		os.Exit(onboarding.ClientGrantCLI(os.Args[2:], os.Stdout))
+	}
+	if len(os.Args) == 2 && os.Args[1] == "__client-provision" {
+		os.Exit(onboarding.ClientProvisionChild(os.Stdin, os.Stdout))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "activate" {
 		os.Exit(onboarding.ControllerActivationCLI(os.Args[2:], os.Stdout))
 	}
