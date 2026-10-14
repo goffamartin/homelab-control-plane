@@ -162,16 +162,24 @@ func requireDeadChild(t *testing.T, pidFile string) {
 		// Orphan zombies can await PID 1's reaper in a disposable container.
 		return err == nil && strings.Contains(string(data), ") Z ")
 	}
+	observedDead := false
 	t.Cleanup(func() {
-		if !dead() {
+		if !observedDead && !dead() {
 			_ = syscall.Kill(pid, syscall.SIGKILL)
 		}
 	})
 	deadline := time.Now().Add(time.Second)
-	for !dead() && time.Now().Before(deadline) {
+	for {
+		// Once disappearance/zombie state is observed, the original process is
+		// dead. Do not query the PID again and contradict a terminal observation
+		// with a racing /proc read (or kill an unrelated reused PID in cleanup).
+		if dead() {
+			observedDead = true
+			return
+		}
+		if !time.Now().Before(deadline) {
+			t.Fatalf("child %d survived script group cleanup", pid)
+		}
 		time.Sleep(10 * time.Millisecond)
-	}
-	if !dead() {
-		t.Fatalf("child %d survived script group cleanup", pid)
 	}
 }
