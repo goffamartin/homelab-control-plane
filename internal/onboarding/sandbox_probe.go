@@ -8,6 +8,7 @@ import (
 	"hlcp/deploy/systemd"
 	"hlcp/internal/agent"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -134,10 +135,11 @@ func sandboxProbeInputs(config agent.Config) (SandboxProbeInputs, error) {
 			}
 			command := resource.Commands[action]
 			for _, path := range []string{command.Executable, command.WorkingDirectory} {
-				for _, hidden := range []string{"/home", "/root", "/run/user", "/tmp", "/var/tmp"} {
-					if underSystemPath(path, hidden) {
-						return SandboxProbeInputs{}, ErrSandboxProbeUnsupported
-					}
+				if path == config.CertificateFile || path == config.PrivateKeyFile || path == config.CAFile {
+					return SandboxProbeInputs{}, ErrSandboxProbeUnsupported
+				}
+				if !validInspectorPath(path) || path == config.JournalFile || strings.HasPrefix(path, config.JournalFile+".") {
+					return SandboxProbeInputs{}, ErrSandboxProbeUnsupported
 				}
 			}
 			files = append(files, sandboxProbeFile{command.Executable, command.WorkingDirectory})

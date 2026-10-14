@@ -115,6 +115,9 @@ func inspectorDigest(value string) ([32]byte, bool) {
 	return result, result != [32]byte{}
 }
 func validInspectorPath(value string) bool {
+	if underSystemPath(value, "/run/credentials") || value == "/var/lib/hlcp/command-journal.json" || strings.HasPrefix(value, "/var/lib/hlcp/command-journal.json.") {
+		return false
+	}
 	if len(value) > 4096 || !utf8.ValidString(value) || strings.ContainsRune(value, 0) || !path.IsAbs(value) || path.Clean(value) != value {
 		return false
 	}
