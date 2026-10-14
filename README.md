@@ -42,6 +42,7 @@ The project deliberately focuses on a narrow, observable protocol: an outbound-c
 - [Agent service activation core and system credential paths (P05k)](docs/33-agent-service-activation-core.md)
 - [Native agent activation CLI for initial imported setup (P05l)](docs/34-native-agent-activation-cli.md)
 - [Resource readiness rules and native integration gate (P05m)](docs/35-resource-readiness-core.md)
+- [Native Linux user resource metadata preflight (P05n)](docs/36-native-resource-readiness.md)
 - [Architecture decisions](docs/adr/README.md)
 
 ## Status

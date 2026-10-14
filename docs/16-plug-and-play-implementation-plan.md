@@ -434,6 +434,14 @@ activation snapshotu teprve navazují; empty-only activation gate se nemění.
 [Kontrakt a otevřené brány](35-resource-readiness-core.md). P05/checkpoint B
 a preview.4 zůstávají otevřené/beze změny.
 
+P05n native Linux user resource metadata preflight je napojený do activation
+snapshotu: fixed Docker socket, rootless Podman mappings/setuid helpers, script
+executable/interpreter/working directory a status-only systemd. Žádné resource
+execution, runtime CLI/API, grants či journal read. System-scope resources nadále
+odmítnuté do ověření service sandboxu. Metadata nejsou záruka prostředí služby,
+health či existence resource. [Kontrakt a acceptance](36-native-resource-readiness.md).
+P05/checkpoint B a vydané preview.4 se tímto neuzavírají/nemění.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.

@@ -1,8 +1,9 @@
 # P05m — Resource readiness: společná pravidla
 
-Stav: implementovaný a testovaný interní core, zatím bez native Linux hostu a bez
-napojení do `hlcp-agent activate`. Nemění vydané preview.4 ani chování instalace.
-Dosavadní aktivace stále vyžaduje prázdné resources/capabilities.
+Stav původního P05m: implementovaný a testovaný interní core bez native hostu.
+Navazující [P05n](36-native-resource-readiness.md) již přidává Linux host a user-scope
+napojení do `hlcp-agent activate`. Tento dokument popisuje samostatný core;
+preview.4 se nemění. System-scope resources mají nadále samostatnou otevřenou bránu.
 
 ## Co tento blok připravuje
 
@@ -37,7 +38,7 @@ zůstávají explicitně neověřené; core není oprávnění ke spuštění sl
 
 ## Následující blok a acceptance
 
-Linux host musí ověřovat skutečného non-root uživatele, bezpečně a omezeně číst
+Navazující Linux host musí ověřovat skutečného non-root uživatele, bezpečně a omezeně číst
 soubory, odmítat nebezpečné ownership/permissions a změny během čtení. Bez socket
 connect, runtime příkazů nebo resource execution. Poté se jeho důkaz připojí do
 activation snapshotu a znovu ověří před i po lifecycle změně. Teprve tento blok

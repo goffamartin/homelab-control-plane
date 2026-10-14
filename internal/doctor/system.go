@@ -133,6 +133,15 @@ func checkUnit(p map[string]string, scope string, add func(string, string, strin
 }
 
 func validSubordinateRange(data []byte, account Account) bool {
+	return ValidSubordinateRange(data, account)
+}
+
+// ValidSubordinateRange only validates a bounded mapping declaration, not helper
+// privileges, runtime storage, cgroups or successful namespace creation.
+func ValidSubordinateRange(data []byte, account Account) bool {
+	if len(data) > MaximumFileSize {
+		return false
+	}
 	for _, line := range strings.Split(string(data), "\n") {
 		fields := strings.Split(line, ":")
 		if len(fields) != 3 || (fields[0] != account.Name && fields[0] != account.UID) {
