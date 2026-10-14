@@ -20,11 +20,13 @@ type sandboxProbeCLIHost interface {
 }
 
 type sandboxProbeReport struct {
-	Status   string               `json:"status"`
-	Code     string               `json:"code,omitempty"`
-	ReadOnly bool                 `json:"read_only"`
-	Preview  *SandboxProbePreview `json:"preview,omitempty"`
-	Result   *SandboxProbeResult  `json:"result,omitempty"`
+	Status         string               `json:"status"`
+	Code           string               `json:"code,omitempty"`
+	ReadOnly       bool                 `json:"read_only"`
+	Preview        *SandboxProbePreview `json:"preview,omitempty"`
+	Result         *SandboxProbeResult  `json:"result,omitempty"`
+	StartRequested bool                 `json:"start_requested,omitempty"`
+	Start          *SandboxStartResult  `json:"start,omitempty"`
 }
 
 func SandboxProbeCLI(args []string, out io.Writer) int {
@@ -36,17 +38,21 @@ func runSandboxProbeCLI(args []string, out io.Writer, host sandboxProbeCLIHost) 
 	f.SetOutput(io.Discard)
 	apply := f.Bool("apply", false, "launch fixed metadata inspector")
 	yes := f.Bool("yes", false, "separate probe consent")
+	start := f.Bool("start", false, "after a matching fresh probe, start the inactive system agent")
 	jsonOutput := f.Bool("json", false, "redacted JSON report")
 	if err := f.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
-			if _, e := fmt.Fprintln(out, "Usage: hlcp-agent probe-resources [--json] [--apply --yes]\nDefault: read-only preview. Requires root, installed package and local booted Linux systemd.\nFixed system profile and /etc/hlcp/agent configuration; inactive agent, absent probe.\nOnly script executable/workdir metadata is inspected; no configured actions run.\nApply creates a transient sandbox and may create its StateDirectory.\nNo main-agent start/enable, persisted readiness receipt or activation-gate bypass.\nAfter uncertain outcome inspect actual state before retry."); e == nil {
+			if _, e := fmt.Fprintln(out, "Usage: hlcp-agent probe-resources [--start] [--json] [--apply --yes]\nDefault: read-only preview. Requires root, installed package and local booted Linux systemd.\nFixed system profile and /etc/hlcp/agent configuration; inactive agent, absent probe.\nOnly script executable/workdir metadata is inspected; no configured actions run by probes.\nApply creates a transient sandbox and may create its StateDirectory.\n--start with --apply --yes repeats the sandbox check and starts the inactive agent.\nAgent start opens its normal journal/runtime and outbound controller connection.\nWithout --start, no main-agent start. No enable/restart/reset or persisted receipt.\n--start alone is still read-only preview. Live Debian acceptance remains pending.\nAfter uncertain outcome inspect actual state before retry."); e == nil {
 				return 0
 			}
 		}
 		fmt.Fprintln(out, "Invalid probe options. Use probe-resources --help.")
 		return 2
 	}
+	var startResult *SandboxStartResult
 	emit := func(report sandboxProbeReport) int {
+		report.StartRequested = *start
+		report.Start = startResult
 		var err error
 		if *jsonOutput {
 			err = json.NewEncoder(out).Encode(report)
@@ -57,6 +63,12 @@ func runSandboxProbeCLI(args []string, out io.Writer, host sandboxProbeCLIHost) 
 			}
 			if err == nil && report.Result != nil {
 				_, err = fmt.Fprintf(out, "Completed: %t; uncertain: %t. No activation receipt stored.\n", report.Result.Completed, report.Result.Uncertain)
+			}
+			if err == nil && *start {
+				_, err = fmt.Fprintln(out, "Planned: fresh matching sandbox check, then start inactive system agent (no enable/restart).")
+			}
+			if err == nil && report.Start != nil {
+				_, err = fmt.Fprintf(out, "Verified started: %t; uncertain: %t. Active state is not controller registration/health.\n", report.Start.Started, report.Start.Uncertain)
 			}
 		}
 		if err != nil {
@@ -77,6 +89,9 @@ func runSandboxProbeCLI(args []string, out io.Writer, host sandboxProbeCLIHost) 
 			code = "STALE_PLAN"
 		case errors.Is(err, ErrSandboxProbeIncomplete):
 			code = "PROBE_INCOMPLETE"
+			if startResult != nil {
+				code = "START_INCOMPLETE"
+			}
 		}
 		if emit(sandboxProbeReport{Status: "failed", Code: code, ReadOnly: readonly, Preview: preview, Result: result}) != 0 {
 			return 2
@@ -90,6 +105,14 @@ func runSandboxProbeCLI(args []string, out io.Writer, host sandboxProbeCLIHost) 
 	defer cancel()
 	if host == nil {
 		return failure(ErrSandboxProbeInvalid, true, nil, nil)
+	}
+	if *start {
+		if _, ok := host.(sandboxStartHost); !ok {
+			if emit(sandboxProbeReport{Status: "failed", Code: "START_UNAVAILABLE", ReadOnly: true}) != 0 {
+				return 2
+			}
+			return 1
+		}
 	}
 	uid, gid, err := host.Caller(preflight)
 	if err != nil || uid != 0 || gid != 0 {
@@ -107,9 +130,22 @@ func runSandboxProbeCLI(args []string, out io.Writer, host sandboxProbeCLIHost) 
 	if !*apply {
 		return emit(sandboxProbeReport{Status: "preview", ReadOnly: true, Preview: &preview})
 	}
-	result, err := plan.Apply(ctx, true)
+	workflow, cancelWorkflow := context.WithTimeout(ctx, 90*time.Second)
+	defer cancelWorkflow()
+	result, err := plan.Apply(workflow, true)
 	if err != nil {
 		return failure(err, !result.Completed && !result.Uncertain, &preview, &result)
+	}
+	if *start {
+		ready, err := PlanSandboxReadiness(workflow, plan)
+		if err != nil {
+			return failure(err, false, &preview, &result)
+		}
+		r, err := ready.Start(workflow, true)
+		startResult = &r
+		if err != nil {
+			return failure(err, false, &preview, &result)
+		}
 	}
 	return emit(sandboxProbeReport{Status: "applied", ReadOnly: false, Preview: &preview, Result: &result})
 }

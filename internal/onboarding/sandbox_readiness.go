@@ -14,7 +14,7 @@ const sandboxReadinessMaximumAge = 2 * time.Minute
 // Only a completed probe can produce a plan; Apply must repeat the sandbox
 // inspection and match dependency evidence before a future start adapter may
 // consider it. Start couples revalidation and the fixed native start adapter;
-// no CLI path consumes this evidence yet.
+// the confirmed probe-resources --start workflow consumes this in-process.
 type SandboxReadiness struct{ *sandboxReadinessState }
 
 type sandboxReadinessState struct {

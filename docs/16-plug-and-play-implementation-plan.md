@@ -512,6 +512,13 @@ inactive → active, nikoli změnu enabled/source. Bez enable/restart/reset/gran
 booted VM/cleanup/reboot akceptace navazuje. P05/checkpoint B a veřejná system
 resource activation gate otevřené; preview.4 a VM beze změn.
 
+P05w confirmed CLI `probe-resources --start`: výchozí read-only plán, dvojí
+consent pro initial probe → fresh revalidation → fixed start a active postcheck.
+Report zachovává první probe a oddělený start/uncertain stav; partial mutation
+není hlášená jako read-only. [Postup](45-confirmed-sandbox-start-cli.md).
+Původní activate gate se nemění; explicit enable a booted Debian registration/
+reboot acceptance navazují. P05/checkpoint B otevřené, preview.4 a VM beze změn.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
