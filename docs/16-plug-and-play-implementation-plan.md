@@ -451,6 +451,14 @@ může odstranit; žádná tichá změna databáze či legacy config migrace.
 [Kontrakt a evidence](37-controller-package-setup.md). Booted VM/reboot,
 system resource sandbox a celý checkpoint B zůstávají otevřené; preview.4 beze změny.
 
+P05p system resource constraints: odmítnutý system preflight nyní vrací pevné
+redigované constraints pro ProtectHome/PrivateTmp/read-only workdir, Podman
+privileged helpers, chybějící Docker opt-in group a neověřenou systemd autorizaci.
+Analýza respektuje fixed embedded profil, neprovádí host probes/exec/grants/writes
+a neuvolňuje activation gate. [Kontrakt](38-system-resource-sandbox-constraints.md).
+Skutečný sandbox probe potřebuje explicitní návrh/souhlas, pokud vytváří transient
+unit či namespace; nelze ho schovat do read-only preview. VM/checkpoint B otevřené.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
