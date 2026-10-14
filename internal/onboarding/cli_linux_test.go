@@ -11,9 +11,8 @@ import (
 
 func TestNativeSetupCLIWritesOnlyConfirmedPlan(t *testing.T) {
 	input := t.TempDir()
-	target := t.TempDir()
+	target := filepath.Join(t.TempDir(), "config")
 	os.Chmod(input, 0700)
-	os.Chmod(target, 0700)
 	material := agentMaterial(t)
 	files := map[string][]byte{"cert": material.certificate, "key": material.key, "peer": material.peerTrust, "issuer": material.issuerTrust}
 	for name, data := range files {
@@ -34,9 +33,11 @@ func TestNativeSetupCLIWritesOnlyConfirmedPlan(t *testing.T) {
 	if runAgentCLI(args, nil, &out, nativeSetupHost{}, false, testNow) != 0 {
 		t.Fatalf("%s", out.String())
 	}
-	entries, _ := os.ReadDir(target)
-	if len(entries) != 0 {
+	if _, err := os.Stat(target); !os.IsNotExist(err) {
 		t.Fatal("preview wrote")
+	}
+	if !strings.Contains(out.String(), "create-directory") {
+		t.Fatal("directory absent from preview")
 	}
 	out.Reset()
 	if runAgentCLI(append(args, "--apply", "--yes"), nil, &out, nativeSetupHost{}, false, testNow) != 0 {

@@ -45,9 +45,10 @@ PlanAgent binduje generated paths k přesnému private setup adresáři a sestav
 | ca.crt | Runtime controller trust |
 | issuer-ca.crt | Lokální evidence trust pro ověření vlastního leafu, ne runtime peer trust |
 
-Všechny soubory mají mode 0600. Adresář musí již existovat s mode 0700 a explicitním
-registrovaným setup.Owner; factory používá setup.OpenPlanner a vrací privátní
-AgentSetup s Preview/Apply/Close. Node ID, controller host:port, server name,
+Všechny soubory mají mode 0600. Existující adresář vyžaduje mode 0700 a explicitní
+registrovaný setup.Owner. Novější P05c podporuje také potvrzené vytvoření posledního
+adresáře pod bezpečným existujícím rodičem, viz [directory kontrakt](25-setup-directory-provisioning.md).
+Factory vrací privátní AgentSetup s Preview/Apply/Close. Node ID, controller host:port, server name,
 agent version a journal path jsou explicitní. DNS/IP syntax se ověří, nikoli
 jejich dostupnost. Journal musí být clean absolute mimo config directory,
 aby nemohl kolidovat s konfigurací nebo transakčními oblastmi.

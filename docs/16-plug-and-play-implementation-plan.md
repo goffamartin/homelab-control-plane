@@ -328,6 +328,14 @@ aktuální ověřený účet, žádná service/resource/admission aktivace.
 controller wizard a explicitní service orchestrace zůstávají další bloky;
 P05/release checkpoint B nejsou uzavřené.
 
+P05c: chybějící finální private config directory je nově součástí read-only
+preview a vzniká jen po consent, přes pinned safe parent + private staging
+NOREPLACE publish. Žádné recursive parents, adopted raced entry nebo permission
+repair; parent rebinding/unknown orphan/content fail closed a zachování.
+File apply zůstává P04b transakce, journal nedotčený.
+[Creation/persistence kontrakt](25-setup-directory-provisioning.md).
+Controller wizard, service orchestrace a VM/release acceptance zůstávají otevřené.
+
 ## P06 — Managed PKI a controller setup
 
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
