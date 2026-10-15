@@ -126,8 +126,8 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 		fmt.Fprintln(out, "Managed controller setup requires local Linux root.")
 		return 1
 	}
-	ctx, cancel := boundedContext()
-	defer cancel()
+	phases := newWorkflowContext()
+	defer phases.close()
 	if *offline && (*start || !offlineImage()) {
 		fmt.Fprintln(out, "Offline mode is only for stopped non-booted images, never service activation.")
 		return 2
@@ -142,14 +142,14 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	}
 	if *interactive {
 		if *listen == "" {
-			*listen, err = ui.line("Controller IP:port (for example 192.168.0.15:9443): ")
+			*listen, err = ui.lineContext(phases.input(), "Controller IP:port (for example 192.168.0.15:9443): ")
 			if err != nil {
 				return fail("INPUT_REQUIRED")
 			}
 		}
 		host, _, _ := net.SplitHostPort(*listen)
 		if *name == "" {
-			value, e := ui.line("Controller DNS/IP [" + host + "]: ")
+			value, e := ui.lineContext(phases.input(), "Controller DNS/IP ["+host+"]: ")
 			if e != nil {
 				return fail("INPUT_REQUIRED")
 			}
@@ -159,18 +159,18 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 			}
 		}
 		if *cliUser == "" {
-			*cliUser, err = ui.line("Existing non-root account for hlcp CLI (blank to skip): ")
+			*cliUser, err = ui.lineContext(phases.input(), "Existing non-root account for hlcp CLI (blank to skip): ")
 			if err != nil {
 				return fail("INPUT_REQUIRED")
 			}
 		}
-		value, e := ui.line("Start controller after setup? [yes/no]: ")
+		value, e := ui.lineContext(phases.input(), "Start controller after setup? [yes/no]: ")
 		if e != nil {
 			return fail("INPUT_REQUIRED")
 		}
 		*start = affirmative(value)
 		if *start {
-			value, e = ui.line("Enable controller after successful start? [yes/no]: ")
+			value, e = ui.lineContext(phases.input(), "Enable controller after successful start? [yes/no]: ")
 			if e != nil {
 				return fail("INPUT_REQUIRED")
 			}
@@ -216,7 +216,7 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	}
 	if *interactive {
 		fmt.Fprintf(out, "Plan: managed PKI, controller %s, enrollment %s, encrypted backup %s, start=%t, boot=%t.\n", *listen, *address, *backup, *start, *enable)
-		answer, e := ui.line("Apply this configuration? [yes/no]: ")
+		answer, e := ui.lineContext(phases.input(), "Apply this configuration? [yes/no]: ")
 		if e != nil || !affirmative(answer) {
 			fmt.Fprintln(out, "No changes applied.")
 			return 0
@@ -232,6 +232,7 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 		}
 		return 0
 	}
+	ctx := phases.operation()
 	var serviceBefore serviceState
 	if (*start || *migrate) && !*offline {
 		if reloadManager(ctx, "system") != nil {
@@ -282,6 +283,7 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	}
 	password := ""
 	if *interactive {
+		ctx = phases.input()
 		password, err = ui.secret(ctx, "Root backup password (at least 16 characters): ")
 		if err != nil {
 			return fail("PASSWORD_REQUIRED")
@@ -303,6 +305,7 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	if len(password) < 16 || len(password) > 1024 {
 		return fail("PASSWORD_LENGTH")
 	}
+	ctx = phases.operation()
 	var seed *managed.Seed
 	provisioned := false
 	if data, err := rootStore.Read("managed-bootstrap.json"); err == nil {
@@ -365,11 +368,12 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 		return fail("BACKUP_WRITE_FAILED")
 	}
 	if *interactive {
-		answer, e := ui.line("Encrypted backup saved. Retain it and its password OFF this VM. Acknowledge? [yes/no]: ")
+		answer, e := ui.lineContext(phases.input(), "Encrypted backup saved. Retain it and its password OFF this VM. Acknowledge? [yes/no]: ")
 		if e != nil || !affirmative(answer) {
 			return fail("BACKUP_ACK_REQUIRED")
 		}
 	}
+	ctx = phases.operation()
 	serviceUID, serviceGID, err := ensureAccount(ctx, "hlcp-controller")
 	if err != nil {
 		return fail("SERVICE_ACCOUNT_REFUSED")

@@ -112,13 +112,15 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 	if err != nil {
 		return fail("SCOPE_OR_ACCOUNT_INVALID")
 	}
-	ctx, cancel := boundedContext()
-	defer cancel()
+	phases := newWorkflowContext()
+	defer phases.close()
+	ctx := phases.operation()
 	if *offline && (*start || !offlineImage()) {
 		return fail("OFFLINE_MODE_NOT_AVAILABLE")
 	}
 	code := ""
 	if interactive {
+		ctx = phases.input()
 		if !ui.interactive {
 			return fail("TERMINAL_REQUIRED")
 		}
@@ -126,13 +128,13 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 		if err != nil {
 			return fail("PAIRING_REQUIRED")
 		}
-		answer, e := ui.line("Start agent and enable boot startup? [yes/no]: ")
+		answer, e := ui.lineContext(phases.input(), "Start agent and enable boot startup? [yes/no]: ")
 		if e != nil {
 			return fail("INPUT_REQUIRED")
 		}
 		*start = affirmative(answer)
 		*enable = *start
-		answer, e = ui.line("Pair this machine with the controller? [yes/no]: ")
+		answer, e = ui.lineContext(phases.input(), "Pair this machine with the controller? [yes/no]: ")
 		if e != nil || !affirmative(answer) {
 			fmt.Fprintln(out, "No changes applied.")
 			return 0
@@ -162,6 +164,7 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 		_ = json.NewEncoder(out).Encode(map[string]any{"status": "preview", "read_only": true, "scope": *scope, "node": invitation.NodeID, "controller": invitation.URL, "resume": *resume})
 		return 0
 	}
+	ctx = phases.operation()
 	// Refuse changing a live service before consuming the one-use invitation.
 	if (*start || *repair) && !*offline {
 		if reloadManager(ctx, *scope) != nil {

@@ -33,22 +33,31 @@ type terminal struct {
 func newTerminal(input io.Reader, out io.Writer) *terminal {
 	return &terminal{reader: bufio.NewReader(input), input: input, out: out, interactive: isTerminal(input)}
 }
-func (t *terminal) line(prompt string) (string, error) {
+func (t *terminal) lineContext(ctx context.Context, prompt string) (string, error) {
 	if _, err := fmt.Fprint(t.out, prompt); err != nil {
 		return "", err
 	}
-	chunk, err := t.reader.ReadSlice('\n')
-	data := string(chunk)
-	if len(data) > 4096 {
-		return "", ErrSetup
+	type result struct {
+		data string
+		err  error
 	}
-	if err != nil && !errors.Is(err, io.EOF) {
-		return "", err
+	done := make(chan result, 1)
+	go func() {
+		chunk, err := t.reader.ReadSlice('\n')
+		done <- result{string(chunk), err}
+	}()
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case value := <-done:
+		if len(value.data) == 0 || len(value.data) > 4096 {
+			return "", ErrSetup
+		}
+		if value.err != nil && !errors.Is(value.err, io.EOF) {
+			return "", value.err
+		}
+		return strings.TrimSpace(value.data), nil
 	}
-	if len(data) == 0 {
-		return "", ErrSetup
-	}
-	return strings.TrimSpace(data), nil
 }
 func (t *terminal) secret(ctx context.Context, prompt string) (string, error) {
 	if _, err := fmt.Fprint(t.out, prompt); err != nil {
