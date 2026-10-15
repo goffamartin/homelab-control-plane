@@ -11,6 +11,7 @@ import (
 	"hlcp/internal/transport"
 	"net/http"
 	"net/url"
+	"os"
 	"sync"
 	"time"
 )
@@ -43,11 +44,33 @@ func (*AgentIdentity) String() string               { return "managed agent iden
 func (i *AgentIdentity) GoString() string           { return i.String() }
 func (*AgentIdentity) MarshalJSON() ([]byte, error) { return []byte(`{"identity":"redacted"}`), nil }
 func CreateAgentIdentity(ctx context.Context, store *Store, id, enrollment string, key, csr []byte, result EnrollmentResult) error {
+	return ProvisionAgentIdentity(ctx, store, id, enrollment, key, csr, result, false)
+}
+
+func ProvisionAgentIdentity(ctx context.Context, store *Store, id, enrollment string, key, csr []byte, result EnrollmentResult, replace bool) error {
 	if !validEnrollmentURL(enrollment) || VerifyAgentMaterial(id, result.Certificate, key, result.CA, time.Now()) != nil {
 		return ErrPKI
 	}
 	d := identityDisk{Version: 1, NodeID: id, EnrollmentURL: enrollment, Key: key, CSR: csr, CA: result.CA, Certificate: result.Certificate, LastSuccess: time.Now()}
 	data, _ := json.Marshal(d)
+	if before, err := store.Read(identityFile); err == nil {
+		var old identityDisk
+		if DecodeJSON(before, &old, 128<<10) != nil || old.NodeID != id {
+			return ErrPKI
+		}
+		if bytes.Equal(old.Key, key) && bytes.Equal(old.CA, result.CA) && VerifyAgentMaterial(id, old.Certificate, old.Key, old.CA, time.Now()) == nil {
+			return nil
+		}
+		if !replace {
+			return ErrConflict
+		}
+		if err := store.Update(ctx, "identity-before-repair.json", func([]byte) ([]byte, error) { return before, nil }); err != nil {
+			return err
+		}
+		return store.Update(ctx, identityFile, func([]byte) ([]byte, error) { return data, nil })
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	return store.Create(ctx, identityFile, data)
 }
 func OpenAgentIdentity(store *Store, id string) (*AgentIdentity, error) {

@@ -7,7 +7,9 @@ After=network-online.target
 Type=simple
 User=hlcp-controller
 Group=hlcp-controller
+Environment=HLCP_MANAGED_STATE=
 EnvironmentFile=/etc/hlcp/controller/controller.env
+EnvironmentFile=-/etc/hlcp/controller/managed.env
 LoadCredential=controller.crt:/etc/hlcp/controller/controller.crt
 LoadCredential=controller.key:/etc/hlcp/controller/controller.key
 LoadCredential=ca.crt:/etc/hlcp/controller/ca.crt

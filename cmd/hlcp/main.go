@@ -28,6 +28,9 @@ var outputMode string
 var operationIntent string
 
 func main() {
+	if args, ok := managedArguments(os.Args[1:]); ok {
+		os.Exit(managedCLI(args, os.Stdout))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "doctor" {
 		os.Exit(doctor.CLI(os.Args[2:], "controller", os.Stdout))
 	}

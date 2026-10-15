@@ -17,7 +17,7 @@ import (
 
 var ErrAgentOptions = errors.New("onboarding: agent setup options are invalid")
 
-type AgentOptions struct{ NodeID, ControllerAddress, ServerName, JournalFile, AgentVersion, Scope string }
+type AgentOptions struct{ NodeID, ControllerAddress, ServerName, JournalFile, AgentVersion, Scope, ManagedDirectory string }
 
 // AgentSetup contains a private transaction plan. It cannot start services or
 // admit a node, and never writes a journal or enables resources.
@@ -111,6 +111,7 @@ func PlanAgent(ctx context.Context, directory string, owner setup.Owner, options
 		CertificateFile: filepath.Join(directory, "agent.crt"), PrivateKeyFile: filepath.Join(directory, "agent.key"),
 		CAFile: filepath.Join(directory, "ca.crt"), JournalFile: options.JournalFile, AgentVersion: options.AgentVersion,
 		Capabilities: []string{}, Resources: []agent.ResourceConfig{}}
+	config.ManagedDirectory = options.ManagedDirectory
 	if options.Scope == "system" {
 		// The dedicated service account cannot read root's mode-0700 provisioning
 		// directory; systemd supplies independent credential snapshots instead.

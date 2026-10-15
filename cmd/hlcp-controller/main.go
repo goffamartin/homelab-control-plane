@@ -12,6 +12,7 @@ import (
 	"hlcp/internal/liveness"
 	"hlcp/internal/localapi"
 	"hlcp/internal/managed"
+	"hlcp/internal/managedcli"
 	"hlcp/internal/onboarding"
 	"hlcp/internal/telemetry"
 	"hlcp/internal/transport"
@@ -25,6 +26,9 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "pki" {
+		os.Exit(managedcli.ControllerPKI(os.Args[2:], os.Stdin, os.Stdout))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "configure-client" {
 		os.Exit(onboarding.ClientGrantCLI(os.Args[2:], os.Stdout))
 	}
@@ -35,7 +39,10 @@ func main() {
 		os.Exit(onboarding.ControllerActivationCLI(os.Args[2:], os.Stdout))
 	}
 	if len(os.Args) > 1 && os.Args[1] == "setup" {
-		os.Exit(onboarding.ControllerCLI(os.Args[2:], os.Stdin, os.Stdout))
+		if managedcli.ManagedSetup(os.Args[2:]) {
+			os.Exit(managedcli.ControllerSetup(os.Args[2:], os.Stdin, os.Stdout))
+		}
+		os.Exit(onboarding.ControllerCLI(managedcli.WithoutImported(os.Args[2:]), os.Stdin, os.Stdout))
 	}
 	if len(os.Args) > 1 && os.Args[1] == "doctor" {
 		os.Exit(doctor.CLI(os.Args[2:], "controller", os.Stdout))
@@ -187,7 +194,7 @@ func main() {
 		extra = append(extra, httpService{https, tls.NewListener(listener, enrollmentTLS)})
 		worker, stopWorker := context.WithCancel(ctx)
 		done := make(chan struct{})
-		go func() { defer close(done); managedRuntime.Identity.Maintain(worker, nil) }()
+		go func() { defer close(done); managedRuntime.Identity.Maintain(worker, managed.StatusReporter(os.Stderr)) }()
 		defer func() { stopWorker(); <-done }()
 	}
 	if *apiPolicyFile != "" {

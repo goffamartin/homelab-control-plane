@@ -67,7 +67,7 @@ po collection interpretovat s úspěšným CLI reportem, nikoli jen exit code co
 Na controller VM v interaktivním TTY:
 
 ```sh
-sudo /usr/bin/hlcp-controller setup --interactive --admit acceptance-system-01
+sudo /usr/bin/hlcp-controller setup --imported --interactive --admit acceptance-system-01
 sudo /usr/bin/hlcp-controller activate --enable
 sudo /usr/bin/hlcp-controller activate --enable --apply --yes
 sh deploy/debian/inspect-onboarding-host.sh controller

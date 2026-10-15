@@ -7,6 +7,7 @@ import (
 	"hlcp/internal/agent"
 	"hlcp/internal/buildinfo"
 	"hlcp/internal/doctor"
+	"hlcp/internal/managedcli"
 	"hlcp/internal/onboarding"
 	"hlcp/internal/telemetry"
 	"os"
@@ -16,6 +17,18 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "certificates" {
+		os.Exit(managedcli.AgentCertificates(os.Args[2:], os.Stdout))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "resources" {
+		os.Exit(managedcli.Resources(os.Args[2:], os.Stdin, os.Stdout))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "join" {
+		os.Exit(managedcli.Join(os.Args[2:], os.Stdin, os.Stdout))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "prepare-user" {
+		os.Exit(managedcli.PrepareUser(os.Args[2:], os.Stdout))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "--internal-sandbox-inspector" {
 		os.Exit(onboarding.SandboxInspectorCLI(os.Args[2:], os.Stdin, os.Stdout))
 	}

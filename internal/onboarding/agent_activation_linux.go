@@ -8,6 +8,7 @@ import (
 	"errors"
 	"hlcp/deploy/systemd"
 	"hlcp/internal/agent"
+	"hlcp/internal/managed"
 	"hlcp/internal/setup"
 	"net"
 	"os"
@@ -309,6 +310,42 @@ func agentServiceConfig(ctx context.Context, directory string, owner setup.Owner
 		return nil, ErrAgentActivationProfile
 	}
 	material, err := NewImportedTLS(files[1].Data, files[2].Data, files[3].Data, files[4].Data)
+	if config.ManagedDirectory != "" {
+		managedPath := filepath.Join(home, ".local", "state", "hlcp", "managed")
+		stateOwner := owner
+		if profile.Scope == "system" {
+			managedPath = "/var/lib/hlcp/managed"
+			account, e := serviceActivationAccount("hlcp")
+			if e != nil {
+				return nil, ErrAgentActivationProfile
+			}
+			fields := strings.Split(account, ":")
+			uid, e1 := strconv.ParseUint(fields[2], 10, 32)
+			gid, e2 := strconv.ParseUint(fields[3], 10, 32)
+			if e1 != nil || e2 != nil {
+				return nil, ErrAgentActivationProfile
+			}
+			stateOwner = setup.Owner{UID: uint32(uid), GID: uint32(gid)}
+		}
+		if config.ManagedDirectory != managedPath {
+			return nil, ErrAgentActivationProfile
+		}
+		identitySource, e := setup.OpenPlanner(managedPath, stateOwner)
+		if e != nil {
+			return nil, ErrAgentActivationProfile
+		}
+		snapshot, e := identitySource.Snapshot("identity.json", 128<<10)
+		_ = identitySource.Close()
+		if e != nil || !snapshot.Exists || snapshot.Mode != 0600 {
+			return nil, ErrAgentActivationProfile
+		}
+		chain, key, root, e := managed.IdentityMaterial(snapshot.Data, config.NodeID, now)
+		if e != nil || !bytes.Equal(root, files[3].Data) {
+			return nil, ErrAgentActivationProfile
+		}
+		material, err = NewImportedTLS(chain, key, root, root)
+		files = append(files, snapshot)
+	}
 	if err != nil {
 		return nil, ErrAgentActivationProfile
 	}
