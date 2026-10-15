@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"hlcp/internal/releaseauth"
 	"io"
 	"os"
 	"os/exec"
@@ -27,10 +28,12 @@ type artifact struct {
 	SHA256 string `json:"sha256"`
 }
 type manifest struct {
-	Version   string     `json:"version"`
-	Revision  string     `json:"revision"`
-	GoVersion string     `json:"go_version"`
-	Artifacts []artifact `json:"artifacts"`
+	Version         string     `json:"version"`
+	Revision        string     `json:"revision"`
+	GoVersion       string     `json:"go_version"`
+	ProtocolVersion int        `json:"protocol_version"`
+	StateVersion    int        `json:"state_version"`
+	Artifacts       []artifact `json:"artifacts"`
 }
 
 func main() {
@@ -38,10 +41,18 @@ func main() {
 	version := flag.String("version", "dev", "release version label")
 	targets := flag.String("targets", "linux/amd64,linux/arm64,windows/amd64", "supported OS/architecture pairs")
 	allowDirty := flag.Bool("allow-dirty", false, "local validation only; mark revision with -dirty")
+	signingKey := flag.String("signing-key", "", "explicit private Ed25519 signing key; must match pinned public key")
 	flag.Parse()
 	if err := release(*out, *version, *targets, *allowDirty); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+	if *signingKey != "" {
+		public, err := os.ReadFile("deploy/install/release.pub")
+		if err != nil || releaseauth.SignDirectory(*out, *signingKey, public) != nil {
+			fmt.Fprintln(os.Stderr, "Release signing failed; unsigned artifacts must not be published as verified releases.")
+			os.Exit(1)
+		}
 	}
 }
 
@@ -150,7 +161,7 @@ func release(out, version, targetList string, allowDirty bool) error {
 	if runtime.GOOS == "windows" {
 		goBinary += ".exe"
 	}
-	result := manifest{Version: version, Revision: revision, GoVersion: runtime.Version()}
+	result := manifest{Version: version, Revision: revision, GoVersion: runtime.Version(), ProtocolVersion: 1, StateVersion: 1}
 	ldflags := "-s -w -buildid= -X hlcp/internal/buildinfo.Version=" + version + " -X hlcp/internal/buildinfo.Revision=" + revision
 	for _, target := range targets {
 		for _, name := range commands {

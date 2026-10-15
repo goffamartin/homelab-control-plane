@@ -11,6 +11,7 @@ import (
 	"hlcp/internal/cli"
 	"hlcp/internal/doctor"
 	"hlcp/internal/localapi"
+	"hlcp/internal/managedcli"
 	"io"
 	"net"
 	"net/http"
@@ -28,6 +29,12 @@ var outputMode string
 var operationIntent string
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "verify-release" {
+		os.Exit(verifyReleaseCLI(os.Args[2:], os.Stdout))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "package-backup" {
+		os.Exit(managedcli.PackageBackup(os.Args[2:], os.Stdout))
+	}
 	if args, ok := managedArguments(os.Args[1:]); ok {
 		os.Exit(managedCLI(args, os.Stdout))
 	}
