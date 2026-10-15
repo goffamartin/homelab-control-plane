@@ -1,7 +1,8 @@
-# Local script resources (P02/P03)
+# Local script actions and resources
 
 P02 defined the configuration; P03 adds Linux execution with no container runtime.
-Existing Docker, Podman and systemd configurations still run. Non-Linux script
+Docker, Podman and systemd resources may also add custom named script actions.
+Existing configurations, including legacy `commands: {}`, still load. Non-Linux script
 startup fails before opening the journal. `hlcp-agent -check-config`
 validates the schema without accessing TLS files, probing executables or running
 scripts. A successful check does not establish executable availability or rights.
@@ -31,9 +32,49 @@ resources:
         timeout: 20s
 ```
 
-Every action must have exactly one matching command; extra/missing commands,
+For the `script` adapter, every action must have exactly one matching command; extra/missing commands,
 duplicate keys, unknown fields and duplicate actions are rejected. Script
-resources have no `target`. Other adapters do not accept `commands`.
+resources have no `target`.
+
+## Extend a native resource
+
+`commands` is optional on every adapter. Add `script` to the existing
+`resource.control` and runtime capabilities whenever commands are nonempty:
+
+```yaml
+capabilities: [resource.control, podman, script]
+resources:
+  - id: app
+    type: container
+    adapter: podman
+    target: app
+    actions: [status, restart, backup]
+    commands:
+      backup:
+        executable: /bin/bash
+        argv: [/opt/hlcp/scripts/backup.sh]
+        working_directory: /opt/hlcp
+        timeout: 10s
+```
+
+`status` and `restart` use Podman; `backup` uses the fixed local script. Docker
+and systemd use the same extension model while retaining their original type
+and target. On native adapters, `status`, `start`, `stop`, and `restart` are
+reserved even if not enabled: commands cannot override them. Every custom name
+must appear in `actions` and have exactly one command; unused commands fail
+validation rather than being silently enabled. Script-only resources retain
+their existing behavior, including a potentially mutating script named `status`.
+
+Missing, null and empty `commands` are equivalent on native resources. New YAML
+serialization omits empty maps; older generated `commands: {}` needs no manual
+cleanup. No automatic pre/post hooks or implicit script execution are added.
+
+User-scope readiness and doctor inspect custom executable/workdir metadata on
+all adapters without running commands. Existing runtime checks and the 128-script
+readiness limit still apply. User systemd readiness permits native status plus
+custom commands, but native service mutations still require the existing explicit
+authorization review. System-scope mixed resources retain the sandbox gate; a
+script-file probe alone cannot establish Docker/Podman/systemd readiness.
 
 Executable and working directory are required clean absolute Linux paths, at
 most 4096 bytes, valid UTF-8 without NUL. No executable PATH lookup or implicit
@@ -59,11 +100,14 @@ local rights; it is not sandboxed and gains no implicit sudo privileges.
 
 ## Controller and CLI
 
-Only resource ID, type `task` and action names appear in the existing inventory.
+Only resource ID, original type (`task`, `container`, or `service`) and action names
+appear in the existing inventory.
 Executable, argv, working directory and environment never travel over HLCP.
-The controller requires `resource.control` + `script`. An older controller
-rejects the unsupported task type through its existing capability check; there
-is no new frame or protocol version. Upgrade controller before enabling P03 agents.
+The controller requires `resource.control`, the resource's provider and `script`
+for custom script actions. Native status remains read-only; custom actions are
+potentially mutating. There is no new frame or protocol version. Update both
+controller and agent before enabling mixed-resource commands; older agents do
+not support nonempty commands on native resources.
 
 The existing syntax works without a new CLI grammar:
 
@@ -71,6 +115,7 @@ The existing syntax works without a new CLI grammar:
 hlcp -n debian-01 -r diagnostics -a
 hlcp -n debian-01 -r diagnostics -a diagnose --dry-run
 hlcp -n debian-01 -r diagnostics -a reload
+hlcp -n debian-01 -r app -a backup --command-id app-backup-01
 ```
 
 Dry-run checks admission without execution or ledger changes. Every fresh task
@@ -78,8 +123,9 @@ action is treated as potentially mutating, including `status`. A known same-ID
 operation remains a read-only lookup, not a second invocation. No runtime argv,
 script upload, command string or resource/action remapping is accepted.
 
-Task observations remain `unknown / NOT_OBSERVED`; no script is called for
-automatic polling, including one named `status`.
+Task observations remain `unknown / NOT_OBSERVED`; native resources keep their
+native status observation. No script is called for automatic polling, including
+a script-only action named `status`, or as a side effect of a native restart.
 
 ## Execution and outcomes
 

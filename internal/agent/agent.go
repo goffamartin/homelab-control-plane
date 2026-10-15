@@ -34,7 +34,7 @@ type ResourceConfig struct {
 	Adapter  string                         `yaml:"adapter"`
 	Target   string                         `yaml:"target"`
 	Actions  []string                       `yaml:"actions"`
-	Commands map[string]ScriptCommandConfig `yaml:"commands"`
+	Commands map[string]ScriptCommandConfig `yaml:"commands,omitempty"`
 }
 
 func (config Config) NewDispatcher() (*command.Dispatcher, error) {
@@ -42,7 +42,7 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 		if err := resource.validate(); err != nil {
 			return nil, err
 		}
-		if resource.Adapter == "script" && runtime.GOOS != "linux" {
+		if len(resource.Commands) > 0 && runtime.GOOS != "linux" {
 			return nil, errors.New("script execution is supported only on Linux")
 		}
 	}
@@ -52,26 +52,23 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 	}
 	dispatcher := command.NewObservedDispatcher(journal, config.Telemetry, config.NodeID)
 	for _, resource := range config.Resources {
-		if resource.Adapter == "script" {
-			commands := make(map[string]adapter.ScriptCommand, len(resource.Commands))
-			for action, spec := range resource.Commands {
-				environment := make(map[string]string, len(spec.Environment))
-				for name, value := range spec.Environment {
-					environment[name] = value
-				}
-				commands[action] = adapter.ScriptCommand{Executable: spec.Executable, Argv: append([]string(nil), spec.Argv...), WorkingDirectory: spec.WorkingDirectory, Environment: environment, Timeout: spec.ExecutionTimeout()}
+		commands := make(map[string]adapter.ScriptCommand, len(resource.Commands))
+		for action, spec := range resource.Commands {
+			environment := make(map[string]string, len(spec.Environment))
+			for name, value := range spec.Environment {
+				environment[name] = value
 			}
-			dispatcher.RegisterMutating(resource.ID, (adapter.Script{Commands: commands}).Execute, resource.Actions...)
-			continue
+			commands[action] = adapter.ScriptCommand{Executable: spec.Executable, Argv: append([]string(nil), spec.Argv...), WorkingDirectory: spec.WorkingDirectory, Environment: environment, Timeout: spec.ExecutionTimeout()}
 		}
-		if resource.Target == "" {
-			return nil, fmt.Errorf("resource %q: target is required", resource.ID)
-		}
+		scripts := adapter.Script{Commands: commands}
 		resource := resource
-		dispatcher.Register(resource.ID, func(executionContext context.Context, action string) protocol.CommandResultPayload {
+		execute := func(executionContext context.Context, action string) protocol.CommandResultPayload {
 			defer config.requestRefresh()
 			if !contains(resource.Actions, action) {
 				return protocol.CommandResultPayload{Code: "ACTION_NOT_SUPPORTED", Message: "action is not enabled"}
+			}
+			if _, custom := scripts.Commands[action]; custom {
+				return scripts.Execute(executionContext, action)
 			}
 			switch resource.Adapter {
 			case "systemd":
@@ -81,7 +78,14 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 			default:
 				return protocol.CommandResultPayload{Code: "INVALID_CONFIGURATION", Message: "unsupported adapter"}
 			}
-		}, resource.Actions...)
+		}
+		// Only native status is read-only. Script-only resources may call a
+		// mutating command "status"; mixed resources reserve all native names.
+		if resource.Adapter == "script" {
+			dispatcher.RegisterMutating(resource.ID, execute, resource.Actions...)
+		} else {
+			dispatcher.Register(resource.ID, execute, resource.Actions...)
+		}
 	}
 	return dispatcher, nil
 }
@@ -162,6 +166,9 @@ func (config Config) Validate() error {
 		if !contains(config.Capabilities, "resource.control") || !contains(config.Capabilities, resource.Adapter) {
 			return fmt.Errorf("resource %q: capabilities must include resource.control and %s", resource.ID, resource.Adapter)
 		}
+		if len(resource.Commands) > 0 && !contains(config.Capabilities, "script") {
+			return fmt.Errorf("resource %q: custom commands require the script capability", resource.ID)
+		}
 	}
 	_, err := config.synchronization()
 	return err
@@ -170,9 +177,6 @@ func (config Config) Validate() error {
 func (resource ResourceConfig) validate() error {
 	if resource.Adapter == "script" {
 		return resource.validateScript()
-	}
-	if resource.Commands != nil {
-		return fmt.Errorf("resource %q: commands is only supported by the script adapter", resource.ID)
 	}
 	if resource.Target == "" || resource.Target != strings.TrimSpace(resource.Target) || strings.HasPrefix(resource.Target, "-") {
 		return fmt.Errorf("resource %q: target is invalid", resource.ID)
@@ -194,14 +198,7 @@ func (resource ResourceConfig) validate() error {
 	default:
 		return fmt.Errorf("resource %q: unsupported adapter %q", resource.ID, resource.Adapter)
 	}
-	for _, action := range resource.Actions {
-		switch action {
-		case "status", "start", "stop", "restart":
-		default:
-			return fmt.Errorf("resource %q: unsupported action %q", resource.ID, action)
-		}
-	}
-	return nil
+	return resource.validateCommands()
 }
 func (config Config) hello() protocol.HelloPayload {
 	return protocol.HelloPayload{ProtocolVersions: []uint8{protocol.ProtocolVersion}, NodeID: config.NodeID, AgentVersion: config.AgentVersion, Capabilities: config.Capabilities}

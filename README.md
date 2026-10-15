@@ -160,6 +160,10 @@ metadata and remains available offline; unsupported node actions are errors.
 `hlcp -n debian-01 -r example-catalog` returns real resource detail/observation.
 Agents with resources must advertise `resource.control` and each configured adapter
 (`docker`, `podman`, `systemd`, or `script`); invalid declarations fail validation.
+All adapters may add fixed agent-local script actions via optional `commands`,
+without overriding their native status/start/stop/restart actions. Empty command
+maps from older YAML remain compatible. Custom actions require the `script`
+capability, are treated as mutating, and never run automatically as hooks.
 Script/task resources execute fixed agent-local commands on Linux without a
 container runtime. Task actions are never assumed read-only by their names;
 they are not polled automatically. See the script runbook for limits and recovery.

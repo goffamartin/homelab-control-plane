@@ -109,6 +109,9 @@ func (server *Server) Resolve(nodeID string, payload protocol.CommandPayload) (R
 		if !supported {
 			return Resolution{}, resolveError(http.StatusUnprocessableEntity, "CAPABILITY_NOT_SUPPORTED", "node does not advertise a provider for this resource type")
 		}
+		if resource.Type != "task" && !hasCapability([]string{"status", "start", "stop", "restart"}, payload.Action) && !hasCapability(record.Capabilities, "script") {
+			return Resolution{}, resolveError(http.StatusUnprocessableEntity, "CAPABILITY_NOT_SUPPORTED", "custom resource actions require the script capability")
+		}
 		plan.ReadOnly = resource.Type != "task" && payload.Action == "status"
 		return plan, nil
 	}

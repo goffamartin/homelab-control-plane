@@ -82,3 +82,28 @@ func TestScriptAgentUsesOnlyInspection(t *testing.T) {
 		t.Fatal("implicit transaction read")
 	}
 }
+
+func TestDoctorInspectsCustomCommandsOnNativeResources(t *testing.T) {
+	for _, name := range []string{"docker", "podman", "systemd"} {
+		t.Run(name, func(t *testing.T) {
+			h := &localFixture{fakeHost: fixture(t, true, testNow.AddDate(1, 0, 0)), script: ScriptStatus{Executable: true, Directory: true, Format: "interpreter"}}
+			kind, target := "container", "app"
+			if name == "systemd" {
+				kind, target = "service", "app.service"
+			}
+			config := strings.ReplaceAll(minimalAgent, "capabilities: []", "capabilities: [resource.control, script, "+name+"]")
+			config = strings.ReplaceAll(config, "resources: []", "resources:\n  - id: app\n    type: "+kind+"\n    adapter: "+name+"\n    target: "+target+"\n    actions: [status, backup]\n    commands:\n      backup:\n        executable: /SECRET/script\n        working_directory: /SECRET/cwd\n        environment: {SECRET: TOP_SECRET_VALUE}")
+			h.files["/config"] = []byte(config)
+			var out bytes.Buffer
+			if code := runCLI([]string{"--config", "/config", "--json"}, "agent", &out, h, testNow); code != 0 {
+				t.Fatal(code, out.String())
+			}
+			if h.scriptCalls != 1 || len(h.executables) != 1 {
+				t.Fatal("custom command inspection skipped", h.scriptCalls, h.executables)
+			}
+			if strings.Contains(out.String(), "SECRET") {
+				t.Fatal("secret exposed")
+			}
+		})
+	}
+}

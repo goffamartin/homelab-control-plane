@@ -93,8 +93,8 @@ func TestScriptYAMLRejectsAmbiguity(t *testing.T) {
 			}
 		})
 	}
-	if _, err := Load(writeConfig(t, validConfigYAML+"    commands: {}\n")); err == nil {
-		t.Fatal("non-script commands silently ignored")
+	if _, err := Load(writeConfig(t, validConfigYAML+"    commands: {}\n")); err != nil {
+		t.Fatal("legacy empty commands must remain valid", err)
 	}
 }
 

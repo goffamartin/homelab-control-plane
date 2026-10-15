@@ -80,6 +80,36 @@ func sortStrings(values []string) bool {
 	return true
 }
 
+func TestMixedSystemResourceRetainsScriptConstraintsAndProbeRefusal(t *testing.T) {
+	c := readinessConfig()
+	r := c.Resources[1]
+	r.Actions = []string{"status", "backup"}
+	r.Commands = map[string]agent.ScriptCommandConfig{"backup": {Executable: "/home/SECRET/backup", WorkingDirectory: "/tmp/SECRET"}}
+	c.Resources = []agent.ResourceConfig{r}
+	h := new(readinessFake)
+	_, err := PlanResourceReadiness(context.Background(), h, AgentServiceProfile{"system", "hlcp-agent.service"}, c)
+	var refusal *systemResourceRefusal
+	if !errors.As(err, &refusal) || len(h.calls) != 0 {
+		t.Fatal(err, h.calls)
+	}
+	codes := refusal.Constraints()
+	for _, want := range []string{"system.podman_privileged_helpers_blocked", "system.script_dependencies_unverified", "system.script_protected_home", "system.script_private_tmp", "system.sandbox_probe_required"} {
+		found := false
+		for _, code := range codes {
+			found = found || code == want
+		}
+		if !found {
+			t.Fatal("missing mixed constraint", want, codes)
+		}
+	}
+	if strings.Contains(fmt.Sprint(refusal), "SECRET") {
+		t.Fatal("private paths exposed")
+	}
+	if _, err := sandboxProbeInputs(c); !errors.Is(err, ErrSandboxProbeUnsupported) {
+		t.Fatal("mixed native sandbox gate bypassed", err)
+	}
+}
+
 type sandboxRefusalHost struct {
 	*agentActivationFake
 	config agent.Config
