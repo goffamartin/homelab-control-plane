@@ -4,6 +4,8 @@ package managedcli
 
 import "context"
 
+func reloadManager(context.Context, string) error { return ErrSetup }
+
 func serviceAccountLocked(string, string, string) bool { return false }
 
 type serviceState struct {

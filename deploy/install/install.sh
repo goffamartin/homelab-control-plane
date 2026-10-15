@@ -120,6 +120,7 @@ if [ "$update" = yes ]&&[ -n "$installed" ];then
 fi
 root apt-get install -y -o Dpkg::Options::=--force-confold "$stage/$package"||fail 'package install failed; inspect state and backup before retry'
 if [ "$restart" = yes ];then
+ systemctl_scope daemon-reload||fail 'service manager reload failed; inspect the selected user/system manager'
  systemctl_scope start "$unit"||fail 'start failed; new package/state retained for inspection'
  [ "$(systemctl_scope show "$unit" --property=ActiveState --value)" = active ]||fail 'service not active'
  echo 'Service started. Verify controller registration/inventory before issuing actions.'
