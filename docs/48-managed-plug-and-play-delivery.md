@@ -25,9 +25,19 @@ end-user path until runtime, CLI, package and recovery tests are integrated.
   root fingerprint check, then separate standard CA/hostname-verified TLS1.3
   connection before any invitation secret is transmitted. No redirects/proxy
   inference, bounded body/concurrency/global rate, isolated public routes.
-- Pending: setup/storage/runtime integration and live-session revocation,
-  operator pairing CLI/API, resumable join/resources wizard, managed renewal/TLS
-  reload, signed artifact verification/update, migration/acceptance quick start.
+- Managed controller runtime, isolated enrollment listener supervision and
+  operator-only pairing/revocation API are integrated. Registry admission is
+  checked during handshake, before session publication and command delivery;
+  revocation disconnects active sessions. Expired peer sessions are closed.
+- Agent and server identity renewal/hot-load are integrated into runtime.
+  Renewal persists a retry ID before network I/O, retains old valid snapshots
+  on failure and keeps bounded overlapping serials. Pairing generations reject
+  old certificates even when a key is reused. Agent expiry requires re-pair;
+  server leaves can renew locally under the valid issuer. Diagnostics expose
+  expiry/renewal/issuer metadata, never keys. HTTP renewal requires mTLS.
+- Pending: managed setup/service/package wiring, operator pairing CLI,
+  resumable join/resources wizard, signed artifact verification/update,
+  migration/acceptance quick start and remaining lifecycle hardening tests.
 - No managed release or VM/live acceptance yet. Preview.4 remains unchanged.
 
 ## Implementation acceptance

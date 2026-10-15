@@ -20,6 +20,7 @@ func (server *Server) HTTPHandler(token string) http.Handler {
 
 func (server *Server) HTTPHandlerWithAuthorizer(authorizer *localapi.Authorizer) http.Handler {
 	mux := http.NewServeMux()
+	server.registerManagedAPI(mux)
 	handle := func(pattern string, handler http.HandlerFunc) {
 		mux.HandleFunc(pattern, func(writer http.ResponseWriter, request *http.Request) {
 			if node := request.PathValue("node"); node != "" && !localapi.Allowed(request.Context(), node, request.PathValue("resource"), false) {

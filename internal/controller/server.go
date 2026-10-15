@@ -3,9 +3,11 @@ package controller
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"hlcp/internal/liveness"
+	"hlcp/internal/managed"
 	"hlcp/internal/protocol"
 	"hlcp/internal/session"
 	"hlcp/internal/telemetry"
@@ -27,7 +29,11 @@ type Config struct {
 	LedgerFile          string
 	ResourceStateMaxAge time.Duration
 	// Nil retains CA-only admission; an explicit empty map denies all nodes.
-	AllowedNodeIDs map[string]bool
+	AllowedNodeIDs    map[string]bool
+	ManagedRegistry   *managed.Registry
+	EnrollmentURL     string
+	VerifyAdmission   func(*x509.Certificate) bool
+	CertificateStatus func() managed.CertificateStatus
 }
 type Server struct {
 	listener        net.Listener
@@ -44,6 +50,12 @@ type Server struct {
 }
 
 func Listen(address string, config Config) (*Server, error) {
+	if config.ManagedRegistry != nil {
+		if config.AllowedNodeIDs != nil {
+			return nil, errors.New("choose managed registry or legacy admission, not both")
+		}
+		config.VerifyAdmission = config.ManagedRegistry.Allows
+	}
 	if config.AllowedNodeIDs != nil {
 		nodes := make(map[string]bool, len(config.AllowedNodeIDs))
 		for node, allowed := range config.AllowedNodeIDs {
@@ -200,6 +212,35 @@ func (server *Server) handleConnection(parent context.Context, raw net.Conn) {
 		server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.ConnectionRejected, NodeID: nodeID, Code: "NODE_NOT_ALLOWED"})
 		return
 	}
+	leaf := state.VerifiedChains[0][0]
+	admitted := func() bool {
+		return time.Now().Before(leaf.NotAfter) && (server.config.VerifyAdmission == nil || server.config.VerifyAdmission(leaf))
+	}
+	if !admitted() {
+		server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.ConnectionRejected, NodeID: nodeID, Code: "MANAGED_ADMISSION"})
+		return
+	}
+	expiry := time.AfterFunc(time.Until(leaf.NotAfter), func() { _ = raw.Close() })
+	defer expiry.Stop()
+	if server.config.VerifyAdmission != nil {
+		watchCtx, stopWatch := context.WithCancel(ctx)
+		defer stopWatch()
+		go func() {
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-watchCtx.Done():
+					return
+				case <-ticker.C:
+					if !admitted() {
+						_ = raw.Close()
+						return
+					}
+				}
+			}
+		}()
+	}
 	server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.Authenticated, ActorID: nodeID, NodeID: nodeID, Code: "MTLS"})
 	connection := telemetry.Wrap(tlsConnection, server.config.Telemetry)
 	registration, err := session.Accept(connection, session.ControllerConfig{ExpectedNodeID: nodeID, HeartbeatInterval: server.config.LivenessPolicy.HeartbeatInterval, MissedHeartbeatThreshold: server.config.LivenessPolicy.OfflineAfter, HandshakeTimeout: server.config.HandshakeTimeout})
@@ -216,7 +257,12 @@ func (server *Server) handleConnection(parent context.Context, raw net.Conn) {
 	tracker, _ := liveness.NewTracker(server.config.LivenessPolicy, registeredAt)
 	writer := session.NewWriter(connection, 4)
 	_, previouslyRegistered := server.registry.Get(registration.NodeID)
-	server.sessions.Publish(registration, synchronization, registeredAt, writer, cancel)
+	server.sessions.PublishGuarded(registration, synchronization, registeredAt, writer, cancel, admitted)
+	if !admitted() {
+		_ = writer.Close()
+		server.sessions.Remove(registration.NodeID, writer)
+		return
+	}
 	if previouslyRegistered {
 		server.config.Telemetry.Record(telemetry.Event{Kind: telemetry.Reconnect, NodeID: registration.NodeID, SessionID: registration.SessionID, Code: "RECONNECTED"})
 	}

@@ -14,8 +14,11 @@ import (
 )
 
 func enrollmentFixture(t *testing.T) (*Registry, *EnrollmentService, *httptest.Server) {
+	return enrollmentFixtureAt(t, time.Now())
+}
+func enrollmentFixtureAt(t *testing.T, epoch time.Time) (*Registry, *EnrollmentService, *httptest.Server) {
 	t.Helper()
-	a, _, err := NewAuthority("test backup password sufficiently long", time.Now())
+	a, _, err := NewAuthority("test backup password sufficiently long", epoch)
 	if err != nil {
 		t.Fatal(err)
 	}
