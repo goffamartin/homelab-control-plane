@@ -178,3 +178,65 @@ func TestResourceReadinessScriptOnlyHasNoRuntimeDependency(t *testing.T) {
 		t.Fatal("compatibility unit must not introduce a container runtime dependency", h.calls)
 	}
 }
+
+func TestMixedReadinessChecksNativeRuntimeAndCustomFiles(t *testing.T) {
+	for _, name := range []string{"docker", "podman", "systemd"} {
+		t.Run(name, func(t *testing.T) {
+			c := readinessConfig()
+			r := c.Resources[0]
+			r.Adapter = name
+			r.Actions = []string{"status", "backup"}
+			r.Commands = map[string]agent.ScriptCommandConfig{"backup": {Executable: "/opt/backup", WorkingDirectory: "/opt", Argv: []string{"SECRET"}}}
+			if name == "systemd" {
+				r.Type = "service"
+				r.Target = "app.service"
+			}
+			c.Resources = []agent.ResourceConfig{r}
+			host := new(readinessFake)
+			result, err := PlanResourceReadiness(context.Background(), host, AgentServiceProfile{"user", "hlcp-agent.service"}, c)
+			if err != nil {
+				t.Fatal(err)
+			}
+			expected := []string{name}
+			switch name {
+			case "docker":
+				expected = append(expected, "socket")
+			case "podman":
+				expected = append(expected, "mappings")
+			case "systemd":
+				expected = []string{"systemctl"}
+			}
+			expected = append(expected, "/opt/backup")
+			if !reflect.DeepEqual(host.calls, expected) {
+				t.Fatal(host.calls, expected)
+			}
+			if strings.Contains(fmt.Sprint(result), "SECRET") || strings.Contains(fmt.Sprint(result), "/opt/") {
+				t.Fatal("private data exposed")
+			}
+			for _, failure := range expected {
+				if _, err := PlanResourceReadiness(context.Background(), &readinessFake{fail: failure}, AgentServiceProfile{"user", "hlcp-agent.service"}, c); !errors.Is(err, ErrAgentActivationResources) {
+					t.Fatal("missing mixed dependency accepted", failure, err)
+				}
+			}
+			spec := r.Commands["backup"]
+			spec.Argv = []string{"changed"}
+			r.Commands["backup"] = spec
+			changed, err := PlanResourceReadiness(context.Background(), new(readinessFake), AgentServiceProfile{"user", "hlcp-agent.service"}, c)
+			if err != nil || changed.proof == result.proof {
+				t.Fatal("custom command not bound to readiness proof", err)
+			}
+		})
+	}
+}
+
+func TestMixedReadinessCommandLimitBeforeInspection(t *testing.T) {
+	c := readinessConfig()
+	c.Resources = nil
+	for i := 0; i < 129; i++ {
+		c.Resources = append(c.Resources, agent.ResourceConfig{ID: fmt.Sprintf("container-%d", i), Type: "container", Adapter: "podman", Target: "app", Actions: []string{"status", "backup"}, Commands: map[string]agent.ScriptCommandConfig{"backup": {Executable: "/opt/backup", WorkingDirectory: "/opt"}}})
+	}
+	h := new(readinessFake)
+	if _, err := PlanResourceReadiness(context.Background(), h, AgentServiceProfile{"user", "hlcp-agent.service"}, c); !errors.Is(err, ErrAgentActivationResources) || len(h.calls) != 0 {
+		t.Fatal("mixed script bound bypassed", err, h.calls)
+	}
+}

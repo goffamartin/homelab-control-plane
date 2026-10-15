@@ -195,3 +195,45 @@ func TestResolveLegacyTypesAndUnknownType(t *testing.T) {
 		}
 	}
 }
+
+func TestResolveCustomNativeResourceActions(t *testing.T) {
+	for _, provider := range []string{"docker", "podman", "systemd"} {
+		for _, script := range []bool{false, true} {
+			sessions, _, _ := retrySession(t, DefaultRetryPolicy())
+			server := &Server{registry: sessions.registry, sessions: sessions}
+			record := server.registry.nodes["n"]
+			record.Capabilities = []string{"resource.control", provider}
+			if script {
+				record.Capabilities = append(record.Capabilities, "script")
+			}
+			kind := "container"
+			if provider == "systemd" {
+				kind = "service"
+			}
+			record.Inventory.Resources = []protocol.ResourceDescriptor{{ID: "app", Type: kind, Actions: []string{"status", "restart", "backup"}}}
+			server.registry.nodes["n"] = record
+			payload := protocol.CommandPayload{CommandID: "custom-check", ResourceID: "app", Action: "backup"}
+			plan, err := server.Resolve("n", payload)
+			if script {
+				if err != nil || plan.ReadOnly || plan.Command == nil || plan.KnownOperation {
+					t.Fatal(provider, plan, err)
+				}
+			} else if err == nil || err.Code != "CAPABILITY_NOT_SUPPORTED" {
+				t.Fatal("custom action without capability", provider, err)
+			}
+			payload.Action = "status"
+			plan, err = server.Resolve("n", payload)
+			if err != nil || !plan.ReadOnly {
+				t.Fatal("native status changed", provider, err)
+			}
+			payload.Action = "restart"
+			plan, err = server.Resolve("n", payload)
+			if err != nil || plan.ReadOnly {
+				t.Fatal("native restart changed", provider, err)
+			}
+			if _, exists := sessions.tracker.Progress("n", "custom-check"); exists {
+				t.Fatal("resolve changed ledger")
+			}
+		}
+	}
+}

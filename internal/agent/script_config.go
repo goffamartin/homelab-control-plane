@@ -41,20 +41,49 @@ func (resource ResourceConfig) validateScript() error {
 	if resource.Type != "task" || resource.Target != "" {
 		return fmt.Errorf("resource %q: script requires type task and no target", resource.ID)
 	}
+	return resource.validateCommands()
+}
+
+func nativeAction(action string) bool {
+	switch action {
+	case "status", "start", "stop", "restart":
+		return true
+	default:
+		return false
+	}
+}
+
+// ScriptActions includes only explicitly enabled local commands. Native status
+// observation never traverses this list or executes a custom action.
+func (resource ResourceConfig) ScriptActions() []string {
+	var actions []string
+	for _, action := range resource.Actions {
+		if _, ok := resource.Commands[action]; ok {
+			actions = append(actions, action)
+		}
+	}
+	return actions
+}
+
+func (resource ResourceConfig) validateCommands() error {
 	inventory := protocol.InventorySnapshot{Revision: 1, Resources: []protocol.ResourceDescriptor{{ID: resource.ID, Type: resource.Type, Actions: resource.Actions}}}
 	if err := inventory.Validate(); err != nil {
 		return err
 	}
-	if len(resource.Commands) != len(resource.Actions) {
-		return fmt.Errorf("resource %q: commands must exactly match actions", resource.ID)
-	}
-	for _, action := range resource.Actions {
-		command, exists := resource.Commands[action]
-		if !exists {
-			return fmt.Errorf("resource %q: commands must exactly match actions", resource.ID)
+	for action, command := range resource.Commands {
+		if !contains(resource.Actions, action) {
+			return fmt.Errorf("resource %q: command %q is not enabled in actions", resource.ID, action)
+		}
+		if resource.Adapter != "script" && nativeAction(action) {
+			return fmt.Errorf("resource %q: command %q conflicts with a reserved native action", resource.ID, action)
 		}
 		if err := command.validate(); err != nil {
 			return fmt.Errorf("resource %q action %q: %w", resource.ID, action, err)
+		}
+	}
+	for _, action := range resource.Actions {
+		if _, exists := resource.Commands[action]; !exists && (resource.Adapter == "script" || !nativeAction(action)) {
+			return fmt.Errorf("resource %q: action %q has no local command", resource.ID, action)
 		}
 	}
 	return nil

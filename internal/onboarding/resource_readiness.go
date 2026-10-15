@@ -58,14 +58,13 @@ func PlanResourceReadiness(ctx context.Context, host ResourceReadinessHost, prof
 		required[resource.Adapter] = true
 		if resource.Adapter == "systemd" {
 			for _, action := range resource.Actions {
-				if action != "status" {
+				_, custom := resource.Commands[action]
+				if action != "status" && !custom {
 					return r, ErrAgentActivationResources
 				}
 			}
 		}
-		if resource.Adapter == "script" {
-			scriptChecks += len(resource.Actions)
-		}
+		scriptChecks += len(resource.Commands)
 	}
 	if scriptChecks > 128 {
 		return r, ErrAgentActivationResources
@@ -116,10 +115,7 @@ func PlanResourceReadiness(ctx context.Context, host ResourceReadinessHost, prof
 	resources := append([]agent.ResourceConfig{}, config.Resources...)
 	sort.Slice(resources, func(i, j int) bool { return resources[i].ID < resources[j].ID })
 	for _, resource := range resources {
-		if resource.Adapter != "script" {
-			continue
-		}
-		actions := append([]string{}, resource.Actions...)
+		actions := resource.ScriptActions()
 		sort.Strings(actions)
 		for _, action := range actions {
 			if err := ctx.Err(); err != nil {

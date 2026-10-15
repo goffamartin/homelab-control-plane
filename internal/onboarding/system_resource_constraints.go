@@ -36,9 +36,10 @@ func systemResourceConstraints(config agent.Config) error {
 			codes["system.podman_privileged_helpers_blocked"] = true
 		case "systemd":
 			codes["system.systemd_authorization_unverified"] = true
-		case "script":
+		}
+		if len(resource.Commands) > 0 {
 			codes["system.script_dependencies_unverified"] = true
-			for _, action := range resource.Actions {
+			for _, action := range resource.ScriptActions() {
 				command := resource.Commands[action]
 				for _, path := range []string{command.Executable, command.WorkingDirectory} {
 					if underSystemPath(path, "/home") || underSystemPath(path, "/root") || underSystemPath(path, "/run/user") {

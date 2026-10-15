@@ -115,13 +115,12 @@ func Run(host Host, options Options, now time.Time) Report {
 				required[resource.Adapter] = true
 			case "systemd":
 				required["systemctl"] = true
-			case "script":
-				actions := append([]string(nil), resource.Actions...)
-				sort.Strings(actions)
-				for _, action := range actions {
-					spec := resource.Commands[action]
-					checkScript(host, spec.Executable, spec.WorkingDirectory, add)
-				}
+			}
+			actions := resource.ScriptActions()
+			sort.Strings(actions)
+			for _, action := range actions {
+				spec := resource.Commands[action]
+				checkScript(host, spec.Executable, spec.WorkingDirectory, add)
 			}
 		}
 		names := make([]string, 0, len(required))

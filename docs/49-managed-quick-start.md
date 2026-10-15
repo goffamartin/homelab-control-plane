@@ -187,7 +187,13 @@ resources:
     type: container
     adapter: podman
     target: hlcp-smoke
-    actions: [status, restart]
+    actions: [status, restart, backup]
+    commands:
+      backup:
+        executable: /bin/bash
+        argv: [/opt/hlcp/scripts/backup.sh]
+        working_directory: /opt/hlcp
+        timeout: 10s
   - id: kernel
     type: task
     adapter: script
@@ -203,6 +209,12 @@ resources:
 Scripts remain local, explicitly allowlisted executable/argument configurations,
 not arbitrary shell commands from the controller. They require no container
 runtime. Script actions are mutating even when called `status`.
+The optional `backup` example requires that reviewed script/workdir to exist;
+omit it if unused. Commands can extend Docker, Podman or systemd resources, but
+cannot replace their reserved `status`, `start`, `stop` or `restart` actions.
+Custom commands require the `script` capability in addition to the adapter's
+capability. They run only when explicitly requested, never as automatic hooks.
+Empty `commands: {}` from older generated YAML remains valid.
 See [administrative output contract](55-administrative-output.md) for `--json`.
 
 On the controller:
