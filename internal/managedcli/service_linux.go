@@ -251,3 +251,10 @@ func activateService(ctx context.Context, scope, unit string, enable bool) error
 	}
 	return nil
 }
+func reloadManager(ctx context.Context, scope string) error {
+	if (scope != "user" && scope != "system") || (scope == "user" && os.Geteuid() == 0) || (scope == "system" && os.Geteuid() != 0) {
+		return ErrSetup
+	}
+	_, err := fixedProcess(ctx, "/usr/bin/systemctl", []string{"--" + scope, "--no-ask-password", "daemon-reload"}, scope)
+	return err
+}

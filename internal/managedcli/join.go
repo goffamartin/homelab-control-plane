@@ -164,6 +164,9 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 	}
 	// Refuse changing a live service before consuming the one-use invitation.
 	if (*start || *repair) && !*offline {
+		if reloadManager(ctx, *scope) != nil {
+			return fail("SERVICE_MANAGER_RELOAD_FAILED")
+		}
 		current, e := inspectService(ctx, *scope, *unit)
 		if e != nil {
 			return fail("SERVICE_PREFLIGHT_REFUSED")

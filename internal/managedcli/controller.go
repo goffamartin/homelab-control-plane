@@ -234,6 +234,9 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	}
 	var serviceBefore serviceState
 	if (*start || *migrate) && !*offline {
+		if reloadManager(ctx, "system") != nil {
+			return fail("SERVICE_MANAGER_RELOAD_FAILED")
+		}
 		var err error
 		if serviceBefore, err = inspectService(ctx, "system", "hlcp-controller.service"); err != nil {
 			return fail("SERVICE_PREFLIGHT_REFUSED")

@@ -235,6 +235,9 @@ func Resources(args []string, input io.Reader, out io.Writer) int {
 		return 0
 	}
 	if *restart {
+		if reloadManager(ctx, *scope) != nil {
+			return fail("SERVICE_MANAGER_RELOAD_FAILED")
+		}
 		state, e := inspectService(ctx, *scope, *unit)
 		if e != nil {
 			return fail("SERVICE_PREFLIGHT_REFUSED")

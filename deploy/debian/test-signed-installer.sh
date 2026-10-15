@@ -30,4 +30,10 @@ for problem in unsigned tamper wrong-version missing bad-manifest;do
  if sh "$helper" controller --version "$selected" --from-directory "$fixture" --update;then echo "Accepted $problem" >&2;exit 1;fi
  unset selected
 done
+high=$(mktemp -d)
+dpkg-deb -R "$artifacts/hlcp-controller_${version#v}_amd64.deb" "$high/package"
+sed -i 's/^Version:.*/Version: 99.0.0/' "$high/package/DEBIAN/control"
+dpkg-deb --build "$high/package" "$high/high.deb"
+apt-get install -y "$high/high.deb"
+if sh "$helper" controller --version "$version" --from-directory "$artifacts" --update;then echo 'Downgrade accepted' >&2;exit 1;fi
 echo 'Signed installer preview/install/offline update/private backup/preservation/refusal acceptance passed. No live systemd/reboot claim.'
