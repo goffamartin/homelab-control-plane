@@ -55,6 +55,10 @@ func managedCLI(args []string, out io.Writer) int {
 		}
 		action = args[1]
 		args = args[2:]
+		if action == "--help" || action == "-h" {
+			action = "list"
+			args = []string{"--help"}
+		}
 	} else {
 		args = args[1:]
 	}

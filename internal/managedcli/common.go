@@ -19,6 +19,10 @@ import (
 
 var ErrSetup = errors.New("managed setup refused; existing state preserved for inspection")
 
+func validAgentProfile(scope, unit string) bool {
+	return (scope == "user" && (unit == "hlcp-agent.service" || unit == "hlcp-agent-podman.service")) || (scope == "system" && unit == "hlcp-agent.service")
+}
+
 type terminal struct {
 	reader      *bufio.Reader
 	input       io.Reader
@@ -106,6 +110,9 @@ func account(name string) (int, int, error) {
 	}
 	groups, err := u.GroupIds()
 	if err != nil || len(groups) != 1 || groups[0] != u.Gid {
+		return 0, 0, ErrSetup
+	}
+	if !serviceAccountLocked(name, u.Uid, u.Gid) {
 		return 0, 0, ErrSetup
 	}
 	return uid, gid, nil

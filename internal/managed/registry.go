@@ -34,6 +34,7 @@ type node struct {
 	ID                string       `json:"id"`
 	Generation        uint64       `json:"generation"`
 	Active            bool         `json:"active"`
+	Legacy            bool         `json:"legacy,omitempty"`
 	KeyHash           [32]byte     `json:"key_hash"`
 	Credentials       []credential `json:"credentials"`
 	InvitationHash    [32]byte     `json:"invitation_hash"`
@@ -51,9 +52,10 @@ type registryState struct {
 	Nodes   []node `json:"nodes"`
 }
 type Registry struct {
-	store     *Store
-	authority *Authority
-	now       func() time.Time
+	store       *Store
+	authority   *Authority
+	now         func() time.Time
+	legacyRoots *x509.CertPool
 }
 
 func (*Registry) String() string               { return "managed node registry (redacted)" }
@@ -84,7 +86,7 @@ func parseRegistry(data []byte) (registryState, error) {
 	}
 	seen := map[string]bool{}
 	for _, n := range state.Nodes {
-		if !nodePattern.MatchString(n.ID) || seen[n.ID] || n.Generation == 0 || len(n.Credentials) > 8 || len(n.Certificate) > 16<<10 || (n.Active && (n.KeyHash == [32]byte{} || len(n.Credentials) == 0)) {
+		if !nodePattern.MatchString(n.ID) || seen[n.ID] || n.Generation == 0 || len(n.Credentials) > 8 || len(n.Certificate) > 16<<10 || (n.Active && !n.Legacy && (n.KeyHash == [32]byte{} || len(n.Credentials) == 0)) || (n.Legacy && (n.KeyHash != [32]byte{} || len(n.Credentials) != 0)) {
 			return state, ErrStore
 		}
 		seen[n.ID] = true
@@ -199,6 +201,7 @@ type EnrollmentRequest struct {
 type EnrollmentResult struct {
 	Certificate []byte `json:"certificate"`
 	CA          []byte `json:"ca"`
+	PeerCA      []byte `json:"peer_ca,omitempty"`
 	Controller  string `json:"controller"`
 	ServerName  string `json:"server_name"`
 }
@@ -267,6 +270,10 @@ func (r *Registry) Allows(cert *x509.Certificate) bool {
 	}
 	hash := sha256.Sum256(cert.RawSubjectPublicKeyInfo)
 	for _, n := range state.Nodes {
+		if n.ID == id && n.Active && n.Legacy && r.legacyRoots != nil {
+			_, err := cert.Verify(x509.VerifyOptions{Roots: r.legacyRoots, CurrentTime: r.now(), KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}})
+			return err == nil
+		}
 		if n.ID == id && n.Active && n.KeyHash == hash {
 			for _, c := range n.Credentials {
 				if c.Serial == cert.SerialNumber.Text(16) && r.now().Before(c.Expires) {
@@ -297,6 +304,7 @@ type NodeInfo struct {
 	ID                 string    `json:"id"`
 	Generation         uint64    `json:"generation"`
 	Active             bool      `json:"active"`
+	Legacy             bool      `json:"legacy,omitempty"`
 	InvitationExpires  time.Time `json:"invitation_expires"`
 	CertificateExpires time.Time `json:"certificate_expires"`
 }
@@ -312,7 +320,7 @@ func (r *Registry) List() ([]NodeInfo, error) {
 	}
 	result := make([]NodeInfo, 0, len(state.Nodes))
 	for _, n := range state.Nodes {
-		v := NodeInfo{ID: n.ID, Generation: n.Generation, Active: n.Active, InvitationExpires: n.InvitationExpires}
+		v := NodeInfo{ID: n.ID, Generation: n.Generation, Active: n.Active, Legacy: n.Legacy, InvitationExpires: n.InvitationExpires}
 		for _, c := range n.Credentials {
 			if c.Expires.After(v.CertificateExpires) {
 				v.CertificateExpires = c.Expires

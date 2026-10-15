@@ -54,7 +54,10 @@ func TestAgentPackageContentsAndReproducibility(t *testing.T) {
 		if len(control) != 2 || len(payload) != 25 {
 			t.Fatal("unexpected package files / maintainer scripts")
 		}
-		if !strings.Contains(string(control["control"].data), "Depends: systemd (>= 252)\n") || strings.Contains(string(control["control"].data), "podman") || strings.Contains(string(control["control"].data), "docker") || strings.Contains(string(control["control"].data), "uidmap") {
+		if !strings.Contains(string(control["control"].data), "Depends: adduser, systemd (>= 252)\n") {
+			t.Fatal("core package must provide its native service/account prerequisites")
+		}
+		if strings.Contains(string(control["control"].data), "podman") || strings.Contains(string(control["control"].data), "docker") || strings.Contains(string(control["control"].data), "uidmap") {
 			t.Fatal("core package depends on a container runtime")
 		}
 		if control["preinst"].mode != 0755 || bytes.Contains(control["preinst"].data, []byte("\r")) {

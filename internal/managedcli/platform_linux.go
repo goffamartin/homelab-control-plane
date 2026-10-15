@@ -4,9 +4,18 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 	"unsafe"
 )
+
+func offlineImage() bool {
+	if _, e := os.Lstat("/run/systemd/system"); !os.IsNotExist(e) {
+		return false
+	}
+	data, e := os.ReadFile("/proc/1/comm")
+	return e == nil && strings.TrimSpace(string(data)) != "systemd"
+}
 
 func isTerminal(input io.Reader) bool {
 	f, ok := input.(*os.File)

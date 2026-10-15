@@ -47,6 +47,10 @@ func main() {
 	configPath := flag.String("config", "/etc/hlcp/agent.yaml", "agent YAML configuration")
 	checkConfig := flag.Bool("check-config", false, "validate configuration and exit")
 	version := flag.Bool("version", false, "print build metadata and exit")
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: hlcp-agent join|resources|certificates|prepare-user|setup|activate|probe-resources|doctor [options]\nRuntime options:")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 	if *version {
 		fmt.Println(buildinfo.String())
@@ -61,6 +65,9 @@ func main() {
 		fmt.Println("configuration valid")
 		return
 	}
+	// Installed binary metadata, not an old provisioning label, describes the
+	// running CLI agent after an upgrade. Embedded Go clients retain Config control.
+	config.AgentVersion = buildinfo.Version
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	config.Telemetry = telemetry.New(telemetry.JSONSink(os.Stderr))

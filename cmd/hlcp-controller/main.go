@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"flag"
 	"fmt"
@@ -67,10 +68,20 @@ func main() {
 	maxAttempts := flag.Int("command-max-attempts", retryDefaults.MaxAttempts, "maximum delivery attempts before ACK")
 	ledgerFile := flag.String("ledger-file", "/var/lib/hlcp/controller-operations.json", "durable controller operation ledger")
 	stateMaxAge := flag.Duration("resource-state-max-age", time.Minute, "maximum age of a received resource observation")
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "Usage: hlcp-controller setup|pki|configure-client|activate|doctor [options]\nManaged setup is the default; setup --imported retains external PKI.\nRuntime options:")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 	if *version {
 		fmt.Println(buildinfo.String())
 		return
+	}
+	if *managedState == "" {
+		if _, e := os.Lstat("/var/lib/hlcp-controller/managed"); e == nil || !os.IsNotExist(e) {
+			fmt.Fprintln(os.Stderr, "managed state exists or is inaccessible; refusing imported-mode fallback without explicit managed-state")
+			os.Exit(2)
+		}
 	}
 	if *stateMaxAge < time.Second || *stateMaxAge > 24*time.Hour {
 		fmt.Fprintln(os.Stderr, "resource-state-max-age must be 1s..24h")
@@ -125,6 +136,7 @@ func main() {
 	}
 	var tlsConfig *tls.Config
 	var managedRuntime *managed.Runtime
+	var legacyExpires time.Time
 	if *managedState != "" {
 		managedRuntime, err = managed.OpenRuntime(*managedState)
 		if err == nil {
@@ -134,6 +146,26 @@ func main() {
 				os.Exit(2)
 			}
 			tlsConfig, err = managedRuntime.Identity.TLSConfig()
+			if err == nil && managedRuntime.Config.LegacyServer {
+				chain, e1 := os.ReadFile(*certificate)
+				key, e2 := os.ReadFile(*privateKey)
+				if e1 != nil || e2 != nil || managed.VerifyLegacyServer(chain, key, []byte(managedRuntime.Config.LegacyTrust), managedRuntime.Config.ServerName, time.Now()) != nil {
+					err = managed.ErrPKI
+				} else {
+					pair, e := tls.X509KeyPair(chain, key)
+					err = e
+					if err == nil {
+						leaf, e := x509.ParseCertificate(pair.Certificate[0])
+						if e != nil {
+							fmt.Fprintln(os.Stderr, "invalid legacy server leaf")
+							os.Exit(2)
+						}
+						legacyExpires = leaf.NotAfter
+						roots := append(managedRuntime.Authority.RootPEM(), []byte(managedRuntime.Config.LegacyTrust)...)
+						tlsConfig, err = transport.ServerTLSConfigDynamic(roots, func(*tls.ClientHelloInfo) (*tls.Certificate, error) { return &pair, nil })
+					}
+				}
+			}
 		}
 	} else {
 		tlsConfig, err = transport.ServerTLSConfig(transport.TLSFiles{CertificateFile: *certificate, PrivateKeyFile: *privateKey, CAFile: *ca})
@@ -162,7 +194,12 @@ func main() {
 	if managedRuntime != nil {
 		serverConfig.ManagedRegistry = managedRuntime.Registry
 		serverConfig.EnrollmentURL = managedRuntime.Config.EnrollmentURL
-		serverConfig.CertificateStatus = func() managed.CertificateStatus { return managedRuntime.Identity.Status(time.Now()) }
+		serverConfig.CertificateStatus = func() managed.CertificateStatus {
+			s := managedRuntime.Identity.Status(time.Now())
+			s.Migration = managedRuntime.Config.LegacyServer
+			s.LegacyExpires = legacyExpires
+			return s
+		}
 	}
 	server, err := controller.Listen(*listen, serverConfig)
 	if err != nil {
@@ -178,6 +215,9 @@ func main() {
 		if e != nil {
 			fmt.Fprintln(os.Stderr, "managed enrollment configuration invalid")
 			os.Exit(2)
+		}
+		if managedRuntime.Config.LegacyServer {
+			service.PeerCA = append(managedRuntime.Authority.RootPEM(), []byte(managedRuntime.Config.LegacyTrust)...)
 		}
 		enrollmentTLS, e := managedRuntime.Identity.EnrollmentTLSConfig()
 		if e != nil {

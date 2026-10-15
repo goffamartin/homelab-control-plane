@@ -4,6 +4,8 @@ package managedcli
 
 import "context"
 
+func serviceAccountLocked(string, string, string) bool { return false }
+
 type serviceState struct {
 	active  string
 	enabled bool

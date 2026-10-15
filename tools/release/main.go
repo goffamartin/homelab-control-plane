@@ -33,6 +33,8 @@ type manifest struct {
 	GoVersion       string     `json:"go_version"`
 	ProtocolVersion int        `json:"protocol_version"`
 	StateVersion    int        `json:"state_version"`
+	JournalVersion  int        `json:"journal_version"`
+	LedgerVersion   int        `json:"ledger_version"`
 	Artifacts       []artifact `json:"artifacts"`
 }
 
@@ -161,7 +163,7 @@ func release(out, version, targetList string, allowDirty bool) error {
 	if runtime.GOOS == "windows" {
 		goBinary += ".exe"
 	}
-	result := manifest{Version: version, Revision: revision, GoVersion: runtime.Version(), ProtocolVersion: 1, StateVersion: 1}
+	result := manifest{Version: version, Revision: revision, GoVersion: runtime.Version(), ProtocolVersion: 1, StateVersion: 1, JournalVersion: 3, LedgerVersion: 1}
 	ldflags := "-s -w -buildid= -X hlcp/internal/buildinfo.Version=" + version + " -X hlcp/internal/buildinfo.Revision=" + revision
 	for _, target := range targets {
 		for _, name := range commands {
@@ -186,6 +188,11 @@ func release(out, version, targetList string, allowDirty bool) error {
 			fmt.Println(filename)
 		}
 	}
+	installer, err := packageInstaller(out)
+	if err != nil {
+		return err
+	}
+	result.Artifacts = append(result.Artifacts, installer)
 	deployment, err := packageDeployment(out)
 	if err != nil {
 		return err

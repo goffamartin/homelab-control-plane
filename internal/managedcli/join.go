@@ -73,10 +73,12 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 		defaultScope = "system"
 	}
 	scope := f.String("scope", defaultScope, "user or system")
+	unit := f.String("unit", "hlcp-agent.service", "packaged generic or user Podman compatibility unit")
 	codeFile := f.String("pairing-file", "", "private pairing code file")
 	codeStdin := f.Bool("pairing-stdin", false, "read pairing code from stdin")
 	resume := f.Bool("resume", false, "resume saved join without generating another key")
 	repair := f.Bool("re-pair", false, "explicit replacement preserving resources and journal")
+	offline := f.Bool("offline-stopped", false, "explicit stopped-service confirmation for non-booted images only")
 	start := f.Bool("start", false, "start packaged service")
 	enable := f.Bool("enable", false, "enable after verified start")
 	apply := f.Bool("apply", false, "apply pairing")
@@ -84,6 +86,7 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 	jsonOut := f.Bool("json", false, "redacted JSON")
 	if err := f.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
+			fmt.Fprintln(out, "Profiles: --unit hlcp-agent.service (default) or user --unit hlcp-agent-podman.service. Non-booted stopped images alone can use --offline-stopped; never live activation.")
 			fmt.Fprintln(out, "Usage: hlcp-agent join [--scope user|system] [--pairing-stdin|--pairing-file /private/code|--resume] [--re-pair] [--start [--enable]] [--json] [--apply --yes]\nNo arguments opens an interactive wizard. Noninteractive defaults to read-only preview. Pairing codes are never accepted in argv. Re-pair preserves resources and journal; stop the old service first.")
 			return 0
 		}
@@ -99,7 +102,7 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 		}
 		return 1
 	}
-	if f.NArg() != 0 || *apply != *yes || (*enable && !*start) || (*codeFile != "" && *codeStdin) || (*resume && (*codeFile != "" || *codeStdin)) || (*resume && *repair) {
+	if f.NArg() != 0 || !validAgentProfile(*scope, *unit) || *apply != *yes || (*enable && !*start) || (*codeFile != "" && *codeStdin) || (*resume && (*codeFile != "" || *codeStdin)) || (*resume && *repair) {
 		return 2
 	}
 	if runtime.GOOS != "linux" {
@@ -111,6 +114,9 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 	}
 	ctx, cancel := boundedContext()
 	defer cancel()
+	if *offline && (*start || !offlineImage()) {
+		return fail("OFFLINE_MODE_NOT_AVAILABLE")
+	}
 	code := ""
 	if interactive {
 		if !ui.interactive {
@@ -157,15 +163,26 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 		return 0
 	}
 	// Refuse changing a live service before consuming the one-use invitation.
-	if *start || *repair {
-		current, e := inspectService(ctx, *scope, "hlcp-agent.service")
+	if (*start || *repair) && !*offline {
+		current, e := inspectService(ctx, *scope, *unit)
 		if e != nil {
 			return fail("SERVICE_PREFLIGHT_REFUSED")
 		}
 		if current.active != "inactive" {
 			return fail("STOP_AGENT_BEFORE_JOIN")
 		}
+		if *scope == "user" {
+			peer := "hlcp-agent-podman.service"
+			if *unit == peer {
+				peer = "hlcp-agent.service"
+			}
+			other, e := inspectService(ctx, *scope, peer)
+			if e != nil || other.active != "inactive" {
+				return fail("STOP_PEER_AGENT_PROFILE_FIRST")
+			}
+		}
 		if *enable && *scope == "user" && checkLinger(ctx) != nil {
+			fmt.Fprintln(out, "Before boot startup run as yourself: sudo hlcp-agent prepare-user --user \"$(id -un)\" --apply --yes")
 			return fail("RUN_PREPARE_USER_FIRST")
 		}
 	}
@@ -319,7 +336,7 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 	_ = state.Close()
 	_ = configStore.Close()
 	if *start {
-		activate := []string{"--scope", *scope, "--apply", "--yes"}
+		activate := []string{"--scope", *scope, "--unit", *unit, "--apply", "--yes"}
 		if *enable {
 			activate = append(activate, "--enable")
 		}

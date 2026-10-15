@@ -4,6 +4,21 @@ HLCP is a lightweight application-layer control plane for a small HomeLab. It is
 
 The project deliberately focuses on a narrow, observable protocol: an outbound-connected agent registers with a controller, reports liveness and resource state, accepts an allow-listed command, and returns a deduplicated result. It is not a general-purpose remote shell, scheduler, or orchestration platform.
 
+## Start here — managed onboarding
+
+The [managed Quick Start](docs/49-managed-quick-start.md) covers verified Debian
+installation, automatic CA/certificates, one-use pairing, resumable agent join,
+resource selection and explicit updates. A normal setup needs no OpenSSL, YAML
+editing or private-key copying. Agents can be script-only, Docker or rootless
+Podman owners; HLCP itself remains a native system/user process.
+
+Implemented and locally package/process-tested; **not yet booted-VM accepted or
+published in a managed release**. Preview.4 is the earlier checkpoint. See
+[current evidence](docs/48-managed-plug-and-play-delivery.md),
+[existing-install migration](docs/50-managed-migration-and-recovery.md) and the
+[whole-system live gate](docs/51-managed-live-acceptance.md). Existing external
+PKI remains supported via explicit `hlcp-controller setup --imported`.
+
 ## Documentation map
 
 - [Project vision and scope](docs/00-project-vision.md)
@@ -74,6 +89,9 @@ The v1 implementation currently includes:
 - inventory/state synchronization and heartbeat-based liveness;
 - live typed resource observations with session-scoped updates and freshness;
 - allow-listed `systemd`, Docker, and Podman resource actions;
+- fixed executable/argv script actions, without a remotely supplied shell;
+- automatic managed PKI, pinned one-use enrollment, durable live revoke/re-pair,
+  renewable identities, resource wizard and signed explicit installation/update;
 - controller-side command correlation and agent-side command-result deduplication;
 - ACK-aware bounded retries, a durable controller ledger and read-only recovery;
 - a loopback-only HTTP API consumed by the `hlcp` CLI;

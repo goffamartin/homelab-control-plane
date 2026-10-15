@@ -538,6 +538,16 @@ P05/checkpoint B otevřené, preview.4 a produkční homelab beze změn.
 
 ## P06 — Managed PKI a controller setup
 
+Aktualizace implementace: P06–P11 jsou propojené v managed setup/join/runtime,
+resource wizardu, obnově certifikátů a podepsaném installeru/update helperu.
+Lokální Debian package/process test zahrnuje i skutečný přechod ze staré
+pathLen:0 CA se zachováním resources a byte-identické historie. P12 má připravený
+postup a testy, ale živá migrace/systemd/reboot/Podman/Docker akceptace není
+provedená. Preview.4 a skutečné VM se nemění. Viz
+[aktuální evidence](48-managed-plug-and-play-delivery.md),
+[Quick Start](49-managed-quick-start.md), [migrace](50-managed-migration-and-recovery.md)
+a [celková live brána](51-managed-live-acceptance.md).
+
 - Vestavěný Go issuer v controlleru; bez povinného externího CA serveru/Vault.
   Root EC P-256 s pathLen 1 a encrypted export, issuing CA pathLen 0, neagentní
   podpisový klíč dostupný jen kontrolované issuer části. Žádné agentní CA certs.

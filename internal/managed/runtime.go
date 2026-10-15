@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"net"
+	"net/url"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -14,9 +16,22 @@ type RuntimeConfig struct {
 	ServerName       string `json:"server_name"`
 	EnrollmentListen string `json:"enrollment_listen"`
 	EnrollmentURL    string `json:"enrollment_url"`
+	LegacyServer     bool   `json:"legacy_server,omitempty"`
+	LegacyTrust      string `json:"legacy_trust,omitempty"`
 }
 
 func (c RuntimeConfig) Validate() error {
+	u, e := url.Parse(c.EnrollmentURL)
+	if e != nil || !strings.EqualFold(u.Hostname(), c.ServerName) {
+		return ErrInput
+	}
+	if c.LegacyServer {
+		if len(c.LegacyTrust) > 8<<10 || ValidatePeerTrust([]byte(c.LegacyTrust), time.Now()) != nil {
+			return ErrInput
+		}
+	} else if c.LegacyTrust != "" {
+		return ErrInput
+	}
 	if c.Version != 1 || !validEnrollmentURL(c.EnrollmentURL) || (!validDNS(c.ServerName) && net.ParseIP(c.ServerName) == nil) {
 		return ErrInput
 	}
@@ -26,6 +41,10 @@ func (c RuntimeConfig) Validate() error {
 		if err != nil || e != nil || net.ParseIP(host) == nil || p < 1 || p > 65535 {
 			return ErrInput
 		}
+	}
+	host, _, _ := net.SplitHostPort(c.Listen)
+	if net.ParseIP(host).IsUnspecified() {
+		return ErrInput
 	}
 	return nil
 }
@@ -68,6 +87,11 @@ func OpenRuntime(path string) (*Runtime, error) {
 	r, err := OpenRegistry(s, a)
 	if err != nil {
 		return fail()
+	}
+	if config.LegacyServer {
+		if r.ConfigureLegacy([]byte(config.LegacyTrust)) != nil {
+			return fail()
+		}
 	}
 	i, err := OpenServerIdentity(s, a, config.ServerName)
 	if err != nil {

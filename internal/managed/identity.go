@@ -8,6 +8,7 @@ import (
 	"crypto/x509"
 	"encoding/hex"
 	"encoding/json"
+	"encoding/pem"
 	"hlcp/internal/transport"
 	"net/http"
 	"net/url"
@@ -25,6 +26,7 @@ type identityDisk struct {
 	Certificate   []byte    `json:"certificate"`
 	Key           []byte    `json:"key"`
 	CA            []byte    `json:"ca"`
+	PeerCA        []byte    `json:"peer_ca,omitempty"`
 	CSR           []byte    `json:"csr"`
 	PendingID     string    `json:"pending_id"`
 	PendingAt     time.Time `json:"pending_at"`
@@ -48,10 +50,11 @@ func CreateAgentIdentity(ctx context.Context, store *Store, id, enrollment strin
 }
 
 func ProvisionAgentIdentity(ctx context.Context, store *Store, id, enrollment string, key, csr []byte, result EnrollmentResult, replace bool) error {
-	if !validEnrollmentURL(enrollment) || VerifyAgentMaterial(id, result.Certificate, key, result.CA, time.Now()) != nil {
+	if !validEnrollmentURL(enrollment) || ValidateEnrollmentTrust(result.CA, result.PeerCA, time.Now()) != nil || VerifyAgentMaterial(id, result.Certificate, key, result.CA, time.Now()) != nil {
 		return ErrPKI
 	}
 	d := identityDisk{Version: 1, NodeID: id, EnrollmentURL: enrollment, Key: key, CSR: csr, CA: result.CA, Certificate: result.Certificate, LastSuccess: time.Now()}
+	d.PeerCA = result.PeerCA
 	data, _ := json.Marshal(d)
 	if before, err := store.Read(identityFile); err == nil {
 		var old identityDisk
@@ -79,6 +82,7 @@ func OpenAgentIdentity(store *Store, id string) (*AgentIdentity, error) {
 		return nil, ErrStore
 	}
 	var d identityDisk
+	// Trust overlap is explicit migration metadata, not system CA inference.
 	if DecodeJSON(data, &d, 128<<10) != nil || d.Version != 1 || d.NodeID != id || !validEnrollmentURL(d.EnrollmentURL) || len(d.Key) > 16<<10 || len(d.CSR) > 16<<10 || d.Failures < 0 || d.Failures > 30 || VerifyAgentMaterial(id, d.Certificate, d.Key, d.CA, time.Now()) != nil {
 		return nil, ErrPKI
 	}
@@ -92,11 +96,47 @@ func OpenAgentIdentity(store *Store, id string) (*AgentIdentity, error) {
 func (i *AgentIdentity) TLSConfig(serverName string) (*tls.Config, error) {
 	i.mutex.RLock()
 	defer i.mutex.RUnlock()
-	return transport.ClientTLSConfigDynamic(i.disk.CA, serverName, func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+	roots := i.disk.CA
+	if len(i.disk.PeerCA) > 0 {
+		roots = i.disk.PeerCA
+	}
+	if ValidateEnrollmentTrust(i.disk.CA, i.disk.PeerCA, time.Now()) != nil {
+		return nil, ErrPKI
+	}
+	config, err := transport.ClientTLSConfigDynamic(roots, serverName, func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
 		i.mutex.RLock()
 		defer i.mutex.RUnlock()
 		return i.pair, nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	roleCheck := config.VerifyConnection
+	config.VerifyConnection = func(state tls.ConnectionState) error {
+		if err := roleCheck(state); err != nil {
+			return err
+		}
+		i.mutex.RLock()
+		current := bytes.Clone(i.disk.CA)
+		if len(i.disk.PeerCA) > 0 {
+			current = bytes.Clone(i.disk.PeerCA)
+		}
+		i.mutex.RUnlock()
+		if len(state.PeerCertificates) == 0 {
+			return ErrPKI
+		}
+		pool := x509.NewCertPool()
+		if !pool.AppendCertsFromPEM(current) {
+			return ErrPKI
+		}
+		intermediates := x509.NewCertPool()
+		for _, cert := range state.PeerCertificates[1:] {
+			intermediates.AddCert(cert)
+		}
+		_, err := state.PeerCertificates[0].Verify(x509.VerifyOptions{Roots: pool, Intermediates: intermediates, DNSName: serverName, CurrentTime: time.Now(), KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}})
+		return err
+	}
+	return config, nil
 }
 
 type CertificateStatus struct {
@@ -110,6 +150,9 @@ type CertificateStatus struct {
 	IssuerExpires time.Time `json:"issuer_expires,omitempty"`
 	IssuerWarning string    `json:"issuer_warning,omitempty"`
 	RootExpires   time.Time `json:"root_expires,omitempty"`
+	RootWarning   string    `json:"root_warning,omitempty"`
+	Migration     bool      `json:"migration,omitempty"`
+	LegacyExpires time.Time `json:"legacy_expires,omitempty"`
 }
 
 func expiryWarning(expires, now time.Time) string {
@@ -131,7 +174,20 @@ func expiryWarning(expires, now time.Time) string {
 func (i *AgentIdentity) Status(now time.Time) CertificateStatus {
 	i.mutex.RLock()
 	defer i.mutex.RUnlock()
-	return CertificateStatus{Managed: true, Expires: i.pair.Leaf.NotAfter, RenewAt: RenewalTime(i.pair.Leaf), NextAttempt: i.disk.NextAttempt, LastSuccess: i.disk.LastSuccess, Failures: i.disk.Failures, Warning: expiryWarning(i.pair.Leaf.NotAfter, now)}
+	status := CertificateStatus{Managed: true, Expires: i.pair.Leaf.NotAfter, RenewAt: RenewalTime(i.pair.Leaf), NextAttempt: i.disk.NextAttempt, LastSuccess: i.disk.LastSuccess, Failures: i.disk.Failures, Warning: expiryWarning(i.pair.Leaf.NotAfter, now), Migration: len(i.disk.PeerCA) > 0}
+	if len(i.pair.Certificate) > 1 {
+		if issuer, e := x509.ParseCertificate(i.pair.Certificate[1]); e == nil {
+			status.IssuerExpires = issuer.NotAfter
+			status.IssuerWarning = issuerWarning(issuer.NotAfter, now)
+		}
+	}
+	if block, _ := pem.Decode(i.disk.CA); block != nil {
+		if root, e := x509.ParseCertificate(block.Bytes); e == nil {
+			status.RootExpires = root.NotAfter
+			status.RootWarning = expiryWarning(root.NotAfter, now)
+		}
+	}
+	return status
 }
 func renewalDelay(failures int) time.Duration {
 	if failures > 8 {
@@ -228,6 +284,10 @@ func (i *AgentIdentity) Renew(ctx context.Context, now time.Time) error {
 		return ErrPKI
 	}
 	d.Certificate = result.Certificate
+	if ValidateEnrollmentTrust(result.CA, result.PeerCA, now) != nil {
+		return ErrPKI
+	}
+	d.PeerCA = result.PeerCA
 	d.PendingID = ""
 	d.PendingAt = time.Time{}
 	d.NextAttempt = time.Time{}

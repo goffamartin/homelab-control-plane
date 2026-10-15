@@ -1,5 +1,9 @@
 # P05y — Booted Debian onboarding acceptance runbook
 
+Historical imported-PKI gate. Managed setup is now implemented; use
+[Quick Start](49-managed-quick-start.md) and the expanded
+[managed live gate](51-managed-live-acceptance.md) for the next candidate.
+
 Stav: připravený postup a read-only collector; **live akceptace dosud neprovedená**.
 Lokální shell/core/package testy nejsou booted systemd ani reboot evidence.
 Preview.4 se nemění, žádný tag/release/publish ani homelab deploy není součástí.

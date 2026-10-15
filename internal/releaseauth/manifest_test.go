@@ -24,7 +24,7 @@ func TestSignedManifestRefusesTamperArchitectureCompatibilityAndMissingAssets(t 
 	for _, kind := range []string{"valid", "tamper", "wrong-version", "wrong-arch", "missing", "incompatible", "dirty", "duplicate", "traversal", "unsigned"} {
 		t.Run(kind, func(t *testing.T) {
 			dir := t.TempDir()
-			m := Manifest{Version: "v1.2.3", Revision: strings.Repeat("a", 40), GoVersion: "go1.27.2", ProtocolVersion: 1, StateVersion: 1}
+			m := Manifest{Version: "v1.2.3", Revision: strings.Repeat("a", 40), GoVersion: "go1.27.2", ProtocolVersion: 1, StateVersion: 1, JournalVersion: 3, LedgerVersion: 1}
 			for _, name := range []string{"hlcp-agent_1.2.3_amd64.deb", "hlcp-linux-amd64"} {
 				content := []byte(name)
 				hash := sha256.Sum256(content)

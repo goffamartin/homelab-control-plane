@@ -58,6 +58,9 @@ func backupTree(path string, uid, gid int, result *[]backupEntry, total *int, de
 		return ErrSetup
 	}
 	for _, entry := range entries {
+		if len(*result) >= 1024 {
+			return ErrSetup
+		}
 		name := entry.Name()
 		if name == ".managed.lock" {
 			continue

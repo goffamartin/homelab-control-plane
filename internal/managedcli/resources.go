@@ -16,11 +16,11 @@ import (
 	"time"
 )
 
-func activateConfiguredAgent(scope string) int {
+func activateConfiguredAgent(scope, unit string) int {
 	if scope == "system" {
 		return onboarding.SandboxProbeCLI([]string{"--start", "--apply", "--yes"}, io.Discard)
 	}
-	return onboarding.AgentActivationCLI([]string{"--scope", scope, "--apply", "--yes"}, io.Discard)
+	return onboarding.AgentActivationCLI([]string{"--scope", scope, "--unit", unit, "--apply", "--yes"}, io.Discard)
 }
 
 type arguments []string
@@ -43,6 +43,7 @@ func Resources(args []string, input io.Reader, out io.Writer) int {
 		defaultScope = "system"
 	}
 	scope := f.String("scope", defaultScope, "user or system")
+	unit := f.String("unit", "hlcp-agent.service", "packaged generic or user compatibility profile")
 	id := f.String("id", "", "resource ID")
 	adapter := f.String("adapter", "", "docker, podman, systemd or script")
 	target := f.String("target", "", "container name or service unit")
@@ -63,7 +64,7 @@ func Resources(args []string, input io.Reader, out io.Writer) int {
 		}
 		return 2
 	}
-	if f.NArg() != 0 || *apply != *yes {
+	if f.NArg() != 0 || !validAgentProfile(*scope, *unit) || *apply != *yes {
 		return 2
 	}
 	p, err := pathsFor(*scope)
@@ -234,12 +235,12 @@ func Resources(args []string, input io.Reader, out io.Writer) int {
 		return 0
 	}
 	if *restart {
-		state, e := inspectService(ctx, *scope, "hlcp-agent.service")
+		state, e := inspectService(ctx, *scope, *unit)
 		if e != nil {
 			return fail("SERVICE_PREFLIGHT_REFUSED")
 		}
 		if state.active == "active" {
-			if _, e = fixedProcess(ctx, "/usr/bin/systemctl", []string{"--" + *scope, "--no-ask-password", "stop", "hlcp-agent.service"}, *scope); e != nil {
+			if _, e = fixedProcess(ctx, "/usr/bin/systemctl", []string{"--" + *scope, "--no-ask-password", "stop", *unit}, *scope); e != nil {
 				return fail("STOP_UNCERTAIN")
 			}
 		}
@@ -265,7 +266,7 @@ func Resources(args []string, input io.Reader, out io.Writer) int {
 		return fail("WRITE_FAILED")
 	}
 	_ = s.Close()
-	if *restart && activateConfiguredAgent(*scope) != 0 {
+	if *restart && activateConfiguredAgent(*scope, *unit) != 0 {
 		return fail("CONFIGURED_SERVICE_NOT_STARTED_CHECK_READINESS")
 	}
 	fmt.Fprintln(out, "Resource configuration saved. Journal and identity unchanged.")

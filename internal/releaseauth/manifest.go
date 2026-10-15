@@ -21,6 +21,8 @@ type Manifest struct {
 	GoVersion       string     `json:"go_version"`
 	ProtocolVersion int        `json:"protocol_version"`
 	StateVersion    int        `json:"state_version"`
+	JournalVersion  int        `json:"journal_version"`
+	LedgerVersion   int        `json:"ledger_version"`
 	Artifacts       []Artifact `json:"artifacts"`
 }
 
@@ -59,7 +61,7 @@ func VerifyDirectory(directory, version, role, arch string, public []byte) (stri
 	var m Manifest
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&m) != nil || decoder.Decode(new(any)) != io.EOF || m.Version != version || !revisionPattern.MatchString(m.Revision) || m.ProtocolVersion != 1 || m.StateVersion != 1 || len(m.Artifacts) == 0 || len(m.Artifacts) > 64 {
+	if decoder.Decode(&m) != nil || decoder.Decode(new(any)) != io.EOF || m.Version != version || !revisionPattern.MatchString(m.Revision) || m.ProtocolVersion != 1 || m.StateVersion != 1 || m.JournalVersion != 3 || m.LedgerVersion != 1 || len(m.Artifacts) == 0 || len(m.Artifacts) > 64 {
 		return "", ErrSignature
 	}
 	packageName := "hlcp-" + role + "_" + strings.TrimPrefix(version, "v") + "_" + arch + ".deb"
