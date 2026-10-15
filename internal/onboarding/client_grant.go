@@ -19,21 +19,35 @@ type clientGrantReport struct {
 	ReadOnly bool               `json:"read_only"`
 	Preview  *setup.Preview     `json:"preview,omitempty"`
 	Result   *setup.ApplyResult `json:"result,omitempty"`
+	Path     string             `json:"path,omitempty"`
+	Group    uint32             `json:"group,omitempty"`
+}
+
+type ClientAccessReport = clientGrantReport
+
+// ClientPreflight runs the normal user-side profile preview without requiring
+// a CA/token to exist and never exports a bearer or mutates user paths.
+func ClientPreflight(ctx context.Context, name string, trust bool) ClientAccessReport {
+	return nativeClientGrantWithOptions(ctx, name, "operator", false, trust, true)
 }
 
 func ClientGrantCLI(args []string, out io.Writer) int {
-	return runClientGrantCLI(args, out, nativeClientGrant)
+	return runClientGrantCLI(args, out, func(ctx context.Context, name, role string, apply, trust bool) clientGrantReport {
+		return nativeClientGrantWithOptions(ctx, name, role, apply, trust, false)
+	})
 }
-func runClientGrantCLI(args []string, out io.Writer, grant func(context.Context, string, string, bool) clientGrantReport) int {
+func runClientGrantCLI(args []string, out io.Writer, grant func(context.Context, string, string, bool, bool) clientGrantReport) int {
 	f := flag.NewFlagSet("configure-client", flag.ContinueOnError)
 	f.SetOutput(io.Discard)
 	user := f.String("user", "", "explicit local non-root account")
 	role := f.String("role", "operator", "existing operator or observer access")
 	apply := f.Bool("apply", false, "apply user CLI plan")
 	yes := f.Bool("yes", false, "explicit access export and file-write consent")
+	trust := f.Bool("trust-user-group", false, "explicitly trust group-writable ancestors owned by this user and their primary group; no chmod")
 	jsonOutput := f.Bool("json", false, "redacted JSON report")
 	if err := f.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
+			fmt.Fprintln(out, "Optional: --trust-user-group explicitly accepts primary-group-writable user-owned ancestors only; no chmod and no relaxation of private profile/file permissions.")
 			if _, err = fmt.Fprintln(out, "Usage: hlcp-controller configure-client --user account [--role operator|observer] [--json] [--apply --yes]\nDefault: preview without exporting the bearer; role defaults to operator. Writes run as the selected user only.\nRequires installed controller and an existing safe user home. Missing .config/hlcp directories are created only after consent. No overwrite, rotation, policy or service changes."); err == nil {
 				return 0
 			}
@@ -52,7 +66,7 @@ func runClientGrantCLI(args []string, out io.Writer, grant func(context.Context,
 			return 2
 		}
 	}
-	report := grant(ctx, *user, *role, *apply)
+	report := grant(ctx, *user, *role, *apply, *trust)
 	var err error
 	if *jsonOutput {
 		err = json.NewEncoder(out).Encode(report)
@@ -63,6 +77,12 @@ func runClientGrantCLI(args []string, out io.Writer, grant func(context.Context,
 		}
 		if err == nil {
 			_, err = fmt.Fprintln(out)
+		}
+		if err == nil && report.Path != "" {
+			_, err = fmt.Fprintf(out, "Path: %s (group ID %d).\n", report.Path, report.Group)
+		}
+		if err == nil && report.Code == "GROUP_WRITABLE_PARENT" {
+			_, err = fmt.Fprintln(out, "Selected user's primary group can modify this parent. If you trust its members, retry with --trust-user-group; no permissions will be changed.")
 		}
 		if err == nil && report.Preview != nil {
 			for _, c := range report.Preview.Changes {

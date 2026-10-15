@@ -53,6 +53,13 @@ func PlanDirectory(directory string, owner Owner) (*DirectoryPlan, error) {
 	}
 	return &DirectoryPlan{source: source}, nil
 }
+func PlanDirectoryTrustingOwnerGroup(directory string, owner Owner) (*DirectoryPlan, error) {
+	source, err := planDirectoryWithTrust(directory, owner, true)
+	if err != nil {
+		return nil, err
+	}
+	return &DirectoryPlan{source: source}, nil
+}
 func (p *DirectoryPlan) Create(ctx context.Context, confirmed bool) (*Planner, error) {
 	p.mutex.Lock()
 	defer p.mutex.Unlock()

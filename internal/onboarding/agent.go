@@ -146,12 +146,21 @@ func PlanAgent(ctx context.Context, directory string, owner setup.Owner, options
 
 // Shared confirmed file/directory application, independent of runtime role.
 func planFiles(ctx context.Context, directory string, owner setup.Owner, intents []setup.Intent) (*AgentSetup, error) {
-	planner, err := setup.OpenPlanner(directory, owner)
+	return planFilesWithTrust(ctx, directory, owner, intents, false)
+}
+func planFilesWithTrust(ctx context.Context, directory string, owner setup.Owner, intents []setup.Intent, trust bool) (*AgentSetup, error) {
+	open := setup.OpenPlanner
+	planDirectory := setup.PlanDirectory
+	if trust {
+		open = setup.OpenPlannerTrustingOwnerGroup
+		planDirectory = setup.PlanDirectoryTrustingOwnerGroup
+	}
+	planner, err := open(directory, owner)
 	if err != nil {
 		if !errors.Is(err, setup.ErrMissingDirectory) {
 			return nil, err
 		}
-		directoryPlan, err := setup.PlanDirectory(directory, owner)
+		directoryPlan, err := planDirectory(directory, owner)
 		if err != nil {
 			return nil, err
 		}
