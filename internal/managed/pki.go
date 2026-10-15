@@ -177,6 +177,8 @@ func (a *Authority) Fingerprint() string {
 }
 func (a *Authority) IssuerExpires() time.Time { return a.issuer.NotAfter }
 
+func (a *Authority) RootPEM() []byte { return certPEM(a.root) }
+
 func LoadAuthority(rootPEM, issuerPEM, privatePEM []byte, now time.Time) (*Authority, error) {
 	parse := func(data []byte) (*x509.Certificate, error) {
 		b, rest := pem.Decode(data)
