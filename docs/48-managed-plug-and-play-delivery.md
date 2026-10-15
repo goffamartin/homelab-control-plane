@@ -84,8 +84,13 @@ end-user path until runtime, CLI, package and recovery tests are integrated.
   disposable non-booted container, NOT a deployment or VM lifecycle verdict.
 - Quick Start, backup/migration/recovery boundaries and the whole-system live
   acceptance matrix are in docs/49–51. No extra web UI/MCP scope was inferred.
-- Pending: final complete regression/candidate reproducibility rerun, then only
-  user-authorized publication/whole-system booted VM acceptance.
+- Final full Windows test/vet and Linux race/test/vet passed. Clean signed final
+  candidate v0.0.0-test.ready.2 from product commit 974d0ee was built twice for
+  Linux amd64/arm64 and Windows amd64; all 19 files/signatures matched. Installed
+  onboarding/migration/signed-install/update and package-preservation gates passed.
+  [Exact local evidence](52-managed-local-acceptance-evidence.md).
+- Remaining handoff boundary: user-authorized candidate publication and combined
+  whole-system booted VM acceptance, not another implementation prerequisite.
 - No managed release or VM/live acceptance yet. Preview.4 remains unchanged.
 
 ## Implementation acceptance
