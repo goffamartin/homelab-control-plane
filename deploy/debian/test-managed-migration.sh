@@ -22,7 +22,9 @@ install -m 600 -o acceptance -g acceptance "$fixture/ca.crt" /home/acceptance/le
 install -d -m 700 -o acceptance -g acceptance /home/acceptance/.local/state/hlcp
 install -d -m 700 -o acceptance -g acceptance /home/acceptance/.config
 runuser -u acceptance -- hlcp-agent setup --scope user --directory /home/acceptance/.config/hlcp --node legacy-01 --controller 127.0.0.1:19443 --server-name 127.0.0.1 --journal /home/acceptance/.local/state/hlcp/command-journal.json --cert /home/acceptance/legacy-material/agent.crt --key /home/acceptance/legacy-material/agent.key --issuer-ca /home/acceptance/legacy-material/ca.crt --peer-ca /home/acceptance/legacy-material/ca.crt --apply --yes
-runuser -u acceptance -- hlcp-agent resources configure --scope user --id kernel --adapter script --actions status --executable /usr/bin/uname --arg=-s --apply --yes
+runuser -u acceptance -- sed -i '/^resources: \[\]$/c\resources:\n  - id: kernel\n    type: task\n    adapter: script\n    actions: [status]\n    commands:\n      status:\n        executable: /usr/bin/uname\n        argv: [-s]\n        working_directory: /\n        timeout: 10s' /home/acceptance/.config/hlcp/agent.yaml
+runuser -u acceptance -- sed -i 's/^capabilities:.*/capabilities: [resource.control, script]/' /home/acceptance/.config/hlcp/agent.yaml
+runuser -u acceptance -- hlcp-agent check-config --scope user --json
 sed -i 's/^agent_version:.*/agent_version: legacy-version/' /home/acceptance/.config/hlcp/agent.yaml
 controller_pid=;agent_pid=
 trap 'if [ -n "$agent_pid" ];then kill "$agent_pid" 2>/dev/null||true;fi;if [ -n "$controller_pid" ];then kill "$controller_pid" 2>/dev/null||true;fi' EXIT

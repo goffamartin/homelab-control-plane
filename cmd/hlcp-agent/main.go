@@ -17,6 +17,12 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "configure" {
+		os.Exit(managedcli.Configure(os.Args[2:], os.Stdin, os.Stdout))
+	}
+	if len(os.Args) > 1 && os.Args[1] == "check-config" {
+		os.Exit(managedcli.CheckConfig(os.Args[2:], os.Stdout))
+	}
 	if len(os.Args) > 1 && os.Args[1] == "certificates" {
 		os.Exit(managedcli.AgentCertificates(os.Args[2:], os.Stdout))
 	}
@@ -48,7 +54,7 @@ func main() {
 	checkConfig := flag.Bool("check-config", false, "validate configuration and exit")
 	version := flag.Bool("version", false, "print build metadata and exit")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: hlcp-agent join|resources|certificates|prepare-user|setup|activate|probe-resources|doctor [options]\nRuntime options:")
+		fmt.Fprintln(os.Stderr, "Usage: hlcp-agent join|configure|check-config|resources|certificates|prepare-user|setup|activate|probe-resources|doctor [options]\nRuntime options:")
 		flag.PrintDefaults()
 	}
 	flag.Parse()

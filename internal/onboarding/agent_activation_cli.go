@@ -13,12 +13,15 @@ import (
 )
 
 type agentActivationReport struct {
-	Status      string                      `json:"status"`
-	Code        string                      `json:"code,omitempty"`
-	ReadOnly    bool                        `json:"read_only"`
-	Preview     *AgentActivationPreview     `json:"preview,omitempty"`
-	Result      *ControllerActivationResult `json:"result,omitempty"`
-	Constraints []string                    `json:"constraints,omitempty"`
+	SchemaVersion int                         `json:"schema_version"`
+	Check         string                      `json:"check,omitempty"`
+	Next          string                      `json:"next,omitempty"`
+	Status        string                      `json:"status"`
+	Code          string                      `json:"code,omitempty"`
+	ReadOnly      bool                        `json:"read_only"`
+	Preview       *AgentActivationPreview     `json:"preview,omitempty"`
+	Result        *ControllerActivationResult `json:"result,omitempty"`
+	Constraints   []string                    `json:"constraints,omitempty"`
 }
 
 func AgentActivationCLI(args []string, out io.Writer) int {
@@ -33,8 +36,24 @@ func runAgentActivationCLI(args []string, out io.Writer, host AgentActivationHos
 	enable := f.Bool("enable", false, "explicit persistent service enable; user linger must already exist")
 	apply := f.Bool("apply", false, "apply service activation plan")
 	yes := f.Bool("yes", false, "separate activation consent")
-	jsonOutput := f.Bool("json", false, "redacted JSON report")
+	jsonRequested := false
+	for _, arg := range args {
+		if arg == "--json" {
+			jsonRequested = true
+		}
+	}
+	jsonOutput := f.Bool("json", jsonRequested, "redacted JSON report")
 	if err := f.Parse(args); err != nil {
+		if *jsonOutput {
+			status, code, exitCode := "failed", "INVALID_OPTIONS", 2
+			if errors.Is(err, flag.ErrHelp) {
+				status, code, exitCode = "ok", "HELP", 0
+			}
+			if json.NewEncoder(out).Encode(agentActivationReport{SchemaVersion: 1, Status: status, Code: code, ReadOnly: true, Next: "Use --scope user|system, --unit hlcp-agent.service, optional --enable, --apply --yes. Default is read-only preview."}) != nil {
+				return 2
+			}
+			return exitCode
+		}
 		if errors.Is(err, flag.ErrHelp) {
 			if _, err = fmt.Fprintln(out, "Usage: hlcp-agent activate [--scope user|system] [--unit hlcp-agent.service|hlcp-agent-podman.service]\n  [--enable] [--json] [--apply --yes]\nDefault: user-scope read-only preview; run directly as the non-root resource owner.\nSystem scope requires root. Installed package profiles and validated imported setup only.\nUser resources: bounded Docker/Podman/script metadata checks; systemd status only.\nSystem-scope resources still require separate service-sandbox readiness review.\nMetadata checks do not establish runtime health, service environment or resource execution success.\nNo restart, implicit linger, account/config changes, recovery or resource execution during preview."); err == nil {
 				return 0
@@ -44,6 +63,7 @@ func runAgentActivationCLI(args []string, out io.Writer, host AgentActivationHos
 		return 2
 	}
 	emit := func(report agentActivationReport) int {
+		report.SchemaVersion = 1
 		var err error
 		if *jsonOutput {
 			err = json.NewEncoder(out).Encode(report)
@@ -54,6 +74,12 @@ func runAgentActivationCLI(args []string, out io.Writer, host AgentActivationHos
 			}
 			if err == nil {
 				_, err = fmt.Fprintln(out)
+			}
+			if err == nil && report.Check != "" {
+				_, err = fmt.Fprintln(out, "Check:", report.Check)
+			}
+			if err == nil && report.Next != "" {
+				_, err = fmt.Fprintln(out, "Next:", report.Next)
 			}
 			if err == nil && report.Preview != nil {
 				for _, action := range report.Preview.Actions {
@@ -105,7 +131,15 @@ func runAgentActivationCLI(args []string, out io.Writer, host AgentActivationHos
 		if errors.As(err, &refusal) {
 			constraints = refusal.Constraints()
 		}
-		if emit(agentActivationReport{Status: "failed", Code: code, ReadOnly: true, Constraints: constraints}) != 0 {
+		check, next := "", "Inspect the selected service and its configuration; no activation changes were made. Do not reset pairing or journal state."
+		var checkError *agentActivationCheckError
+		if errors.As(err, &checkError) {
+			check = checkError.check
+		}
+		if check == "service_manager_reload_required" {
+			next = "Run systemctl --user daemon-reload for user scope, or sudo systemctl daemon-reload for system scope, then retry activation."
+		}
+		if emit(agentActivationReport{Status: "failed", Code: code, ReadOnly: true, Constraints: constraints, Check: check, Next: next}) != 0 {
 			return 2
 		}
 		return 1

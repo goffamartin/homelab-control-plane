@@ -36,7 +36,13 @@ runuser -u acceptance -- /usr/bin/hlcp-agent join --pairing-stdin --scope user -
 runuser -u acceptance -- /usr/bin/hlcp-agent join --resume --scope user --apply --yes --json
 if runuser -u acceptance -- /usr/bin/hlcp-agent join --pairing-stdin --scope user --apply --yes </root/pairing-code; then echo 'Unexpected second join accepted';exit 1;fi
 test "$(stat -c %U /home/acceptance/.local/state/hlcp/managed/identity.json)" = acceptance
-runuser -u acceptance -- /usr/bin/hlcp-agent resources configure --scope user --id kernel --adapter script --actions status --executable /usr/bin/uname --arg=-s --apply --yes
+runuser -u acceptance -- sed -i 's/^capabilities:.*/capabilities: [resource.control, script]/' /home/acceptance/.config/hlcp/agent.yaml
+runuser -u acceptance -- sed -i '/^resources: \[\]$/c\resources:\n  - id: kernel\n    type: task\n    adapter: script\n    actions: [status]\n    commands:\n      status:\n        executable: /usr/bin/uname\n        argv: [-s]\n        working_directory: /\n        timeout: 10s' /home/acceptance/.config/hlcp/agent.yaml
+runuser -u acceptance -- /usr/bin/hlcp-agent check-config --scope user --json
+runuser -u acceptance -- env VISUAL=/bin/false /usr/bin/hlcp-agent configure --scope user --json
+runuser -u acceptance -- env VISUAL=/bin/true /usr/bin/hlcp-agent configure --scope user
+runuser -u acceptance -- /usr/bin/hlcp-agent resources list --scope user --json | grep 'kernel'
+if runuser -u acceptance -- /usr/bin/hlcp-agent resources configure --scope user --json;then echo 'Removed writer was accepted';exit 1;fi
 runuser -u acceptance -- /usr/bin/hlcp-agent certificates --scope user
 runuser -u acceptance -- /usr/bin/hlcp-agent -config /home/acceptance/.config/hlcp/agent.yaml >/root/agent-test.log 2>&1 &
 agent_pid=$!

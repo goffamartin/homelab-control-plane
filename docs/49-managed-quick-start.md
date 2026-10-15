@@ -153,30 +153,57 @@ As the agent's execution/configuration owner:
 hlcp-agent resources
 ```
 
-The wizard supports `script`, `podman`, `docker` and `systemd`. It never enables
-all discovered resources automatically. Script input is an absolute executable,
-literal argument list, working directory, named action and bounded timeout, not
-a shell string sent from the controller. Script actions are treated as mutating
-even when named `status`. Each update retains one private previous config.
-
-Examples without YAML editing:
+YAML is the single source of truth. `resources` lists safe metadata; it does not
+open a mutation wizard. `configure` opens the existing private YAML in `$VISUAL`,
+`$EDITOR`, `nano` or `vi`, as the invoking owner. It does not repair permissions,
+rewrite YAML, validate runtime health or restart the service automatically.
 
 ```sh
 hlcp-agent resources discover --adapter podman
-hlcp-agent resources configure --id example-catalog --adapter podman \
-  --target example-catalog --actions status,restart --restart --apply --yes
-hlcp-agent resources configure --id kernel --adapter script --actions status \
-  --executable /usr/bin/uname --arg=-s --restart --apply --yes
+hlcp-agent configure
+hlcp-agent check-config
+systemctl --user restart hlcp-agent.service
 ```
 
-For Docker change only `--adapter docker`. `discover` runs bounded local runtime
+For Docker use `discover --adapter docker` and `adapter: docker` in YAML.
+`discover` runs bounded local runtime
 metadata listing as the actual non-root owner, never actions or implicit imports.
-For service resources choose `--adapter systemd --target example.service`.
+For service resources choose `adapter: systemd` and `target: example.service`.
 System-scope actions still need the existing sandbox-readiness gate and actual
 OS permissions; failures are not solved by granting root or disabling sandboxing.
-Use `--replace` to replace an existing resource explicitly, or `resources remove
---id NAME --apply --yes`. Without `--restart`, saved changes take effect only at
-the next explicitly requested restart.
+Add/edit/remove entries in `resources:` in the YAML. Former `resources configure`
+and `resources remove` commands now fail with `COMMAND_REMOVED`, without changes.
+`check-config` validates syntax/schema only: it does not open TLS files, execute
+resources or establish service readiness. For system scope use `--scope system`
+as root and explicitly restart with `sudo systemctl restart hlcp-agent.service`.
+For the compatibility profile restart `hlcp-agent-podman.service` instead.
+
+Example entries (retain the identity/controller/journal fields created by join):
+
+```yaml
+capabilities: [resource.control, podman, script]
+resources:
+  - id: hlcp-smoke
+    type: container
+    adapter: podman
+    target: hlcp-smoke
+    actions: [status, restart]
+  - id: kernel
+    type: task
+    adapter: script
+    actions: [status]
+    commands:
+      status:
+        executable: /usr/bin/uname
+        argv: [-s]
+        working_directory: /
+        timeout: 10s
+```
+
+Scripts remain local, explicitly allowlisted executable/argument configurations,
+not arbitrary shell commands from the controller. They require no container
+runtime. Script actions are mutating even when called `status`.
+See [administrative output contract](55-administrative-output.md) for `--json`.
 
 On the controller:
 

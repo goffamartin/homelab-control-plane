@@ -17,7 +17,7 @@ import (
 	"time"
 )
 
-var ErrSetup = errors.New("managed setup refused; existing state preserved for inspection")
+var ErrSetup = errors.New("managed setup operation did not complete; inspect actual state before retrying")
 
 func validAgentProfile(scope, unit string) bool {
 	return (scope == "user" && (unit == "hlcp-agent.service" || unit == "hlcp-agent-podman.service")) || (scope == "system" && unit == "hlcp-agent.service")
