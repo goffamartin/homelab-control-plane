@@ -65,8 +65,14 @@ end-user path until runtime, CLI, package and recovery tests are integrated.
   inactive service or explicit restart consent, and takes a private bounded
   no-follow state/config snapshot before APT. It never restores command history.
   Download staging is removed after success and retained privately after failure.
-- Pending: installed signed-helper/update acceptance, migration/acceptance quick
-  start and final lifecycle hardening/integrated verification.
+- Installed signed-helper acceptance passed in disposable Debian: exact signed
+  clean-SHA artifacts, verified preview and real APT installation, explicit
+  non-booted offline update, private recovery archive and byte-preserved config
+  and managed state. Missing/unsigned/modified/wrong-version assets and invalid
+  manifest signatures failed before installation. Live service update remains
+  a separate booted VM gate, not inferred from offline success.
+- Pending: migration/acceptance quick start and final lifecycle hardening and
+  integrated verification.
 - No managed release or VM/live acceptance yet. Preview.4 remains unchanged.
 
 ## Implementation acceptance

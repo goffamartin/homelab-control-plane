@@ -63,7 +63,7 @@ func packageAgentDeb(out, version, revision, arch string) (artifact, error) {
 	for _, entry := range data {
 		installedSize += (len(entry.data) + 1023) / 1024
 	}
-	controlText := fmt.Sprintf("Package: hlcp-agent\nVersion: %s\nArchitecture: %s\nMaintainer: Martin Goffa <goffamartin@gmail.com>\nSection: admin\nPriority: optional\nInstalled-Size: %d\nDepends: systemd (>= 252)\nSuggests: dbus-user-session\nHomepage: https://github.com/goffamartin/homelab-control-plane\nDescription: HomeLab runtime-independent agent\n Native mTLS agent with opt-in system and user units; no automatic startup.\n", packageVersion, arch, installedSize)
+	controlText := fmt.Sprintf("Package: hlcp-agent\nVersion: %s\nArchitecture: %s\nMaintainer: Martin Goffa <goffamartin@gmail.com>\nSection: admin\nPriority: optional\nInstalled-Size: %d\nDepends: adduser, systemd (>= 252)\nSuggests: dbus-user-session\nHomepage: https://github.com/goffamartin/homelab-control-plane\nDescription: HomeLab runtime-independent agent\n Native mTLS agent with opt-in system and user units; no automatic startup.\n", packageVersion, arch, installedSize)
 	filename := "hlcp-agent_" + strings.ReplaceAll(packageVersion, "~", "-") + "_" + arch + ".deb"
 	preinst, err := debSource("deploy/debian/agent/preinst", true)
 	if err != nil {

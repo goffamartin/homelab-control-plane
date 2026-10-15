@@ -7,15 +7,16 @@ export PATH
 usage() {
  echo 'Usage: sh install.sh controller|agent --version vX.Y.Z [--public|--from-directory /artifacts] [--scope system|user] [--update] [--restart] [--configure] [--apply --yes]'
  echo 'Default verifies/downloads only. Private GitHub uses your existing gh login, never a PAT argument. Update snapshots config/state and never restores an old journal.'
+ echo 'Advanced: --unit hlcp-agent-podman.service (user compatibility profile); --offline-stopped only for non-booted image maintenance, never live restart.'
 }
 fail(){ echo "HLCP installation refused: $*" >&2; exit 1; }
 role=${1:-}
 case "$role" in controller|agent) shift;; --help|-h) usage;exit 0;; *) usage;exit 2;;esac
-version=;public=no;source_dir=;scope=system;update=no;restart=no;configure=no;apply=no;yes=no
+version=;public=no;source_dir=;scope=system;update=no;restart=no;configure=no;apply=no;yes=no;offline=no;unit=
 while [ "$#" -gt 0 ];do
  case "$1" in
-  --version|--from-directory|--scope) [ "$#" -ge 2 ]||fail 'missing option value';key=$1;shift;case "$key" in --version) version=$1;;--from-directory) source_dir=$1;;--scope) scope=$1;;esac;;
-  --public) public=yes;;--update) update=yes;;--restart) restart=yes;;--configure) configure=yes;;--apply) apply=yes;;--yes) yes=yes;;--help|-h) usage;exit 0;;*) fail 'unknown option';;
+  --version|--from-directory|--scope|--unit) [ "$#" -ge 2 ]||fail 'missing option value';key=$1;shift;case "$key" in --version) version=$1;;--from-directory) source_dir=$1;;--scope) scope=$1;;--unit) unit=$1;;esac;;
+  --public) public=yes;;--update) update=yes;;--restart) restart=yes;;--configure) configure=yes;;--offline-stopped) offline=yes;;--apply) apply=yes;;--yes) yes=yes;;--help|-h) usage;exit 0;;*) fail 'unknown option';;
  esac;shift
 done
 [ "$apply" = "$yes" ]||fail '--apply and --yes are both required for changes'
@@ -23,6 +24,11 @@ done
 [ "$role" != controller ]||[ "$scope" = system ]||fail 'controller requires system scope'
 [ "$restart" = no ]||[ "$update" = yes ]||fail '--restart is only for updates; use --configure on a fresh install'
 [ "$configure" = no ]||[ "$update" = no ]||fail 'update never reruns provisioning'
+if [ -z "$unit" ];then unit="hlcp-$role.service";fi
+case "$role:$scope:$unit" in controller:system:hlcp-controller.service|agent:system:hlcp-agent.service|agent:user:hlcp-agent.service|agent:user:hlcp-agent-podman.service);;*)fail 'unsupported service profile';;esac
+if [ "$offline" = yes ];then
+ [ "$update" = yes ]&&[ "$restart" = no ]&&[ ! -d /run/systemd/system ]&&[ "$(cat /proc/1/comm)" != systemd ]||fail '--offline-stopped is only for explicit non-booted image maintenance, never live restart'
+fi
 printf '%s' "$version"|grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.]+)?$'||fail 'an exact numeric release version is required; latest is not accepted'
 [ "$(uname -s)" = Linux ]||fail 'Debian Linux required'
 command -v dpkg >/dev/null||fail 'Debian dpkg required'
@@ -94,10 +100,9 @@ if [ "$apply" = no ];then echo 'Read-only verification complete. No package, ser
 root(){ if [ "$(id -u)" -eq 0 ];then "$@";else sudo -- "$@";fi; }
 systemctl_scope(){ if [ "$scope" = user ];then [ "$(id -u)" -ne 0 ]||fail 'run user-scope installation as the real resource owner, not root';systemctl --user --no-ask-password "$@";else root systemctl --system --no-ask-password "$@";fi; }
 if [ "$update" = yes ]&&[ -n "$installed" ];then
- unit="hlcp-$role.service"
- active=$(systemctl_scope show "$unit" --property=ActiveState --value)||fail 'cannot inspect service'
+ if [ "$offline" = yes ];then active=inactive;else active=$(systemctl_scope show "$unit" --property=ActiveState --value)||fail 'cannot inspect service';fi
  case "$active" in active) [ "$restart" = yes ]||fail 'stop service first or explicitly request --restart';systemctl_scope stop "$unit"||fail 'service stop uncertain';;inactive);;*)fail 'service must be active or inactive; inspect failed/transitioning unit';;esac
- [ "$(systemctl_scope show "$unit" --property=ActiveState --value)" = inactive ]||fail 'service did not stop'
+ [ "$offline" = yes ]||[ "$(systemctl_scope show "$unit" --property=ActiveState --value)" = inactive ]||fail 'service did not stop'
  stamp=$(date -u +%Y%m%dT%H%M%SZ)
  if [ "$scope" = user ];then
   account_home=$(getent passwd "$(id -u)"|cut -d: -f6)
@@ -111,8 +116,8 @@ if [ "$update" = yes ]&&[ -n "$installed" ];then
 fi
 root apt-get install -y -o Dpkg::Options::=--force-confold "$stage/$package"||fail 'package install failed; inspect state and backup before retry'
 if [ "$restart" = yes ];then
- systemctl_scope start "hlcp-$role.service"||fail 'start failed; new package/state retained for inspection'
- [ "$(systemctl_scope show "hlcp-$role.service" --property=ActiveState --value)" = active ]||fail 'service not active'
+ systemctl_scope start "$unit"||fail 'start failed; new package/state retained for inspection'
+ [ "$(systemctl_scope show "$unit" --property=ActiveState --value)" = active ]||fail 'service not active'
  echo 'Service started. Verify controller registration/inventory before issuing actions.'
 fi
 if [ "$configure" = yes ];then
