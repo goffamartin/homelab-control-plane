@@ -4,6 +4,8 @@ Status: implemented in source and tested with installed packages/processes in
 disposable Debian 13 containers. **Booted systemd/reboot acceptance is NOT RUN.**
 Preview.4 does not contain this workflow. Use the next explicitly published,
 signed candidate, or the exact-SHA local candidate for isolated acceptance.
+Preview.6 fixes prompt timing; preview.7 adds early CLI-path preflight,
+explicit primary-group trust and resumable setup settings (see docs/54).
 This document does not authorize touching or cleaning existing HomeLab VMs.
 
 ## What the normal user does
@@ -73,6 +75,27 @@ the dedicated controller process. Root compromise is outside this protection.
 Selecting the explicit CLI user provisions its private profile; thereafter run
 `hlcp -n` as that user without sudo or repeated token arguments. Successful setup
 and service startup do not themselves prove agent registration.
+
+The controller itself runs as `hlcp-controller`; the selected CLI account is a
+separate existing human account, not the service identity. Before CA creation,
+setup checks the service account, private destinations and the CLI profile path.
+If a user-owned parent such as `.config` is writable by that user's primary group,
+the wizard names the path/group and asks whether you trust its members. Accepting
+does NOT chmod `.config`: only the new HLCP directory/files are private 0700/0600.
+World-write, foreign ownership/groups, links and unsafe private profiles remain
+refused. Declining trust can skip CLI setup without blocking controller setup.
+Noninteractive consent is `--trust-user-group`; the standalone
+`configure-client` command accepts the same explicit flag.
+
+Setup retains selected settings privately in `managed-setup-request.json`.
+After interruption, rerun `sudo hlcp-controller setup`; review the saved settings
+and confirm completion. A configured controller keeps its CA, registry and history
+and does not ask for another root-backup password. Preview.6 installations without
+saved settings recover their existing network identity from bootstrap metadata
+and ask only for choices that were not previously saved. `--cli-user ACCOUNT`
+overrides the saved account; `--skip-client` completes without exporting another
+profile (it does not revoke existing tokens). A late CLI error retains the full
+controller state and shows the specific cause and completion instructions.
 
 ## 3. Agent — choose execution account, not a containerized HLCP service
 
