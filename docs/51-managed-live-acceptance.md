@@ -43,7 +43,7 @@ separate explicit user authorization; no workflow publishes automatically.
 | Scenario | Pass evidence | Status |
 |---|---|---|
 | Verified private download | Actual non-root gh login, exact signed version; no token/secret in logs | PASS preview.5: helper checksum and signed controller preview verified on controller VM |
-| Fresh managed controller | Wizard creates PKI/backup/profile; service active; CLI without sudo; no remote API 9444 | FAIL preview.5: wizard SERVICE_MANAGER_RELOAD_FAILED after user input; timeout defect fixed in source, live retry pending |
+| Fresh managed controller | Wizard creates PKI/backup/profile; service active; CLI without sudo; no remote API 9444 | FAIL preview.5 timeout, fixed in preview.6; preview.6 reached CA backup then CLI refusal due to group-writable .config. Removing group-write allowed preview; full activation still unverified. Preview.7 early checks/trust/resume need live retry. |
 | Script-only system agent | No container runtime installed; join, explicit script resource, allowed action and sandbox startup | NOT RUN |
 | Generic user agent | Actual owner join/start/enable; no implicit sudo/account impersonation | NOT RUN |
 | Rootless Podman | Actual container owner/subuid/subgid/linger; selected container status/restart only | NOT RUN |

@@ -98,6 +98,8 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	passwordStdin := f.Bool("backup-password-stdin", false, "read one backup password line, never argv")
 	backupConfirmed := f.Bool("backup-confirmed", false, "explicit acknowledgement that backup must be saved off-host")
 	cliUser := f.String("cli-user", "", "explicit existing non-root CLI account")
+	trustGroup := f.Bool("trust-user-group", false, "explicit trust in selected user's primary group for writable parent directories; no chmod")
+	skipClient := f.Bool("skip-client", false, "finish controller setup without exporting CLI access")
 	start := f.Bool("start", false, "start controller after configuration")
 	enable := f.Bool("enable", false, "enable boot startup after verified start")
 	resume := f.Bool("resume", false, "explicitly recover interrupted local setup transaction")
@@ -106,6 +108,7 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	jsonOutput := f.Bool("json", false, "redacted JSON result")
 	if err := f.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
+			fmt.Fprintln(out, "CLI access: --cli-user ACCOUNT (not the service identity), --trust-user-group or --skip-client. Saved managed setup settings are reused; an existing CA/registry/history is never reset to finish CLI access.")
 			fmt.Fprintln(out, "Migration: setup --migrate --interactive (stopped imported controller, explicit trust overlap). Non-booted images alone may use --offline-stopped without activation.")
 			fmt.Fprintln(out, "Usage: hlcp-controller setup [--managed] --interactive\nOr: --listen IP:9443 --server-name DNS/IP [--enrollment-listen IP:9445] [--enrollment-url https://DNS:9445]\n  [--cli-user account] [--backup-file /private/root-backup.json] [--backup-password-stdin --backup-confirmed]\n  [--start [--enable]] [--resume] [--json] [--apply --yes]\nDefault noninteractive mode is read-only preview. Managed setup creates CA/certificates automatically.\nEncrypted root backup needs a >=16-character password and off-host retention. No CA key in argv.\nImported mode remains: setup --imported with explicit certificate options.")
 			return 0
@@ -128,15 +131,76 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	}
 	phases := newWorkflowContext()
 	defer phases.close()
+	defaults, savedPreferences, defaultsErr := loadControllerRequest(*directory)
+	if defaultsErr != nil {
+		fmt.Fprintln(out, "Saved setup settings are invalid or unsafe; preserve existing state for inspection.")
+		return 1
+	}
+	set := map[string]bool{}
+	f.Visit(func(flag *flag.Flag) { set[flag.Name] = true })
+	if defaults.Config.Listen != "" {
+		if !set["listen"] {
+			*listen = defaults.Config.Listen
+		}
+		if !set["server-name"] {
+			*name = defaults.Config.ServerName
+		}
+		if !set["enrollment-listen"] {
+			*enrollment = defaults.Config.EnrollmentListen
+		}
+		if !set["enrollment-url"] {
+			*address = defaults.Config.EnrollmentURL
+		}
+		if !set["state-directory"] {
+			*state = defaults.State
+		}
+		if !set["backup-file"] {
+			*backup = defaults.Backup
+		}
+		if savedPreferences {
+			if !set["cli-user"] {
+				*cliUser = defaults.CLIUser
+			}
+			if !set["trust-user-group"] && !set["cli-user"] {
+				*trustGroup = defaults.TrustUserGroup
+			}
+			if !set["start"] {
+				*start = defaults.Start
+			}
+			if !set["enable"] {
+				*enable = defaults.Enable
+			}
+		}
+		if *interactive {
+			fmt.Fprintln(out, "Found saved managed setup. Reusing its settings; existing CA, admission and history will not be regenerated.")
+		}
+	}
+	if *skipClient {
+		*cliUser = ""
+		*trustGroup = false
+	}
+	if *enable && !*start {
+		fmt.Fprintln(out, "Boot enable requires start; use --enable=false when overriding saved start=false.")
+		return 2
+	}
 	if *offline && (*start || !offlineImage()) {
 		fmt.Fprintln(out, "Offline mode is only for stopped non-booted images, never service activation.")
 		return 2
 	}
+	var clientFailure *onboarding.ClientAccessReport
 	fail := func(code string) int {
 		if *jsonOutput {
-			_ = json.NewEncoder(out).Encode(map[string]any{"status": "failed", "code": code, "preserved": true})
+			report := map[string]any{"status": "failed", "code": code, "preserved": true}
+			if clientFailure != nil {
+				report["client_error"] = clientFailure
+				report["next"] = "Rerun setup to finish existing configuration, or setup --skip-client; do not delete CA/state."
+			}
+			_ = json.NewEncoder(out).Encode(report)
 		} else {
 			fmt.Fprintln(out, "Managed setup refused:", code, "Existing state preserved; inspect before retry.")
+			if code == "SERVICE_PREFLIGHT_REFUSED" {
+				fmt.Fprintln(out, "Expected the installed controller unit at /usr/lib/systemd/system/hlcp-controller.service, service account hlcp-controller and no custom drop-ins. Inspect systemctl cat/show; do not remove local overrides blindly.")
+			}
 		}
 		return 1
 	}
@@ -158,23 +222,25 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 				*name = host
 			}
 		}
-		if *cliUser == "" {
-			*cliUser, err = ui.lineContext(phases.input(), "Existing non-root account for hlcp CLI (blank to skip): ")
+		if *cliUser == "" && !*skipClient && !savedPreferences {
+			*cliUser, err = ui.lineContext(phases.input(), "Existing local account for CLI access (controller runs separately as hlcp-controller; blank to skip): ")
 			if err != nil {
 				return fail("INPUT_REQUIRED")
 			}
 		}
-		value, e := ui.lineContext(phases.input(), "Start controller after setup? [yes/no]: ")
-		if e != nil {
-			return fail("INPUT_REQUIRED")
-		}
-		*start = affirmative(value)
-		if *start {
-			value, e = ui.lineContext(phases.input(), "Enable controller after successful start? [yes/no]: ")
+		if !savedPreferences {
+			value, e := ui.lineContext(phases.input(), "Start controller after setup? [yes/no]: ")
 			if e != nil {
 				return fail("INPUT_REQUIRED")
 			}
-			*enable = affirmative(value)
+			*start = affirmative(value)
+			if *start {
+				value, e = ui.lineContext(phases.input(), "Enable controller after successful start? [yes/no]: ")
+				if e != nil {
+					return fail("INPUT_REQUIRED")
+				}
+				*enable = affirmative(value)
+			}
 		}
 	}
 	host, _, err := net.SplitHostPort(*listen)
@@ -188,6 +254,10 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 		*address = "https://" + net.JoinHostPort(*name, "9445")
 	}
 	config := managed.RuntimeConfig{Version: 1, Listen: *listen, ServerName: *name, EnrollmentListen: *enrollment, EnrollmentURL: *address}
+	if defaults.Config.Listen != "" && !*migrate {
+		config.LegacyServer = defaults.Config.LegacyServer
+		config.LegacyTrust = defaults.Config.LegacyTrust
+	}
 	var importedIDs []string
 	if *migrate {
 		owner := setup.Owner{UID: 0, GID: 0}
@@ -215,7 +285,7 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 		return fail("INVALID_BACKUP_PATH")
 	}
 	if *interactive {
-		fmt.Fprintf(out, "Plan: managed PKI, controller %s, enrollment %s, encrypted backup %s, start=%t, boot=%t.\n", *listen, *address, *backup, *start, *enable)
+		fmt.Fprintf(out, "Plan: managed PKI, controller %s, enrollment %s, encrypted backup %s, service account hlcp-controller, CLI account %q, start=%t, boot=%t.\n", *listen, *address, *backup, *cliUser, *start, *enable)
 		answer, e := ui.lineContext(phases.input(), "Apply this configuration? [yes/no]: ")
 		if e != nil || !affirmative(answer) {
 			fmt.Fprintln(out, "No changes applied.")
@@ -223,6 +293,57 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 		}
 		*apply = true
 		*yes = true
+	}
+	ctx := phases.operation()
+	preflightUID, preflightGID, preflightErr := account("hlcp-controller")
+	if preflightErr != nil {
+		return fail("SERVICE_ACCOUNT_REFUSED")
+	}
+	for _, target := range []struct {
+		path     string
+		uid, gid int
+	}{{*directory, 0, 0}, {*state, preflightUID, preflightGID}, {filepath.Dir(*backup), 0, 0}} {
+		if preflightPrivateDirectory(target.path, target.uid, target.gid) != nil {
+			if !*jsonOutput {
+				fmt.Fprintf(out, "Unsafe private destination: %q; no permissions changed.\n", target.path)
+			}
+			return fail("PRIVATE_DESTINATION_PREFLIGHT_REFUSED")
+		}
+	}
+	if *cliUser != "" && *directory != controllerDirectory {
+		return fail("CLI_REQUIRES_PACKAGED_PATHS")
+	}
+	for *cliUser != "" {
+		report := onboarding.ClientPreflight(ctx, *cliUser, *trustGroup)
+		if report.Status == "preview" {
+			break
+		}
+		if *jsonOutput {
+			_ = json.NewEncoder(out).Encode(report)
+			return 1
+		}
+		explainClientIssue(out, report)
+		if *interactive && report.Code == "GROUP_WRITABLE_PARENT" && !*trustGroup {
+			answer, e := ui.lineContext(phases.input(), "Trust members of this user's primary group for CLI parent directories? [yes/no]: ")
+			if e != nil {
+				return fail("INPUT_REQUIRED")
+			}
+			if affirmative(answer) {
+				*trustGroup = true
+				ctx = phases.operation()
+				continue
+			}
+		}
+		if *interactive {
+			answer, e := ui.lineContext(phases.input(), "Continue controller setup WITHOUT CLI access for this user? [yes/no]: ")
+			if e == nil && affirmative(answer) {
+				*cliUser = ""
+				*trustGroup = false
+				ctx = phases.operation()
+				break
+			}
+		}
+		return fail(report.Code)
 	}
 	if !*apply {
 		if *jsonOutput {
@@ -232,7 +353,6 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 		}
 		return 0
 	}
-	ctx := phases.operation()
 	var serviceBefore serviceState
 	if (*start || *migrate) && !*offline {
 		if reloadManager(ctx, "system") != nil {
@@ -251,6 +371,31 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 		return fail("CONFIG_STORE_UNAVAILABLE")
 	}
 	defer rootStore.Close()
+	request := controllerRequest{Version: 1, Config: config, State: *state, Backup: *backup, CLIUser: *cliUser, TrustUserGroup: *trustGroup, Start: *start, Enable: *enable}
+	configureClient := func() bool {
+		if *cliUser == "" {
+			return true
+		}
+		report := applyControllerClient(*cliUser, *trustGroup)
+		if report.Status == "applied" {
+			return true
+		}
+		clientFailure = &report
+		if !*jsonOutput {
+			explainClientIssue(out, report)
+			fmt.Fprintln(out, "Controller configuration and CA are retained. Run setup again to finish; use --skip-client to activate without CLI access. Do not delete state or generate another CA.")
+		}
+		if *interactive {
+			answer, e := ui.lineContext(phases.input(), "Keep the configured controller and continue WITHOUT CLI access? [yes/no]: ")
+			ctx = phases.operation()
+			if e == nil && affirmative(answer) {
+				request.CLIUser = ""
+				request.TrustUserGroup = false
+				return saveControllerRequest(ctx, rootStore, request) == nil
+			}
+		}
+		return false
+	}
 	// Completed setup does not re-run seed provisioning or reset live registry.
 	mode, modeErr := rootStore.Read("managed.env")
 	if modeErr == nil {
@@ -262,16 +407,22 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 		if !bytes.Equal(mode, []byte("HLCP_MANAGED_STATE="+*state+"\n")) {
 			return fail("EXISTING_MODE_CONFLICT")
 		}
+		if saveControllerRequest(ctx, rootStore, request) != nil {
+			return fail("SETUP_SETTINGS_SAVE_FAILED")
+		}
+		if !configureClient() {
+			return fail("CLIENT_SETUP_INCOMPLETE")
+		}
 		if *start && activateService(ctx, "system", "hlcp-controller.service", *enable) != nil {
 			return fail("ACTIVATION_UNCERTAIN")
-		}
-		if *cliUser != "" && onboarding.ClientGrantCLI([]string{"--user", *cliUser, "--apply", "--yes"}, io.Discard) != 0 {
-			return fail("CLIENT_SETUP_INCOMPLETE")
 		}
 		if *jsonOutput {
 			_ = json.NewEncoder(out).Encode(map[string]any{"status": "configured", "unchanged": true, "managed": true})
 		} else {
 			fmt.Fprintln(out, "Managed controller already configured; identity and registry preserved.")
+			if request.CLIUser == "" {
+				fmt.Fprintln(out, "No user CLI access configured. Later: sudo hlcp-controller configure-client --user ACCOUNT --apply --yes. Skipping CLI setup does not revoke previously exported tokens.")
+			}
 		}
 		return 0
 	}
@@ -280,6 +431,9 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	}
 	if (*start || *migrate) && !*offline && serviceBefore.active != "inactive" {
 		return fail("STOP_CONTROLLER_BEFORE_PROVISIONING")
+	}
+	if saveControllerRequest(ctx, rootStore, request) != nil {
+		return fail("SETUP_SETTINGS_SAVE_FAILED")
 	}
 	password := ""
 	if *interactive {
@@ -422,7 +576,7 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	if putSame(ctx, rootStore, "managed.env", []byte("HLCP_MANAGED_STATE="+*state+"\n")) != nil {
 		return fail("MANAGED_MODE_COMMIT_FAILED")
 	}
-	if *cliUser != "" && onboarding.ClientGrantCLI([]string{"--user", *cliUser, "--apply", "--yes"}, io.Discard) != 0 {
+	if !configureClient() {
 		return fail("CLIENT_SETUP_INCOMPLETE")
 	}
 	if *start && activateService(ctx, "system", "hlcp-controller.service", *enable) != nil {
@@ -432,6 +586,9 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 		_ = json.NewEncoder(out).Encode(map[string]any{"status": "configured", "managed": true, "started": *start, "enabled": *enable, "backup_file": *backup})
 	} else {
 		fmt.Fprintln(out, "Managed controller configured. PKI created, encrypted backup retained. Next: hlcp pairing create --node NODE.")
+		if request.CLIUser == "" {
+			fmt.Fprintln(out, "No user CLI access configured. Later: sudo hlcp-controller configure-client --user ACCOUNT --apply --yes.")
+		}
 	}
 	return 0
 }
