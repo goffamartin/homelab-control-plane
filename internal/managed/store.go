@@ -19,10 +19,11 @@ const MaximumStateBytes = 8 << 20
 // Store pins a private directory and holds an OS lock until Close. It does not
 // create/repair the directory; setup/join must explicitly provision it first.
 type Store struct {
-	mutex  sync.Mutex
-	root   *os.Root
-	lock   *os.File
-	failed bool
+	mutex    sync.Mutex
+	root     *os.Root
+	lock     *os.File
+	failed   bool
+	uid, gid int
 }
 
 func (*Store) String() string               { return "managed private store (redacted)" }
@@ -30,14 +31,22 @@ func (s *Store) GoString() string           { return s.String() }
 func (*Store) MarshalJSON() ([]byte, error) { return []byte(`{"store":"redacted"}`), nil }
 
 func OpenStore(path string) (*Store, error) {
+	return OpenStoreAsOwner(path, os.Geteuid(), os.Getegid())
+}
+
+// Only explicit root provisioning may select another validated local owner.
+func OpenStoreAsOwner(path string, uid, gid int) (*Store, error) {
+	if uid < 0 || gid < 0 || (os.Geteuid() != 0 && (uid != os.Geteuid() || gid != os.Getegid())) {
+		return nil, ErrStore
+	}
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || path == string(filepath.Separator) {
 		return nil, ErrStore
 	}
-	root, lock, err := openPrivateStore(path)
+	root, lock, err := openPrivateStore(path, uid, gid)
 	if err != nil {
 		return nil, ErrStore
 	}
-	return &Store{root: root, lock: lock}, nil
+	return &Store{root: root, lock: lock, uid: uid, gid: gid}, nil
 }
 func (s *Store) Close() error {
 	if s == nil {
@@ -60,7 +69,7 @@ func (s *Store) read(name string) ([]byte, error) {
 	if s.root == nil || s.failed || !storeName(name) {
 		return nil, ErrStore
 	}
-	f, err := openStoreFile(s.root, name, os.O_RDONLY)
+	f, err := openStoreFile(s.root, name, os.O_RDONLY, s.uid, s.gid)
 	if os.IsNotExist(err) {
 		return nil, os.ErrNotExist
 	}
@@ -104,7 +113,7 @@ func (s *Store) Update(ctx context.Context, name string, fn func([]byte) ([]byte
 		return ErrStore
 	}
 	temp := ".managed-stage-" + hex.EncodeToString(id[:])
-	f, err := openStoreFile(s.root, temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL)
+	f, err := openStoreFile(s.root, temp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, s.uid, s.gid)
 	if err != nil {
 		return ErrStore
 	}

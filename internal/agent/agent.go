@@ -250,7 +250,7 @@ func Run(ctx context.Context, config Config) error {
 		if err == nil {
 			worker, stop := context.WithCancel(ctx)
 			done := make(chan struct{})
-			go func() { defer close(done); identity.Maintain(worker, nil) }()
+			go func() { defer close(done); identity.Maintain(worker, managed.StatusReporter(os.Stderr)) }()
 			defer func() { stop(); <-done }()
 		}
 	} else {

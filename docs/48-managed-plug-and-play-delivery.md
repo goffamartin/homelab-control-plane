@@ -35,9 +35,28 @@ end-user path until runtime, CLI, package and recovery tests are integrated.
   old certificates even when a key is reused. Agent expiry requires re-pair;
   server leaves can renew locally under the valid issuer. Diagnostics expose
   expiry/renewal/issuer metadata, never keys. HTTP renewal requires mTLS.
-- Pending: managed setup/service/package wiring, operator pairing CLI,
-  resumable join/resources wizard, signed artifact verification/update,
-  migration/acceptance quick start and remaining lifecycle hardening tests.
+- Managed setup is now the default controller wizard; imported setup remains
+  explicit. It creates a resumable root-owned seed and encrypted root backup,
+  provisions service-owned runtime state, and optionally grants the actual CLI
+  user access and starts/enables only verified packaged units.
+- Operator CLI pairing create/list/revoke and certificate diagnostics are wired.
+  Agent join persists key/CSR/request before enrollment, resumes interrupted
+  requests, and supports explicit re-pair with private bounded config/identity
+  backups while retaining resources and journal. Codes are stdin/TTY/private-file
+  only, never command-line arguments. Resource wizard supports script, Docker,
+  Podman and systemd allowlists; discovery does not enable actions.
+- Certificate lifecycle diagnostics and deduplicated journal metadata are wired.
+  Explicit offline issuer renewal decrypts the root backup only for maintenance,
+  retaining root, issuer key, registry and command history. This is not recovery
+  from a compromised key. Root expiry still requires planned replacement.
+- Debian 13 disposable package/process acceptance passed: real installed setup
+  without OpenSSL/YAML/scp, repeat setup preserving CA/registry, pairing, user
+  join, completed resume, duplicate refusal, script allowlist and actual uname
+  action, diagnostics during runtime, active revocation and unchanged journal.
+  The container has no booted systemd: service start/enable/reboot acceptance
+  remains NOT RUN. Local artifacts are development-only, not a release.
+- Pending: signed artifact verification/update, migration/acceptance quick start
+  and final lifecycle hardening/integrated verification.
 - No managed release or VM/live acceptance yet. Preview.4 remains unchanged.
 
 ## Implementation acceptance
