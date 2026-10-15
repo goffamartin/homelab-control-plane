@@ -55,8 +55,18 @@ end-user path until runtime, CLI, package and recovery tests are integrated.
   action, diagnostics during runtime, active revocation and unchanged journal.
   The container has no booted systemd: service start/enable/reboot acceptance
   remains NOT RUN. Local artifacts are development-only, not a release.
-- Pending: signed artifact verification/update, migration/acceptance quick start
-  and final lifecycle hardening/integrated verification.
+- Signed release manifest/checksum support and a pinned-key installation helper
+  are implemented. Exact-version Debian amd64/arm64 artifacts are authenticated
+  before execution/APT; unsigned, modified, missing, wrong-architecture,
+  incompatible-state and dirty-source manifests are rejected. The local signing
+  key is outside Git under ignored .tools/release-signing with restricted ACL;
+  only its public key is distributed. No new release has been published.
+- Explicit update helper preserves conffiles, refuses downgrade, requires an
+  inactive service or explicit restart consent, and takes a private bounded
+  no-follow state/config snapshot before APT. It never restores command history.
+  Download staging is removed after success and retained privately after failure.
+- Pending: installed signed-helper/update acceptance, migration/acceptance quick
+  start and final lifecycle hardening/integrated verification.
 - No managed release or VM/live acceptance yet. Preview.4 remains unchanged.
 
 ## Implementation acceptance

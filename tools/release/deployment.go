@@ -12,6 +12,8 @@ import (
 
 // Explicit source allowlist: never package a directory walk or local secrets.
 var deploymentFiles = []string{
+	"deploy/install/install.sh",
+	"deploy/install/release.pub",
 	"deploy/debian/inspect-onboarding-host.sh",
 	"deploy/systemd/hlcp-controller.service",
 	"deploy/systemd/hlcp-agent.service",
