@@ -126,6 +126,17 @@ func OpenPlanner(directory string, owner Owner) (*Planner, error) {
 	return NewPlanner(source)
 }
 
+// OpenPlannerTrustingOwnerGroup is an explicit user-profile exception, never a
+// global relaxation. The final directory/files remain private; only ancestors
+// owned by the non-root user and their primary group may be group-writable.
+func OpenPlannerTrustingOwnerGroup(directory string, owner Owner) (*Planner, error) {
+	source, err := openNativeSourceWithTrust(directory, owner, true)
+	if err != nil {
+		return nil, err
+	}
+	return NewPlanner(source)
+}
+
 func (planner *Planner) Close() error {
 	planner.mutex.Lock()
 	defer planner.mutex.Unlock()

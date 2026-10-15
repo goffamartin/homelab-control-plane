@@ -66,6 +66,9 @@ func (p *ClientSetup) Apply(ctx context.Context, confirmed bool) (setup.ApplyRes
 // account. No root reads or writes to user-owned paths, chown, HOME/SUDO_USER
 // inference, recursive mkdir, permission repair or controller policy changes.
 func PlanClient(ctx context.Context, directory string, owner setup.Owner, api string, credential ClientCredential) (*ClientSetup, error) {
+	return planClientWithTrust(ctx, directory, owner, api, credential, false)
+}
+func planClientWithTrust(ctx context.Context, directory string, owner setup.Owner, api string, credential ClientCredential, trust bool) (*ClientSetup, error) {
 	if err := validateClientOwner(owner); err != nil {
 		return nil, err
 	}
@@ -73,7 +76,7 @@ func PlanClient(ctx context.Context, directory string, owner setup.Owner, api st
 	if err != nil {
 		return nil, err
 	}
-	plan, err := planFiles(ctx, directory, owner, intents)
+	plan, err := planFilesWithTrust(ctx, directory, owner, intents, trust)
 	if err != nil {
 		return nil, err
 	}

@@ -21,8 +21,9 @@ import (
 )
 
 type grantMetadata struct {
-	Directory string `json:"directory"`
-	Digest    string `json:"digest"`
+	Directory      string `json:"directory"`
+	Digest         string `json:"digest"`
+	TrustUserGroup bool   `json:"trust_user_group,omitempty"`
 }
 type grantConsent struct {
 	Confirmed bool   `json:"confirmed"`
@@ -68,8 +69,15 @@ func ClientProvisionChild(input io.Reader, out io.Writer) int {
 	if err != nil || !safeGrantHome(account.HomeDir) || metadata.Directory != filepath.Join(account.HomeDir, ".config", "hlcp") {
 		return emit(grantFailure("PREVIEW_REFUSED", true))
 	}
+	if issue := inspectClientPath(metadata.Directory, owner, metadata.TrustUserGroup); issue != nil {
+		return emit(*issue)
+	}
 	credential, _ := NewClientCredential([]byte(strings.Repeat("0", 64))) // public schema stand-in, never applied
-	planner, err := setup.OpenPlanner(metadata.Directory, owner)
+	open := setup.OpenPlanner
+	if metadata.TrustUserGroup {
+		open = setup.OpenPlannerTrustingOwnerGroup
+	}
+	planner, err := open(metadata.Directory, owner)
 	if err == nil {
 		token, e := planner.Snapshot("cli.token", 257)
 		planner.Close()
@@ -79,15 +87,15 @@ func ClientProvisionChild(input io.Reader, out io.Writer) int {
 		if token.Exists {
 			credential, e = NewClientCredential(token.Data)
 			if e != nil || credentialDigest(credential) != metadata.Digest {
-				return emit(grantFailure("PREVIEW_REFUSED", true))
+				return emit(grantFailure("PROFILE_CONFLICT", true))
 			}
 		}
 	} else if !os.IsNotExist(err) && err != setup.ErrMissingDirectory {
 		return emit(grantFailure("PREVIEW_REFUSED", true))
 	}
-	p, err := planGrantClient(context.Background(), metadata.Directory, owner, credential)
+	p, err := planGrantClientWithTrust(context.Background(), metadata.Directory, owner, credential, metadata.TrustUserGroup)
 	if err != nil {
-		return emit(grantFailure("PREVIEW_REFUSED", true))
+		return emit(grantFailure("PROFILE_PLAN_REFUSED", true))
 	}
 	defer p.Close()
 	preview := p.Preview()
@@ -114,7 +122,7 @@ func ClientProvisionChild(input io.Reader, out io.Writer) int {
 	return emit(clientGrantReport{Status: "applied", ReadOnly: false, Result: &r})
 }
 func safeGrantHome(home string) bool {
-	return filepath.IsAbs(home) && filepath.Clean(home) == home && home != "/" && len(home) < 3500 && !strings.ContainsRune(home, 0)
+	return filepath.IsAbs(home) && filepath.Clean(home) == home && home != "/" && len(home) < 3500 && !strings.ContainsAny(home, "\x00\r\n")
 }
 
 func lookupGrantAccount(name string) (grantAccount, error) {
@@ -245,7 +253,7 @@ func controllerGrantSource(directory, role string) (*setup.Planner, *setup.Plan,
 }
 
 func validGrantPreview(report clientGrantReport) bool {
-	if report.Status != "preview" || !report.ReadOnly || report.Code != "" || report.Result != nil || report.Preview == nil || !report.Preview.ReadOnly {
+	if report.Status != "preview" || !report.ReadOnly || report.Code != "" || report.Result != nil || report.Preview == nil || !report.Preview.ReadOnly || report.Path != "" || report.Group != 0 {
 		return false
 	}
 	changes := report.Preview.Changes
@@ -279,6 +287,9 @@ func validGrantPreview(report clientGrantReport) bool {
 }
 
 func nativeClientGrant(parent context.Context, name, role string, apply bool) clientGrantReport {
+	return nativeClientGrantWithOptions(parent, name, role, apply, false, false)
+}
+func nativeClientGrantWithOptions(parent context.Context, name, role string, apply, trust, preflight bool) clientGrantReport {
 	if os.Geteuid() != 0 || os.Getegid() != 0 {
 		return grantFailure("ROOT_REQUIRED", true)
 	}
@@ -298,11 +309,17 @@ func nativeClientGrant(parent context.Context, name, role string, apply bool) cl
 	if err != nil {
 		return grantFailure("ACCOUNT_REFUSED", true)
 	}
-	planner, plan, credential, err := controllerGrantSource(controllerConfigDirectory, role)
-	if err != nil {
-		return grantFailure("SOURCE_REFUSED", true)
+	var planner *setup.Planner
+	var plan *setup.Plan
+	credential, _ := NewClientCredential([]byte(strings.Repeat("0", 64)))
+	_, sourceErr := os.Lstat(filepath.Join(controllerConfigDirectory, "api.token"))
+	if !preflight || !os.IsNotExist(sourceErr) {
+		planner, plan, credential, err = controllerGrantSource(controllerConfigDirectory, role)
+		if err != nil {
+			return grantFailure("SOURCE_REFUSED", true)
+		}
+		defer planner.Close()
 	}
-	defer planner.Close()
 	ctx, cancel := context.WithTimeout(parent, 20*time.Second)
 	defer cancel()
 	command := exec.CommandContext(ctx, self, "__client-provision")
@@ -339,13 +356,19 @@ func nativeClientGrant(parent context.Context, name, role string, apply bool) cl
 		}
 	}()
 	encoder := json.NewEncoder(stdin)
-	if encoder.Encode(grantMetadata{Directory: account.Directory, Digest: credentialDigest(credential)}) != nil {
+	if encoder.Encode(grantMetadata{Directory: account.Directory, Digest: credentialDigest(credential), TrustUserGroup: trust}) != nil {
 		return grantFailure("CHILD_REFUSED", true)
 	}
 	decoder := json.NewDecoder(io.LimitReader(stdout, 16*1024))
 	decoder.DisallowUnknownFields()
 	var preview clientGrantReport
-	if decoder.Decode(&preview) != nil || !validGrantPreview(preview) {
+	if decoder.Decode(&preview) != nil {
+		return grantFailure("USER_PROFILE_REFUSED", true)
+	}
+	if validClientPathFailure(preview, account.Directory) {
+		return preview
+	}
+	if !validGrantPreview(preview) {
 		return grantFailure("USER_PROFILE_REFUSED", true)
 	}
 	if !apply {
@@ -375,7 +398,7 @@ func nativeClientGrant(parent context.Context, name, role string, apply bool) cl
 		return grantFailure("TRANSFER_INCOMPLETE", false)
 	}
 	// Never relay arbitrary child strings or a second claimed preview.
-	if result.Status != "applied" || result.Code != "" || result.ReadOnly || result.Preview != nil || result.Result == nil || result.Result.Changed < 0 || result.Result.Changed > 2 {
+	if result.Status != "applied" || result.Code != "" || result.ReadOnly || result.Preview != nil || result.Result == nil || result.Result.Changed < 0 || result.Result.Changed > 2 || result.Path != "" || result.Group != 0 {
 		return grantFailure("TRANSFER_INCOMPLETE", false)
 	}
 	if decoder.Decode(new(any)) != io.EOF {

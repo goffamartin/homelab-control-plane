@@ -23,7 +23,7 @@ func (source *nativeSource) lock() (func(), error) {
 }
 
 func (source *nativeSource) binding() error {
-	other, err := openNativeSource(source.path, source.owner)
+	other, err := openNativeSourceWithTrust(source.path, source.owner, source.trustOwnerGroup)
 	if err != nil {
 		return ErrStalePlan
 	}

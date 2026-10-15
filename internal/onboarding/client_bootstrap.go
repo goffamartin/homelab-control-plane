@@ -29,14 +29,21 @@ func sameGrantChanges(a, b setup.Preview) bool {
 }
 
 func planGrantClient(ctx context.Context, directory string, owner setup.Owner, credential ClientCredential) (*grantClientSetup, error) {
-	client, err := PlanClient(ctx, directory, owner, "http://127.0.0.1:9444", credential)
+	return planGrantClientWithTrust(ctx, directory, owner, credential, false)
+}
+func planGrantClientWithTrust(ctx context.Context, directory string, owner setup.Owner, credential ClientCredential, trust bool) (*grantClientSetup, error) {
+	client, err := planClientWithTrust(ctx, directory, owner, "http://127.0.0.1:9444", credential, trust)
 	if err == nil {
 		return &grantClientSetup{client: client, directory: directory, owner: owner}, nil
 	}
 	if !errors.Is(err, setup.ErrMissingParent) || filepath.Base(directory) != "hlcp" || filepath.Base(filepath.Dir(directory)) != ".config" {
 		return nil, err
 	}
-	parent, err := setup.PlanDirectory(filepath.Dir(directory), owner)
+	planDirectory := setup.PlanDirectory
+	if trust {
+		planDirectory = setup.PlanDirectoryTrustingOwnerGroup
+	}
+	parent, err := planDirectory(filepath.Dir(directory), owner)
 	if err != nil {
 		return nil, err
 	}

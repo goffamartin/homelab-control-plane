@@ -15,12 +15,19 @@ import (
 )
 
 type nativeSource struct {
-	directory *os.File
-	owner     Owner
-	path      string
+	directory       *os.File
+	owner           Owner
+	path            string
+	trustOwnerGroup bool
 }
 
 func openNativeSource(directory string, owner Owner) (Source, error) {
+	return openNativeSourceWithTrust(directory, owner, false)
+}
+func openNativeSourceWithTrust(directory string, owner Owner, trust bool) (Source, error) {
+	if trust && (owner.UID == 0 || owner.GID == 0) {
+		return nil, ErrUnsafePath
+	}
 	if len(directory) > 4096 || !filepath.IsAbs(directory) || filepath.Clean(directory) != directory || directory == "/" || strings.ContainsRune(directory, 0) {
 		return nil, ErrUnsafePath
 	}
@@ -55,6 +62,9 @@ func openNativeSource(directory string, owner Owner) (Source, error) {
 		}
 		trustedOwner := stat.Uid == 0 || stat.Uid == owner.UID
 		writable := stat.Mode&0o022 != 0
+		if trust && stat.Uid == owner.UID && stat.Gid == owner.GID && stat.Mode&0002 == 0 {
+			writable = false
+		}
 		sticky := stat.Uid == 0 && stat.Mode&syscall.S_ISVTX != 0
 		if !trustedOwner || writable && !sticky {
 			_ = syscall.Close(fd)
@@ -70,7 +80,7 @@ func openNativeSource(directory string, owner Owner) (Source, error) {
 		_ = syscall.Close(fd)
 		return nil, ErrUnsafePath
 	}
-	return &nativeSource{directory: os.NewFile(uintptr(fd), "setup-directory"), owner: owner, path: directory}, nil
+	return &nativeSource{directory: os.NewFile(uintptr(fd), "setup-directory"), owner: owner, path: directory, trustOwnerGroup: trust}, nil
 }
 
 func (source *nativeSource) Owner() Owner { return source.owner }

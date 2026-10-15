@@ -73,6 +73,29 @@ func TestGrantSourceRoleSnapshotsAndPreviewValidation(t *testing.T) {
 	}
 }
 
+func TestClientPathFailureReportsAreAllowlisted(t *testing.T) {
+	directory := "/home/test/.config/hlcp"
+	for _, report := range []clientGrantReport{
+		{Status: "failed", Code: "GROUP_WRITABLE_PARENT", ReadOnly: true, Path: "/home/test/.config", Group: 1000},
+		{Status: "failed", Code: "PROFILE_CONFLICT", ReadOnly: true},
+	} {
+		if !validClientPathFailure(report, directory) {
+			t.Fatal("safe diagnostic rejected")
+		}
+	}
+	for _, report := range []clientGrantReport{
+		{Status: "failed", Code: "PRIVATE_SECRET", ReadOnly: true},
+		{Status: "failed", Code: "GROUP_WRITABLE_PARENT", ReadOnly: true, Path: "/home/test/.config-evil"},
+		{Status: "failed", Code: "GROUP_WRITABLE_PARENT", ReadOnly: true, Path: "/etc/passwd"},
+		{Status: "failed", Code: "GROUP_WRITABLE_PARENT", ReadOnly: true, Path: "/home/test/../test/.config"},
+		{Status: "failed", Code: "PROFILE_CONFLICT", ReadOnly: false},
+	} {
+		if validClientPathFailure(report, directory) {
+			t.Fatal("untrusted diagnostic relayed")
+		}
+	}
+}
+
 // Explicit opt-in only, in a fresh throwaway container with the actual trusted
 // controller binary installed and hlcp-test-user created by the test command.
 func TestInstalledClientGrantEndToEnd(t *testing.T) {

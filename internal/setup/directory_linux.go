@@ -20,9 +20,13 @@ type nativeDirectoryPlan struct {
 	owner                  Owner
 	stage                  string
 	fault                  func(string) error
+	trustOwnerGroup        bool
 }
 
 func pinParent(path string, owner Owner) (*os.File, error) {
+	return pinParentWithTrust(path, owner, false)
+}
+func pinParentWithTrust(path string, owner Owner, trust bool) (*os.File, error) {
 	fd, err := syscall.Open("/", syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_CLOEXEC, 0)
 	if err != nil {
 		return nil, ErrReadFailed
@@ -38,27 +42,37 @@ func pinParent(path string, owner Owner) (*os.File, error) {
 				return nil, ErrUnsafePath
 			}
 			fd = next
-			if !safeDirectoryParent(fd, owner) {
+			if !safeDirectoryParentWithTrust(fd, owner, trust) {
 				syscall.Close(fd)
 				return nil, ErrUnsafePath
 			}
 		}
 	}
-	if !safeDirectoryParent(fd, owner) {
+	if !safeDirectoryParentWithTrust(fd, owner, trust) {
 		syscall.Close(fd)
 		return nil, ErrUnsafePath
 	}
 	return os.NewFile(uintptr(fd), "setup-parent"), nil
 }
 func safeDirectoryParent(fd int, owner Owner) bool {
+	return safeDirectoryParentWithTrust(fd, owner, false)
+}
+func safeDirectoryParentWithTrust(fd int, owner Owner, trust bool) bool {
 	var stat syscall.Stat_t
 	if syscall.Fstat(fd, &stat) != nil {
 		return false
 	}
+	groupTrusted := trust && owner.UID != 0 && owner.GID != 0 && stat.Uid == owner.UID && stat.Gid == owner.GID && stat.Mode&0002 == 0
 	return (stat.Uid == 0 || stat.Uid == owner.UID) &&
-		(stat.Mode&0022 == 0 || (stat.Uid == 0 && stat.Mode&syscall.S_ISVTX != 0))
+		(stat.Mode&0022 == 0 || groupTrusted || (stat.Uid == 0 && stat.Mode&syscall.S_ISVTX != 0))
 }
 func planDirectory(path string, owner Owner) (directorySource, error) {
+	return planDirectoryWithTrust(path, owner, false)
+}
+func planDirectoryWithTrust(path string, owner Owner, trust bool) (directorySource, error) {
+	if trust && (owner.UID == 0 || owner.GID == 0) {
+		return nil, ErrUnsafePath
+	}
 	if len(path) > 4096 || !filepath.IsAbs(path) || filepath.Clean(path) != path || path == "/" || strings.ContainsRune(path, 0) ||
 		uint32(os.Geteuid()) != owner.UID || uint32(os.Getegid()) != owner.GID {
 		return nil, ErrUnsafePath
@@ -68,11 +82,11 @@ func planDirectory(path string, owner Owner) (directorySource, error) {
 		return nil, ErrUnsafePath
 	}
 	parentPath := filepath.Dir(path)
-	parent, err := pinParent(parentPath, owner)
+	parent, err := pinParentWithTrust(parentPath, owner, trust)
 	if err != nil {
 		return nil, err
 	}
-	return childDirectoryPlan(parent, parentPath, filepath.Base(path), owner)
+	return childDirectoryPlanWithTrust(parent, parentPath, filepath.Base(path), owner, trust)
 }
 
 func (source *nativeSource) planChildDirectory(name string) (directorySource, error) {
@@ -86,11 +100,14 @@ func (source *nativeSource) planChildDirectory(name string) (directorySource, er
 	if errno != 0 {
 		return nil, ErrReadFailed
 	}
-	return childDirectoryPlan(os.NewFile(fd, "setup-child-parent"), source.path, name, source.owner)
+	return childDirectoryPlanWithTrust(os.NewFile(fd, "setup-child-parent"), source.path, name, source.owner, source.trustOwnerGroup)
 }
 
 // Owns parent on success and closes it on all failed planning paths.
 func childDirectoryPlan(parent *os.File, parentPath, name string, owner Owner) (directorySource, error) {
+	return childDirectoryPlanWithTrust(parent, parentPath, name, owner, false)
+}
+func childDirectoryPlanWithTrust(parent *os.File, parentPath, name string, owner Owner, trust bool) (directorySource, error) {
 	path := filepath.Join(parentPath, name)
 	if len(path) > 4096 {
 		parent.Close()
@@ -106,7 +123,7 @@ func childDirectoryPlan(parent *os.File, parentPath, name string, owner Owner) (
 		parent.Close()
 		return nil, ErrRecoveryRequired
 	}
-	return &nativeDirectoryPlan{parent: parent, parentPath: parentPath, path: path, name: name, owner: owner, stage: stage}, nil
+	return &nativeDirectoryPlan{parent: parent, parentPath: parentPath, path: path, name: name, owner: owner, stage: stage, trustOwnerGroup: trust}, nil
 }
 func absentChild(parent *os.File, name string) bool {
 	// O_PATH|NOFOLLOW inspects existence without opening FIFOs/devices or following links.
@@ -125,14 +142,14 @@ func (p *nativeDirectoryPlan) create(ctx context.Context) (Source, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	current, err := pinParent(p.parentPath, p.owner)
+	current, err := pinParentWithTrust(p.parentPath, p.owner, p.trustOwnerGroup)
 	if err != nil {
 		return nil, err
 	}
 	before, e1 := p.parent.Stat()
 	after, e2 := current.Stat()
 	current.Close()
-	if e1 != nil || e2 != nil || !os.SameFile(before, after) || !safeDirectoryParent(int(p.parent.Fd()), p.owner) {
+	if e1 != nil || e2 != nil || !os.SameFile(before, after) || !safeDirectoryParentWithTrust(int(p.parent.Fd()), p.owner, p.trustOwnerGroup) {
 		return nil, ErrStalePlan
 	}
 	if !absentChild(p.parent, p.name) {
@@ -182,7 +199,7 @@ func (p *nativeDirectoryPlan) create(ctx context.Context) (Source, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	current, err = pinParent(p.parentPath, p.owner)
+	current, err = pinParentWithTrust(p.parentPath, p.owner, p.trustOwnerGroup)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +226,7 @@ func (p *nativeDirectoryPlan) create(ctx context.Context) (Source, error) {
 			return nil, ErrWriteFailed
 		}
 	}
-	source := &nativeSource{directory: file, owner: p.owner, path: p.path}
+	source := &nativeSource{directory: file, owner: p.owner, path: p.path, trustOwnerGroup: p.trustOwnerGroup}
 	if err := source.binding(); err != nil {
 		return nil, ErrStalePlan
 	}
@@ -224,7 +241,7 @@ func (p *nativeDirectoryPlan) create(ctx context.Context) (Source, error) {
 }
 
 func (p *nativeDirectoryPlan) removeEmptyStage(file *os.File) error {
-	if !safeDirectoryParent(int(p.parent.Fd()), p.owner) {
+	if !safeDirectoryParentWithTrust(int(p.parent.Fd()), p.owner, p.trustOwnerGroup) {
 		return ErrRecoveryRequired
 	}
 	fd, err := syscall.Openat(int(p.parent.Fd()), p.stage, syscall.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NOFOLLOW|syscall.O_CLOEXEC, 0)

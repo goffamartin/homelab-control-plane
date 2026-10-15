@@ -12,7 +12,7 @@ func TestClientGrantCLIHelpValidationAndConsent(t *testing.T) {
 	for _, args := range [][]string{{"--help"}, {"--user", "martin", "--yes"}, {"--user", "martin", "--apply"}, {"--user", "martin", "--role", "admin"}, {"--apply", "--yes"}, {"--unknown"}} {
 		called := false
 		var out bytes.Buffer
-		code := runClientGrantCLI(args, &out, func(context.Context, string, string, bool) clientGrantReport {
+		code := runClientGrantCLI(args, &out, func(context.Context, string, string, bool, bool) clientGrantReport {
 			called = true
 			return clientGrantReport{}
 		})
@@ -26,8 +26,8 @@ func TestClientGrantCLIHelpValidationAndConsent(t *testing.T) {
 		if apply {
 			args = append(args, "--apply", "--yes")
 		}
-		code := runClientGrantCLI(args, &out, func(_ context.Context, name, role string, confirmed bool) clientGrantReport {
-			if name != "martin" || role != "observer" || confirmed != apply {
+		code := runClientGrantCLI(args, &out, func(_ context.Context, name, role string, confirmed, trust bool) clientGrantReport {
+			if name != "martin" || role != "observer" || confirmed != apply || trust {
 				t.Fatal("wrong grant request")
 			}
 			return grantFailure("SOURCE_REFUSED", true)
@@ -42,9 +42,25 @@ func TestGrantPreviewStrictOutput(t *testing.T) {
 	// public CLI only ever prints report fields, never credentials.
 	var out bytes.Buffer
 	preview := setup.Preview{ReadOnly: true, Changes: []setup.Change{{Name: "cli.json", Action: "create", Mode: 0600}, {Name: "cli.token", Action: "create", Mode: 0600}}}
-	if runClientGrantCLI([]string{"--user", "martin", "--json"}, &out, func(context.Context, string, string, bool) clientGrantReport {
+	if runClientGrantCLI([]string{"--user", "martin", "--json"}, &out, func(context.Context, string, string, bool, bool) clientGrantReport {
 		return clientGrantReport{Status: "preview", ReadOnly: true, Preview: &preview}
 	}) != 0 || !strings.Contains(out.String(), "cli.json") {
 		t.Fatal(out.String())
+	}
+}
+
+func TestClientGroupTrustRequiresExplicitFlag(t *testing.T) {
+	for _, trust := range []bool{false, true} {
+		args := []string{"--user", "martin", "--json"}
+		if trust {
+			args = append(args, "--trust-user-group")
+		}
+		var out bytes.Buffer
+		runClientGrantCLI(args, &out, func(_ context.Context, _ string, _ string, apply, accepted bool) clientGrantReport {
+			if apply || accepted != trust {
+				t.Fatal("trust or write consent inferred")
+			}
+			return grantFailure("GROUP_WRITABLE_PARENT", true)
+		})
 	}
 }
