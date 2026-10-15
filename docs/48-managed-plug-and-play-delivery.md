@@ -16,8 +16,17 @@ end-user path until runtime, CLI, package and recovery tests are integrated.
 - Root backup: AES-256-GCM authenticated archive with fresh 32-byte salt,
   PBKDF2-HMAC-SHA256 / 600000 iterations and fresh nonce; minimum 16-character
   password. Verification confirms decryptability and root cert/key match.
-- Pending: setup/storage integration, durable registry and revocation, pairing
-  and pinned enrollment, resumable join/resources wizard, managed renewal/TLS
+- Durable bounded private store and node registry implemented, with exclusive
+  OS lock, owner/mode/symlink checks, fsync/atomic snapshot publication and
+  fail-closed uncertain durability. Invitations store secret digests only;
+  enrollment atomically records credential/admission/result for same-request
+  recovery. Revocation and explicit replacement invalidate old credentials.
+- Pinned HTTPS enrollment core implemented: public-only untrusted bootstrap,
+  root fingerprint check, then separate standard CA/hostname-verified TLS1.3
+  connection before any invitation secret is transmitted. No redirects/proxy
+  inference, bounded body/concurrency/global rate, isolated public routes.
+- Pending: setup/storage/runtime integration and live-session revocation,
+  operator pairing CLI/API, resumable join/resources wizard, managed renewal/TLS
   reload, signed artifact verification/update, migration/acceptance quick start.
 - No managed release or VM/live acceptance yet. Preview.4 remains unchanged.
 
