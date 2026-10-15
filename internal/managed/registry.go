@@ -42,6 +42,9 @@ type node struct {
 	CSRHash           [32]byte     `json:"csr_hash"`
 	Certificate       []byte       `json:"certificate"`
 	RetryUntil        time.Time    `json:"retry_until"`
+	RenewalID         string       `json:"renewal_id"`
+	RenewalCSR        [32]byte     `json:"renewal_csr"`
+	RenewedAt         time.Time    `json:"renewed_at"`
 }
 type registryState struct {
 	Version int    `json:"version"`

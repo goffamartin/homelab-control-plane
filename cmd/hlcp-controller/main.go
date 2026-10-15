@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"flag"
 	"fmt"
@@ -10,6 +11,7 @@ import (
 	"hlcp/internal/doctor"
 	"hlcp/internal/liveness"
 	"hlcp/internal/localapi"
+	"hlcp/internal/managed"
 	"hlcp/internal/onboarding"
 	"hlcp/internal/telemetry"
 	"hlcp/internal/transport"
@@ -39,6 +41,7 @@ func main() {
 		os.Exit(doctor.CLI(os.Args[2:], "controller", os.Stdout))
 	}
 	version := flag.Bool("version", false, "print build metadata and exit")
+	managedState := flag.String("managed-state", os.Getenv("HLCP_MANAGED_STATE"), "private managed controller state; no fallback on invalid state")
 	checkConfig := flag.Bool("check-config", false, "validate configuration without binding sockets or opening the ledger")
 	nodesFile := flag.String("node-allowlist-file", "", "startup JSON array of admitted certificate node identities; restart to apply")
 	listen := flag.String("listen", ":9443", "agent TCP address")
@@ -106,14 +109,28 @@ func main() {
 		os.Exit(2)
 	}
 	var allowedNodes map[string]bool
-	if *nodesFile != "" {
+	if *nodesFile != "" && *managedState == "" {
 		allowedNodes, err = transport.LoadAllowedNodes(*nodesFile)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(2)
 		}
 	}
-	tlsConfig, err := transport.ServerTLSConfig(transport.TLSFiles{CertificateFile: *certificate, PrivateKeyFile: *privateKey, CAFile: *ca})
+	var tlsConfig *tls.Config
+	var managedRuntime *managed.Runtime
+	if *managedState != "" {
+		managedRuntime, err = managed.OpenRuntime(*managedState)
+		if err == nil {
+			defer managedRuntime.Store.Close()
+			if managedRuntime.Config.Listen != *listen {
+				fmt.Fprintln(os.Stderr, "managed listener/config mismatch")
+				os.Exit(2)
+			}
+			tlsConfig, err = managedRuntime.Identity.TLSConfig()
+		}
+	} else {
+		tlsConfig, err = transport.ServerTLSConfig(transport.TLSFiles{CertificateFile: *certificate, PrivateKeyFile: *privateKey, CAFile: *ca})
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "invalid TLS configuration: %v\n", err)
 		os.Exit(2)
@@ -122,13 +139,25 @@ func main() {
 		fmt.Println("configuration valid (listener availability and ledger contents not checked)")
 		return
 	}
+	if managedRuntime != nil {
+		if err := managedRuntime.Identity.Renew(context.Background(), time.Now()); err != nil {
+			fmt.Fprintln(os.Stderr, "managed server certificate renewal failed")
+			os.Exit(2)
+		}
+	}
 	diagnostics := telemetry.New(telemetry.JSONSink(os.Stderr))
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
 		_ = diagnostics.Close(ctx)
 	}()
-	server, err := controller.Listen(*listen, controller.Config{TLSConfig: tlsConfig, LivenessPolicy: policy, AllowedNodeIDs: allowedNodes, CommandRetry: commandRetry, LedgerFile: *ledgerFile, ResourceStateMaxAge: *stateMaxAge, Telemetry: diagnostics})
+	serverConfig := controller.Config{TLSConfig: tlsConfig, LivenessPolicy: policy, AllowedNodeIDs: allowedNodes, CommandRetry: commandRetry, LedgerFile: *ledgerFile, ResourceStateMaxAge: *stateMaxAge, Telemetry: diagnostics}
+	if managedRuntime != nil {
+		serverConfig.ManagedRegistry = managedRuntime.Registry
+		serverConfig.EnrollmentURL = managedRuntime.Config.EnrollmentURL
+		serverConfig.CertificateStatus = func() managed.CertificateStatus { return managedRuntime.Identity.Status(time.Now()) }
+	}
+	server, err := controller.Listen(*listen, serverConfig)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "cannot start controller: %v\n", err)
 		os.Exit(1)
@@ -136,6 +165,31 @@ func main() {
 	defer server.Close()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+	var extra []httpService
+	if managedRuntime != nil {
+		service, e := managed.NewEnrollmentService(managedRuntime.Registry, managedRuntime.Config.Listen, managedRuntime.Config.ServerName)
+		if e != nil {
+			fmt.Fprintln(os.Stderr, "managed enrollment configuration invalid")
+			os.Exit(2)
+		}
+		enrollmentTLS, e := managedRuntime.Identity.EnrollmentTLSConfig()
+		if e != nil {
+			fmt.Fprintln(os.Stderr, "managed enrollment TLS invalid")
+			os.Exit(2)
+		}
+		listener, e := net.Listen("tcp", managedRuntime.Config.EnrollmentListen)
+		if e != nil {
+			fmt.Fprintln(os.Stderr, "cannot bind enrollment listener")
+			os.Exit(1)
+		}
+		defer listener.Close()
+		https := &http.Server{Handler: service, ReadHeaderTimeout: 3 * time.Second, ReadTimeout: 5 * time.Second, WriteTimeout: 10 * time.Second, IdleTimeout: 15 * time.Second, MaxHeaderBytes: 8192}
+		extra = append(extra, httpService{https, tls.NewListener(listener, enrollmentTLS)})
+		worker, stopWorker := context.WithCancel(ctx)
+		done := make(chan struct{})
+		go func() { defer close(done); managedRuntime.Identity.Maintain(worker, nil) }()
+		defer func() { stopWorker(); <-done }()
+	}
 	if *apiPolicyFile != "" {
 		hup := make(chan os.Signal, 1)
 		signal.Notify(hup, syscall.SIGHUP)
@@ -156,7 +210,7 @@ func main() {
 	api := &http.Server{Addr: *apiListen, Handler: server.HTTPHandlerWithAuthorizer(authorizer), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: *resultTimeout + 5*time.Second, IdleTimeout: time.Minute, MaxHeaderBytes: 8192}
 	fmt.Printf("HLCP controller listening on %s (%s)\n", server.Address(), transport.ALPN)
 	fmt.Printf("HLCP local API listening on %s\n", *apiListen)
-	if err := serveProcesses(ctx, server, api, apiListener); err != nil {
+	if err := serveProcesses(ctx, server, api, apiListener, extra...); err != nil {
 		fmt.Fprintf(os.Stderr, "controller failed: %v\n", err)
 		os.Exit(1)
 	}
@@ -198,12 +252,21 @@ func runPolicyReloads(ctx context.Context, signals <-chan os.Signal, authorizer 
 	}
 }
 
-func serveProcesses(parent context.Context, server *controller.Server, api *http.Server, listener net.Listener) error {
+type httpService struct {
+	server   *http.Server
+	listener net.Listener
+}
+
+func serveProcesses(parent context.Context, server *controller.Server, api *http.Server, listener net.Listener, extra ...httpService) error {
 	ctx, cancel := context.WithCancel(parent)
 	defer cancel()
-	done := make(chan error, 2)
+	total := 2 + len(extra)
+	done := make(chan error, total)
 	go func() { done <- server.Serve(ctx) }()
 	go func() { done <- api.Serve(listener) }()
+	for _, service := range extra {
+		go func(service httpService) { done <- service.server.Serve(service.listener) }(service)
+	}
 	var failure error
 	completed := 0
 	select {
@@ -227,7 +290,15 @@ func serveProcesses(parent context.Context, server *controller.Server, api *http
 			failure = err
 		}
 	}
-	for completed < 2 {
+	for _, service := range extra {
+		if err := service.server.Shutdown(shutdownContext); err != nil {
+			_ = service.server.Close()
+			if failure == nil {
+				failure = err
+			}
+		}
+	}
+	for completed < total {
 		<-done
 		completed++
 	}

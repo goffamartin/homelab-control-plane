@@ -16,6 +16,7 @@ type activeSession struct {
 	writer    *session.Writer
 	sessionID string
 	cancel    context.CancelFunc
+	admitted  func() bool
 }
 
 type ActiveSessions struct {
@@ -31,11 +32,15 @@ func NewActiveSessions(tracker *CommandTracker) *ActiveSessions {
 }
 
 func (sessions *ActiveSessions) Publish(registration session.Registration, synchronization session.Synchronization, at time.Time, writer *session.Writer, cancel context.CancelFunc) {
+	sessions.PublishGuarded(registration, synchronization, at, writer, cancel, nil)
+}
+
+func (sessions *ActiveSessions) PublishGuarded(registration session.Registration, synchronization session.Synchronization, at time.Time, writer *session.Writer, cancel context.CancelFunc, admitted func() bool) {
 	record := NodeRecord{NodeID: registration.NodeID, AgentVersion: registration.AgentVersion, Capabilities: cloneStrings(registration.Capabilities), SessionID: registration.SessionID, State: "online", LastActivity: at, Inventory: cloneInventory(synchronization.Inventory), Resources: cloneState(synchronization.State)}
 	record.receivedAt = receivedObservations(record.Resources, at)
 	sessions.registry.mutex.Lock()
 	previous, exists := sessions.active[registration.NodeID]
-	sessions.active[registration.NodeID] = activeSession{writer: writer, sessionID: registration.SessionID, cancel: cancel}
+	sessions.active[registration.NodeID] = activeSession{writer: writer, sessionID: registration.SessionID, cancel: cancel, admitted: admitted}
 	sessions.registry.nodes[registration.NodeID] = record
 	sessions.tracker.telemetry.SetGauge(telemetry.Sessions, len(sessions.active))
 	sessions.registry.mutex.Unlock()
@@ -69,10 +74,21 @@ func (sessions *ActiveSessions) send(ctx context.Context, nodeID string, command
 	sessions.registry.mutex.RLock()
 	current, exists := sessions.active[nodeID]
 	sessions.registry.mutex.RUnlock()
-	if !exists {
+	if !exists || (current.admitted != nil && !current.admitted()) {
 		return ErrNodeNotConnected
 	}
 	return current.writer.SendContext(ctx, protocol.MessageCommand, command)
+}
+
+func (sessions *ActiveSessions) Disconnect(nodeID string) {
+	sessions.registry.mutex.RLock()
+	current, ok := sessions.active[nodeID]
+	sessions.registry.mutex.RUnlock()
+	if ok {
+		current.cancel()
+		_ = current.writer.Close()
+		sessions.Remove(nodeID, current.writer)
+	}
 }
 
 func (sessions *ActiveSessions) HandleAck(nodeID string, writer *session.Writer, ack protocol.CommandACKPayload) bool {

@@ -83,9 +83,34 @@ func (s *EnrollmentService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		root := s.Registry.authority.RootPEM()
 		writeManagedJSON(w, EnrollmentResult{Certificate: chain, CA: root, Controller: s.ControllerAddress, ServerName: s.ServerName})
+	case r.Method == http.MethodPost && r.URL.Path == "/v1/renew":
+		s.renew(w, r)
 	default:
 		http.NotFound(w, r)
 	}
+}
+
+func (s *EnrollmentService) renew(w http.ResponseWriter, r *http.Request) {
+	if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 {
+		http.Error(w, "renewal denied", http.StatusForbidden)
+		return
+	}
+	data, err := io.ReadAll(io.LimitReader(r.Body, (32<<10)+1))
+	if err != nil {
+		http.Error(w, "invalid request", 400)
+		return
+	}
+	var request RenewalRequest
+	if DecodeJSON(data, &request, 32<<10) != nil {
+		http.Error(w, "invalid request", 400)
+		return
+	}
+	chain, err := s.Registry.Renew(r.Context(), r.TLS.VerifiedChains[0][0], request)
+	if err != nil {
+		http.Error(w, "renewal denied", http.StatusForbidden)
+		return
+	}
+	writeManagedJSON(w, EnrollmentResult{Certificate: chain, CA: s.Registry.authority.RootPEM(), Controller: s.ControllerAddress, ServerName: s.ServerName})
 }
 func writeManagedJSON(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")

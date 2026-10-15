@@ -8,6 +8,7 @@ import (
 	"go.yaml.in/yaml/v4"
 	"hlcp/internal/adapter"
 	"hlcp/internal/command"
+	"hlcp/internal/managed"
 	"hlcp/internal/protocol"
 	"hlcp/internal/session"
 	"hlcp/internal/telemetry"
@@ -16,6 +17,7 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"time"
@@ -95,6 +97,7 @@ func contains(values []string, wanted string) bool {
 type Config struct {
 	ControllerAddress   string               `yaml:"controller_address"`
 	ServerName          string               `yaml:"server_name"`
+	ManagedDirectory    string               `yaml:"managed_directory,omitempty"`
 	CertificateFile     string               `yaml:"certificate_file"`
 	PrivateKeyFile      string               `yaml:"private_key_file"`
 	CAFile              string               `yaml:"ca_file"`
@@ -136,6 +139,9 @@ func Parse(data []byte) (Config, error) {
 	return config, config.Validate()
 }
 func (config Config) Validate() error {
+	if config.ManagedDirectory != "" && (!filepath.IsAbs(config.ManagedDirectory) || filepath.Clean(config.ManagedDirectory) != config.ManagedDirectory || len(config.ManagedDirectory) > 4096) {
+		return errors.New("managed_directory must be a clean absolute private directory")
+	}
 	if config.ControllerAddress == "" || config.ServerName == "" || config.CertificateFile == "" || config.PrivateKeyFile == "" || config.CAFile == "" || config.JournalFile == "" {
 		return errors.New("agent TLS/controller and command journal configuration is required")
 	}
@@ -228,7 +234,28 @@ func Run(ctx context.Context, config Config) error {
 		}()
 	}
 	config.refresh = make(chan struct{}, 1)
-	tlsConfig, err := transport.ClientTLSConfig(transport.TLSFiles{CertificateFile: config.CertificateFile, PrivateKeyFile: config.PrivateKeyFile, CAFile: config.CAFile, ServerName: config.ServerName})
+	var tlsConfig *tls.Config
+	var err error
+	if config.ManagedDirectory != "" {
+		store, e := managed.OpenStore(config.ManagedDirectory)
+		if e != nil {
+			return e
+		}
+		defer store.Close()
+		identity, e := managed.OpenAgentIdentity(store, config.NodeID)
+		if e != nil {
+			return e
+		}
+		tlsConfig, err = identity.TLSConfig(config.ServerName)
+		if err == nil {
+			worker, stop := context.WithCancel(ctx)
+			done := make(chan struct{})
+			go func() { defer close(done); identity.Maintain(worker, nil) }()
+			defer func() { stop(); <-done }()
+		}
+	} else {
+		tlsConfig, err = transport.ClientTLSConfig(transport.TLSFiles{CertificateFile: config.CertificateFile, PrivateKeyFile: config.PrivateKeyFile, CAFile: config.CAFile, ServerName: config.ServerName})
+	}
 	if err != nil {
 		return err
 	}
@@ -273,6 +300,10 @@ func runSession(ctx context.Context, config Config, tlsConfig *tls.Config, synch
 	if err != nil {
 		config.Telemetry.Record(telemetry.Event{Kind: telemetry.ConnectionRejected, NodeID: config.NodeID, Code: "TLS_HANDSHAKE"})
 		return false, err
+	}
+	if peer := tlsConnection.ConnectionState().PeerCertificates; len(peer) > 0 {
+		expiry := time.AfterFunc(time.Until(peer[0].NotAfter), func() { _ = raw.Close() })
+		defer expiry.Stop()
 	}
 	config.Telemetry.Record(telemetry.Event{Kind: telemetry.Authenticated, NodeID: config.NodeID, Code: "MTLS"})
 	connection := telemetry.Wrap(tlsConnection, config.Telemetry)
