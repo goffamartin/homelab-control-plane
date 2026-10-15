@@ -71,8 +71,9 @@ func Resources(args []string, input io.Reader, out io.Writer) int {
 	if err != nil {
 		return 1
 	}
-	ctx, cancel := boundedContext()
-	defer cancel()
+	phases := newWorkflowContext()
+	defer phases.close()
+	ctx := phases.operation()
 	fail := func(code string) int { fmt.Fprintln(out, "Resource configuration refused:", code); return 1 }
 	if action == "discover" {
 		if *apply || *restart || (*adapter != "docker" && *adapter != "podman") {
@@ -108,24 +109,25 @@ func Resources(args []string, input io.Reader, out io.Writer) int {
 	}
 	interactive := len(args) == 0 && action == "configure"
 	if interactive {
+		phases.input()
 		ui := newTerminal(input, out)
 		if !ui.interactive {
 			return fail("TERMINAL_REQUIRED")
 		}
-		*id, err = ui.line("Resource name: ")
+		*id, err = ui.lineContext(phases.input(), "Resource name: ")
 		if err != nil {
 			return 1
 		}
-		*adapter, err = ui.line("Adapter [docker/podman/systemd/script]: ")
+		*adapter, err = ui.lineContext(phases.input(), "Adapter [docker/podman/systemd/script]: ")
 		if err != nil {
 			return 1
 		}
 		if *adapter == "script" {
-			*executable, err = ui.line("Absolute executable path (no shell command): ")
+			*executable, err = ui.lineContext(phases.input(), "Absolute executable path (no shell command): ")
 			if err != nil {
 				return 1
 			}
-			value, e := ui.line("Action name [status]: ")
+			value, e := ui.lineContext(phases.input(), "Action name [status]: ")
 			if e != nil {
 				return 1
 			}
@@ -133,7 +135,7 @@ func Resources(args []string, input io.Reader, out io.Writer) int {
 				*actions = value
 			}
 			for {
-				value, e = ui.line("One literal argument (blank to finish): ")
+				value, e = ui.lineContext(phases.input(), "One literal argument (blank to finish): ")
 				if e != nil {
 					return 1
 				}
@@ -146,11 +148,11 @@ func Resources(args []string, input io.Reader, out io.Writer) int {
 				}
 			}
 		} else {
-			*target, err = ui.line("Exact container name or systemd unit: ")
+			*target, err = ui.lineContext(phases.input(), "Exact container name or systemd unit: ")
 			if err != nil {
 				return 1
 			}
-			value, e := ui.line("Allowed actions [status] (comma separated, e.g. status,restart): ")
+			value, e := ui.lineContext(phases.input(), "Allowed actions [status] (comma separated, e.g. status,restart): ")
 			if e != nil {
 				return 1
 			}
@@ -158,12 +160,12 @@ func Resources(args []string, input io.Reader, out io.Writer) int {
 				*actions = value
 			}
 		}
-		value, e := ui.line("Stop/restart the agent to apply this resource now? [yes/no]: ")
+		value, e := ui.lineContext(phases.input(), "Stop/restart the agent to apply this resource now? [yes/no]: ")
 		if e != nil {
 			return 1
 		}
 		*restart = affirmative(value)
-		value, e = ui.line("Save this explicit resource/action allowlist? [yes/no]: ")
+		value, e = ui.lineContext(phases.input(), "Save this explicit resource/action allowlist? [yes/no]: ")
 		if e != nil || !affirmative(value) {
 			fmt.Fprintln(out, "No changes applied.")
 			return 0
@@ -171,6 +173,7 @@ func Resources(args []string, input io.Reader, out io.Writer) int {
 		*apply = true
 		*yes = true
 	}
+	ctx = phases.operation()
 	resource := agent.ResourceConfig{ID: *id, Adapter: *adapter, Target: *target, Actions: strings.Split(*actions, ",")}
 	switch *adapter {
 	case "docker", "podman":

@@ -129,8 +129,9 @@ func ControllerPKI(args []string, input io.Reader, out io.Writer) int {
 		fmt.Fprintln(out, "Read-only preview. Issuer renewal needs the encrypted root backup and stopped controller.")
 		return 0
 	}
-	ctx, cancel := boundedContext()
-	defer cancel()
+	phases := newWorkflowContext()
+	defer phases.close()
+	ctx := phases.operation()
 	uid, gid, err := account("hlcp-controller")
 	if err != nil {
 		return 1
@@ -160,11 +161,14 @@ func ControllerPKI(args []string, input io.Reader, out io.Writer) int {
 	}
 	if *stdin {
 		ui = newTerminal(input, io.Discard)
+	} else {
+		ctx = phases.input()
 	}
 	password, err := ui.secret(ctx, "Root backup password: ")
 	if err != nil {
 		return 1
 	}
+	ctx = phases.operation()
 	a, err := managed.RenewIssuer(material, archived, password, time.Now())
 	if err != nil {
 		fmt.Fprintln(out, "Issuer renewal refused; root backup/password/validity must match.")

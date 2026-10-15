@@ -1,15 +1,24 @@
 # Managed plug-and-play — whole-system live gate
 
-The implementation is ready for this gate; **all live rows below are NOT RUN**.
+Live acceptance has started. The signed preview.5 download/verification passed;
+the first interactive controller setup attempt failed (see the
+[timeout regression](53-interactive-timeout-regression.md)). Other rows
+remain NOT RUN until actually observed. Local tests do not complete this gate.
 Local package/process tests and Windows/Linux race tests are not booted Debian
-systemd, rootless Podman, Docker runtime or reboot evidence. No new managed release
-has been published and no existing VM was touched by implementation tests.
+systemd, rootless Podman, Docker runtime or reboot evidence. Preview.5 was published
+privately from `756aa9f0b8ce80e6cec46f83df2c99f6d8fbecb0`; the user, not the agent,
+performs the VM installation steps. Implementation tests use disposable containers.
 
 Use two isolated disposable Debian 13 VM clones/snapshots with separate test
 identities. Reusing the physical resources of the earlier two VMs is possible
 only after preserving their real config/CA/history off-host and explicitly
 agreeing to a test maintenance/clean-install boundary. Do not run disposable
 container fixture scripts directly on VMs: they intentionally refuse that use.
+For this run the user explicitly chose a fresh HLCP identity/history boundary,
+created snapshots of both existing VMs and declined an additional file archive
+before removing the old HLCP state. Podman/container state was left in place.
+Snapshots are not independent off-host backups. Do not restore one side's old
+operational history into an active new deployment or use it as binary rollback.
 
 ## Exact candidate and verification
 
@@ -33,8 +42,8 @@ separate explicit user authorization; no workflow publishes automatically.
 
 | Scenario | Pass evidence | Status |
 |---|---|---|
-| Verified private download | Actual non-root gh login, exact signed version; no token/secret in logs | NOT RUN |
-| Fresh managed controller | Wizard creates PKI/backup/profile; service active; CLI without sudo; no remote API 9444 | NOT RUN |
+| Verified private download | Actual non-root gh login, exact signed version; no token/secret in logs | PASS preview.5: helper checksum and signed controller preview verified on controller VM |
+| Fresh managed controller | Wizard creates PKI/backup/profile; service active; CLI without sudo; no remote API 9444 | FAIL preview.5: wizard SERVICE_MANAGER_RELOAD_FAILED after user input; timeout defect fixed in source, live retry pending |
 | Script-only system agent | No container runtime installed; join, explicit script resource, allowed action and sandbox startup | NOT RUN |
 | Generic user agent | Actual owner join/start/enable; no implicit sudo/account impersonation | NOT RUN |
 | Rootless Podman | Actual container owner/subuid/subgid/linger; selected container status/restart only | NOT RUN |
