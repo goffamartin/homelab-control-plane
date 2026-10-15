@@ -18,6 +18,21 @@ type limitedOutput struct {
 	overflow bool
 }
 
+func serviceAccountLocked(name, uid, gid string) bool {
+	data, err := trustedRootFile("/etc/passwd", false)
+	if err != nil {
+		return false
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Split(line, ":")
+		if len(fields) != 7 || fields[0] != name {
+			continue
+		}
+		return fields[2] == uid && fields[3] == gid && fields[5] == "/nonexistent" && (fields[6] == "/usr/sbin/nologin" || fields[6] == "/sbin/nologin" || fields[6] == "/bin/false")
+	}
+	return false
+}
+
 func (o *limitedOutput) Write(data []byte) (int, error) {
 	n := len(data)
 	if len(o.data)+n > 64<<10 {
@@ -154,7 +169,7 @@ func inspectService(ctx context.Context, scope, unit string) (serviceState, erro
 	if unit == "hlcp-controller.service" && scope == "system" {
 		expected = systemd.PackagedControllerUnit()
 		serviceUser = "hlcp-controller"
-	} else if unit == "hlcp-agent.service" {
+	} else if unit == "hlcp-agent.service" || (scope == "user" && unit == "hlcp-agent-podman.service") {
 		var ok bool
 		expected, ok = systemd.PackagedAgentUnit(scope, unit)
 		if !ok {
@@ -171,7 +186,11 @@ func inspectService(ctx context.Context, scope, unit string) (serviceState, erro
 		return serviceState{}, ErrSetup
 	}
 	self, err = filepath.EvalSymlinks(self)
-	if err != nil || self != "/usr/bin/"+strings.TrimSuffix(unit, ".service") {
+	binary := "/usr/bin/hlcp-agent"
+	if unit == "hlcp-controller.service" {
+		binary = "/usr/bin/hlcp-controller"
+	}
+	if err != nil || self != binary {
 		return serviceState{}, ErrSetup
 	}
 	if _, err := trustedRootFile(self, true); err != nil {

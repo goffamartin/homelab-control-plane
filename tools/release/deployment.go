@@ -43,6 +43,10 @@ var deploymentFiles = []string{
 	"docs/16-plug-and-play-implementation-plan.md",
 	"docs/18-script-resource-contract.md",
 	"docs/47-debian-onboarding-acceptance.md",
+	"docs/48-managed-plug-and-play-delivery.md",
+	"docs/49-managed-quick-start.md",
+	"docs/50-managed-migration-and-recovery.md",
+	"docs/51-managed-live-acceptance.md",
 }
 
 func writeDeployment(root string, output io.Writer) error {
@@ -89,6 +93,31 @@ func packageDeployment(out string) (artifact, error) {
 	}
 	if closeErr != nil {
 		return artifact{}, closeErr
+	}
+	digest, err := checksum(path)
+	return artifact{Name: name, SHA256: digest}, err
+}
+func packageInstaller(out string) (artifact, error) {
+	const source = "deploy/install/install.sh"
+	info, err := os.Lstat(source)
+	if err != nil || !info.Mode().IsRegular() || info.Size() > 128<<10 {
+		return artifact{}, fmt.Errorf("invalid installer source")
+	}
+	data, err := os.ReadFile(source)
+	if err != nil {
+		return artifact{}, err
+	}
+	data = []byte(strings.ReplaceAll(string(data), "\r\n", "\n"))
+	name := "hlcp-install.sh"
+	path := filepath.Join(out, name)
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return artifact{}, err
+	}
+	_, writeErr := file.Write(data)
+	closeErr := file.Close()
+	if writeErr != nil || closeErr != nil {
+		return artifact{}, fmt.Errorf("installer packaging failed")
 	}
 	digest, err := checksum(path)
 	return artifact{Name: name, SHA256: digest}, err

@@ -71,8 +71,21 @@ end-user path until runtime, CLI, package and recovery tests are integrated.
   and managed state. Missing/unsigned/modified/wrong-version assets and invalid
   manifest signatures failed before installation. Live service update remains
   a separate booted VM gate, not inferred from offline success.
-- Pending: migration/acceptance quick start and final lifecycle hardening and
-  integrated verification.
+- Imported-to-managed migration is integrated: explicit valid legacy CA/server
+  overlap, exact old allowlist IDs imported as legacy nodes, immediate old
+  generation revoke on replacement, preserved agent resources/config/journal,
+  guarded migration finish and authenticated agent trust cleanup. Runtime refuses
+  accidental imported fallback when canonical managed state exists. Empty or
+  corrupted registry is never substituted for lost admission history.
+- Actual installed Debian migration process acceptance passed: original pathLen:0
+  root and agent still worked during overlap; explicit re-pair retained resources;
+  early finish was refused; after cutover/refresh the agent reconnected; the
+  same-ID result and byte-identical journal/ledger were preserved. This was a
+  disposable non-booted container, NOT a deployment or VM lifecycle verdict.
+- Quick Start, backup/migration/recovery boundaries and the whole-system live
+  acceptance matrix are in docs/49–51. No extra web UI/MCP scope was inferred.
+- Pending: final complete regression/candidate reproducibility rerun, then only
+  user-authorized publication/whole-system booted VM acceptance.
 - No managed release or VM/live acceptance yet. Preview.4 remains unchanged.
 
 ## Implementation acceptance

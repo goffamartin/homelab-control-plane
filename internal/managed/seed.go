@@ -84,7 +84,7 @@ func (s *Seed) InitialTLS() (chain, key, root []byte) {
 	return server.Certificate, server.Key, authority.Root
 }
 func (s *Seed) Provision(ctx context.Context, store *Store) error {
-	for _, name := range []string{"authority.json", serverIdentityFile, "runtime.json", registryFile} {
+	for _, name := range []string{registryFile, "authority.json", serverIdentityFile, "runtime.json"} {
 		if before, err := store.Read(name); err == nil {
 			if !bytes.Equal(before, s.files[name]) {
 				return ErrConflict

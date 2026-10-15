@@ -180,7 +180,7 @@ func (i *ServerIdentity) Renew(ctx context.Context, now time.Time) error {
 func (i *ServerIdentity) Status(now time.Time) CertificateStatus {
 	i.mutex.RLock()
 	defer i.mutex.RUnlock()
-	return CertificateStatus{Managed: true, Expires: i.pair.Leaf.NotAfter, RenewAt: RenewalTime(i.pair.Leaf), LastSuccess: i.disk.LastSuccess, Warning: expiryWarning(i.pair.Leaf.NotAfter, now), IssuerExpires: i.authority.issuer.NotAfter, IssuerWarning: expiryWarning(i.authority.issuer.NotAfter, now), RootExpires: i.authority.root.NotAfter}
+	return CertificateStatus{Managed: true, Expires: i.pair.Leaf.NotAfter, RenewAt: RenewalTime(i.pair.Leaf), LastSuccess: i.disk.LastSuccess, Warning: expiryWarning(i.pair.Leaf.NotAfter, now), IssuerExpires: i.authority.issuer.NotAfter, IssuerWarning: issuerWarning(i.authority.issuer.NotAfter, now), RootExpires: i.authority.root.NotAfter, RootWarning: expiryWarning(i.authority.root.NotAfter, now)}
 }
 func (i *ServerIdentity) Maintain(ctx context.Context, report func(CertificateStatus)) {
 	ticker := time.NewTicker(time.Minute)
@@ -189,9 +189,16 @@ func (i *ServerIdentity) Maintain(ctx context.Context, report func(CertificateSt
 		if ctx.Err() != nil {
 			return
 		}
-		_ = i.Renew(ctx, time.Now())
+		err := i.Renew(ctx, time.Now())
 		if report != nil {
-			report(i.Status(time.Now()))
+			status := i.Status(time.Now())
+			if err != nil {
+				status.Failures = 1
+				if status.Warning == "" {
+					status.Warning = "CERTIFICATE_RENEWAL_FAILED"
+				}
+			}
+			report(status)
 		}
 		select {
 		case <-ctx.Done():

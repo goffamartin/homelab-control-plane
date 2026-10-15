@@ -110,7 +110,14 @@ func IdentityStatus(data []byte, id string, now time.Time) (CertificateStatus, e
 	if err != nil {
 		return CertificateStatus{}, ErrPKI
 	}
-	return CertificateStatus{Managed: true, Expires: leaf.NotAfter, RenewAt: RenewalTime(leaf), NextAttempt: d.NextAttempt, LastSuccess: d.LastSuccess, Failures: d.Failures, Warning: expiryWarning(leaf.NotAfter, now), IssuerExpires: issuer.NotAfter, IssuerWarning: expiryWarning(issuer.NotAfter, now), RootExpires: root.NotAfter}, nil
+	return CertificateStatus{Managed: true, Expires: leaf.NotAfter, RenewAt: RenewalTime(leaf), NextAttempt: d.NextAttempt, LastSuccess: d.LastSuccess, Failures: d.Failures, Warning: expiryWarning(leaf.NotAfter, now), IssuerExpires: issuer.NotAfter, IssuerWarning: issuerWarning(issuer.NotAfter, now), RootExpires: root.NotAfter, RootWarning: expiryWarning(root.NotAfter, now), Migration: len(d.PeerCA) > 0}, nil
+}
+func issuerWarning(expires, now time.Time) string {
+	warning := expiryWarning(expires, now)
+	if warning == "" && expires.Sub(now) <= 90*24*time.Hour {
+		return "ISSUER_EXPIRES_90D"
+	}
+	return warning
 }
 
 // Reports only bounded lifecycle metadata, once per changed state.

@@ -23,10 +23,11 @@ const controllerDirectory = "/etc/hlcp/controller"
 const controllerState = "/var/lib/hlcp-controller/managed"
 
 type controllerBootstrap struct {
-	Version    int                   `json:"version"`
-	Config     managed.RuntimeConfig `json:"config"`
-	Seed       []byte                `json:"seed"`
-	BackupPath string                `json:"backup_path"`
+	Version     int                   `json:"version"`
+	Config      managed.RuntimeConfig `json:"config"`
+	Seed        []byte                `json:"seed"`
+	BackupPath  string                `json:"backup_path"`
+	Provisioned bool                  `json:"provisioned,omitempty"`
 }
 
 func readPrivate(path string, owner setup.Owner) ([]byte, error) {
@@ -83,7 +84,9 @@ func recoverSetup(ctx context.Context, directory string, owner setup.Owner, resu
 func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	f := flag.NewFlagSet("setup", flag.ContinueOnError)
 	f.SetOutput(io.Discard)
-	_ = f.Bool("managed", true, "managed PKI")
+	managedMode := f.Bool("managed", true, "managed PKI")
+	migrate := f.Bool("migrate", false, "explicit imported-to-managed trust overlap; preserve old server credentials and node IDs")
+	offline := f.Bool("offline-stopped", false, "explicit stopped-service confirmation for non-booted images only")
 	interactive := f.Bool("interactive", false, "interactive managed setup")
 	listen := f.String("listen", "", "explicit controller IP:port")
 	name := f.String("server-name", "", "controller DNS/IP")
@@ -103,6 +106,7 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	jsonOutput := f.Bool("json", false, "redacted JSON result")
 	if err := f.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
+			fmt.Fprintln(out, "Migration: setup --migrate --interactive (stopped imported controller, explicit trust overlap). Non-booted images alone may use --offline-stopped without activation.")
 			fmt.Fprintln(out, "Usage: hlcp-controller setup [--managed] --interactive\nOr: --listen IP:9443 --server-name DNS/IP [--enrollment-listen IP:9445] [--enrollment-url https://DNS:9445]\n  [--cli-user account] [--backup-file /private/root-backup.json] [--backup-password-stdin --backup-confirmed]\n  [--start [--enable]] [--resume] [--json] [--apply --yes]\nDefault noninteractive mode is read-only preview. Managed setup creates CA/certificates automatically.\nEncrypted root backup needs a >=16-character password and off-host retention. No CA key in argv.\nImported mode remains: setup --imported with explicit certificate options.")
 			return 0
 		}
@@ -113,7 +117,7 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	if len(args) == 0 {
 		*interactive = true
 	}
-	if f.NArg() != 0 || (*interactive && (!ui.interactive || *apply || *yes || *jsonOutput)) || (*apply != *yes) || (*enable && !*start) {
+	if f.NArg() != 0 || !*managedMode || (*interactive && (!ui.interactive || *apply || *yes || *jsonOutput)) || (*apply != *yes) || (*enable && !*start) {
 		fmt.Fprintln(out, "Invalid setup options or interactive terminal unavailable. Use --help.")
 		return 2
 	}
@@ -124,6 +128,10 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	}
 	ctx, cancel := boundedContext()
 	defer cancel()
+	if *offline && (*start || !offlineImage()) {
+		fmt.Fprintln(out, "Offline mode is only for stopped non-booted images, never service activation.")
+		return 2
+	}
 	fail := func(code string) int {
 		if *jsonOutput {
 			_ = json.NewEncoder(out).Encode(map[string]any{"status": "failed", "code": code, "preserved": true})
@@ -180,6 +188,20 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 		*address = "https://" + net.JoinHostPort(*name, "9445")
 	}
 	config := managed.RuntimeConfig{Version: 1, Listen: *listen, ServerName: *name, EnrollmentListen: *enrollment, EnrollmentURL: *address}
+	var importedIDs []string
+	if *migrate {
+		owner := setup.Owner{UID: 0, GID: 0}
+		chain, e1 := readPrivate(filepath.Join(*directory, "controller.crt"), owner)
+		key, e2 := readPrivate(filepath.Join(*directory, "controller.key"), owner)
+		trust, e3 := readPrivate(filepath.Join(*directory, "ca.crt"), owner)
+		nodes, e4 := readPrivate(filepath.Join(*directory, "nodes.json"), owner)
+		environment, e5 := readPrivate(filepath.Join(*directory, "controller.env"), owner)
+		if e1 != nil || e2 != nil || e3 != nil || e4 != nil || e5 != nil || managed.VerifyLegacyServer(chain, key, trust, *name, time.Now()) != nil || managed.DecodeJSON(nodes, &importedIDs, 64<<10) != nil || importedIDs == nil || environmentListener(environment) != *listen {
+			return fail("IMPORTED_MIGRATION_PREFLIGHT_REFUSED")
+		}
+		config.LegacyServer = true
+		config.LegacyTrust = string(trust)
+	}
 	if config.Validate() != nil || !filepath.IsAbs(*directory) || filepath.Clean(*directory) != *directory || !filepath.IsAbs(*state) || filepath.Clean(*state) != *state || strings.ContainsAny(*state, "\r\n\x00") {
 		return fail("INVALID_CONFIGURATION")
 	}
@@ -210,8 +232,10 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 		}
 		return 0
 	}
-	if *start {
-		if _, err := inspectService(ctx, "system", "hlcp-controller.service"); err != nil {
+	var serviceBefore serviceState
+	if (*start || *migrate) && !*offline {
+		var err error
+		if serviceBefore, err = inspectService(ctx, "system", "hlcp-controller.service"); err != nil {
 			return fail("SERVICE_PREFLIGHT_REFUSED")
 		}
 	}
@@ -250,6 +274,9 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	if !os.IsNotExist(modeErr) {
 		return fail("MANAGED_MODE_INVALID")
 	}
+	if (*start || *migrate) && !*offline && serviceBefore.active != "inactive" {
+		return fail("STOP_CONTROLLER_BEFORE_PROVISIONING")
+	}
 	password := ""
 	if *interactive {
 		password, err = ui.secret(ctx, "Root backup password (at least 16 characters): ")
@@ -274,24 +301,46 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 		return fail("PASSWORD_LENGTH")
 	}
 	var seed *managed.Seed
+	provisioned := false
 	if data, err := rootStore.Read("managed-bootstrap.json"); err == nil {
 		var saved controllerBootstrap
 		if managed.DecodeJSON(data, &saved, 512<<10) != nil || saved.Version != 1 || saved.Config != config || saved.BackupPath != *backup {
 			return fail("BOOTSTRAP_CONFLICT")
 		}
 		seed, err = managed.DecodeSeed(saved.Seed, password, time.Now())
+		provisioned = saved.Provisioned
 		if err != nil {
 			return fail("BOOTSTRAP_VALIDATION_FAILED")
 		}
 	} else if !os.IsNotExist(err) {
 		return fail("BOOTSTRAP_READ_FAILED")
 	} else {
-		for _, file := range []string{"controller.key", "controller.crt", "api.token", "nodes.json"} {
-			if _, err := rootStore.Read(file); !os.IsNotExist(err) {
-				return fail("EXISTING_IMPORTED_SETUP")
+		if !*migrate {
+			for _, file := range []string{"controller.key", "controller.crt", "api.token", "nodes.json"} {
+				if _, err := rootStore.Read(file); !os.IsNotExist(err) {
+					return fail("EXISTING_IMPORTED_SETUP")
+				}
 			}
 		}
-		seed, err = managed.NewSeed(config, password, time.Now())
+		if *migrate {
+			seed, err = managed.NewMigrationSeed(config, password, importedIDs, time.Now())
+			if err == nil {
+				backupData := joinBackup{Version: 1, Request: "imported-to-managed", Files: map[string][]byte{}}
+				for _, name := range []string{"controller.crt", "controller.key", "ca.crt", "issuer-ca.crt", "controller.env", "api-policy.json", "api.token", "observer.token", "nodes.json"} {
+					data, e := rootStore.Read(name)
+					if e != nil {
+						return fail("IMPORTED_BACKUP_REFUSED")
+					}
+					backupData.Files[name] = data
+				}
+				data, _ := json.Marshal(backupData)
+				if putSame(ctx, rootStore, "migration-imported-backup.json", data) != nil {
+					return fail("IMPORTED_BACKUP_PERSIST_FAILED")
+				}
+			}
+		} else {
+			seed, err = managed.NewSeed(config, password, time.Now())
+		}
 		if err != nil {
 			return fail("PKI_GENERATION_FAILED")
 		}
@@ -329,7 +378,7 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	if err != nil {
 		return fail("STATE_STORE_UNAVAILABLE")
 	}
-	if _, e := rootStore.Read("api.token"); e == nil {
+	if provisioned {
 		if _, e := store.Read("nodes-managed.json"); e != nil {
 			store.Close()
 			return fail("REGISTRY_LOSS_REFUSED")
@@ -340,22 +389,28 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 	if err != nil {
 		return fail("STATE_PROVISION_FAILED")
 	}
-	if recoverSetup(ctx, *directory, setup.Owner{UID: 0, GID: 0}, *resume) != nil {
-		return fail("SETUP_RECOVERY_REQUIRED")
+	bootstrapData, _ := json.Marshal(controllerBootstrap{Version: 1, Config: config, Seed: seed.Encode(), BackupPath: *backup, Provisioned: true})
+	if rootStore.Update(ctx, "managed-bootstrap.json", func([]byte) ([]byte, error) { return bootstrapData, nil }) != nil {
+		return fail("BOOTSTRAP_CHECKPOINT_FAILED")
 	}
-	chain, key, root := seed.InitialTLS()
-	material, err := onboarding.NewImportedTLS(chain, key, root, root)
-	if err != nil {
-		return fail("INITIAL_TLS_INVALID")
-	}
-	plan, err := onboarding.PlanControllerAuto(ctx, *directory, setup.Owner{UID: 0, GID: 0}, onboarding.ControllerOptions{ListenAddress: *listen, ServerName: *name}, material, time.Now())
-	if err != nil {
-		return fail("CONTROLLER_PLAN_REFUSED")
-	}
-	_, err = plan.Apply(ctx, true, time.Now())
-	_ = plan.Close()
-	if err != nil {
-		return fail("CONTROLLER_CONFIG_INCOMPLETE")
+	if !*migrate {
+		if recoverSetup(ctx, *directory, setup.Owner{UID: 0, GID: 0}, *resume) != nil {
+			return fail("SETUP_RECOVERY_REQUIRED")
+		}
+		chain, key, root := seed.InitialTLS()
+		material, err := onboarding.NewImportedTLS(chain, key, root, root)
+		if err != nil {
+			return fail("INITIAL_TLS_INVALID")
+		}
+		plan, err := onboarding.PlanControllerAuto(ctx, *directory, setup.Owner{UID: 0, GID: 0}, onboarding.ControllerOptions{ListenAddress: *listen, ServerName: *name}, material, time.Now())
+		if err != nil {
+			return fail("CONTROLLER_PLAN_REFUSED")
+		}
+		_, err = plan.Apply(ctx, true, time.Now())
+		_ = plan.Close()
+		if err != nil {
+			return fail("CONTROLLER_CONFIG_INCOMPLETE")
+		}
 	}
 	if putSame(ctx, rootStore, "managed.env", []byte("HLCP_MANAGED_STATE="+*state+"\n")) != nil {
 		return fail("MANAGED_MODE_COMMIT_FAILED")
@@ -375,4 +430,19 @@ func ControllerSetup(args []string, input io.Reader, out io.Writer) int {
 }
 func affirmative(value string) bool {
 	return strings.EqualFold(value, "yes") || strings.EqualFold(value, "ano")
+}
+func environmentListener(data []byte) string {
+	result := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if !ok || key != "HLCP_AGENT_LISTEN" || result != "" || value == "" {
+			return ""
+		}
+		result = value
+	}
+	return result
 }

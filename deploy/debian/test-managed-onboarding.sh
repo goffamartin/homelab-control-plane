@@ -12,7 +12,7 @@ preview_setup() {
 }
 preview_setup --json
 test ! -e /root/hlcp-root-backup.json
-printf '%s\n' 'disposable test password 123456' | preview_setup --backup-password-stdin --backup-confirmed --apply --yes --json
+printf '%s\n' 'disposable test password 123456' | preview_setup --cli-user acceptance --backup-password-stdin --backup-confirmed --apply --yes --json
 test "$(stat -c %a /root/hlcp-root-backup.json)" = 600
 authority_before=$(sha256sum /var/lib/hlcp-controller/managed/authority.json)
 registry_before=$(sha256sum /var/lib/hlcp-controller/managed/nodes-managed.json)
@@ -27,6 +27,7 @@ trap 'kill "$controller_pid" 2>/dev/null || true' EXIT
 cli() { /usr/bin/hlcp --api-token-file /etc/hlcp/controller/api.token "$@"; }
 attempt=0
 until cli -n; do attempt=$((attempt+1));if [ "$attempt" -gt 20 ]; then cat /root/controller-test.log;exit 1;fi;sleep 1;done
+runuser -u acceptance -- /usr/bin/hlcp -n
 cli pairing create --node acceptance-01 --output-file /root/pairing-code
 test "$(stat -c %a /root/pairing-code)" = 600
 runuser -u acceptance -- /usr/bin/hlcp-agent join --pairing-stdin --scope user --json </root/pairing-code

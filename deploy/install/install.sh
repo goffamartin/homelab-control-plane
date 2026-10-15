@@ -4,6 +4,10 @@ set -eu
 umask 077
 PATH=/usr/bin:/bin
 export PATH
+unset GH_DEBUG GH_FORCE_TTY
+GH_HOST=github.com
+GH_PROMPT_DISABLED=1
+export GH_HOST GH_PROMPT_DISABLED
 usage() {
  echo 'Usage: sh install.sh controller|agent --version vX.Y.Z [--public|--from-directory /artifacts] [--scope system|user] [--update] [--restart] [--configure] [--apply --yes]'
  echo 'Default verifies/downloads only. Private GitHub uses your existing gh login, never a PAT argument. Update snapshots config/state and never restores an old journal.'
@@ -62,7 +66,7 @@ fetch(){
   cp -- "$source_dir/$name" "$stage/$name"
  elif [ "$public" = yes ];then
   command -v curl >/dev/null||fail 'curl required for public downloads'
-  curl --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --silent --show-error --location --max-redirs 3 --connect-timeout 10 --max-time 120 --max-filesize 67108864 --output "$stage/$name" "https://github.com/goffamartin/homelab-control-plane/releases/download/$version/$name"||fail 'download denied or unavailable'
+  curl --disable --proto '=https' --proto-redir '=https' --tlsv1.2 --fail --silent --show-error --location --max-redirs 3 --connect-timeout 10 --max-time 120 --max-filesize 67108864 --output "$stage/$name" "https://github.com/goffamartin/homelab-control-plane/releases/download/$version/$name"||fail 'download denied or unavailable'
  else
   command -v gh >/dev/null||fail 'install gh and run gh auth login as yourself for private downloads'
   gh release download "$version" --repo goffamartin/homelab-control-plane --pattern "$name" --dir "$stage"||fail 'private release unavailable or access denied'
@@ -95,7 +99,7 @@ if [ -n "$installed" ];then
  dpkg --compare-versions "$target_version" ge "$installed"||fail 'downgrade refused; use a separately reviewed compatible rollback'
  [ "$update" = yes ]||fail 'package already exists; use explicit --update'
 fi
-echo "Verified hlcp-$role: ${installed:-not installed} -> $target_version ($arch, scope=$scope, protocol/state=1)."
+echo "Verified hlcp-$role: ${installed:-not installed} -> $target_version ($arch, scope=$scope, protocol=1, managed=1, journal=3, ledger=1)."
 if [ "$apply" = no ];then echo 'Read-only verification complete. No package, service or configuration changed.';success=yes;exit 0;fi
 root(){ if [ "$(id -u)" -eq 0 ];then "$@";else sudo -- "$@";fi; }
 systemctl_scope(){ if [ "$scope" = user ];then [ "$(id -u)" -ne 0 ]||fail 'run user-scope installation as the real resource owner, not root';systemctl --user --no-ask-password "$@";else root systemctl --system --no-ask-password "$@";fi; }

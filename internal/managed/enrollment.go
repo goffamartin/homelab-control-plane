@@ -20,6 +20,7 @@ import (
 type EnrollmentService struct {
 	Registry                      *Registry
 	ControllerAddress, ServerName string
+	PeerCA                        []byte
 	limitMutex                    sync.Mutex
 	window                        time.Time
 	requests                      int
@@ -82,9 +83,15 @@ func (s *EnrollmentService) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		root := s.Registry.authority.RootPEM()
-		writeManagedJSON(w, EnrollmentResult{Certificate: chain, CA: root, Controller: s.ControllerAddress, ServerName: s.ServerName})
+		writeManagedJSON(w, EnrollmentResult{Certificate: chain, CA: root, PeerCA: s.PeerCA, Controller: s.ControllerAddress, ServerName: s.ServerName})
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/renew":
 		s.renew(w, r)
+	case r.Method == http.MethodGet && r.URL.Path == "/v1/trust":
+		if r.TLS == nil || len(r.TLS.VerifiedChains) == 0 || !s.Registry.Allows(r.TLS.VerifiedChains[0][0]) {
+			http.Error(w, "admission denied", http.StatusForbidden)
+			return
+		}
+		writeManagedJSON(w, TrustResult{CA: s.Registry.authority.RootPEM(), PeerCA: s.PeerCA})
 	default:
 		http.NotFound(w, r)
 	}
@@ -110,7 +117,7 @@ func (s *EnrollmentService) renew(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "renewal denied", http.StatusForbidden)
 		return
 	}
-	writeManagedJSON(w, EnrollmentResult{Certificate: chain, CA: s.Registry.authority.RootPEM(), Controller: s.ControllerAddress, ServerName: s.ServerName})
+	writeManagedJSON(w, EnrollmentResult{Certificate: chain, CA: s.Registry.authority.RootPEM(), PeerCA: s.PeerCA, Controller: s.ControllerAddress, ServerName: s.ServerName})
 }
 func writeManagedJSON(w http.ResponseWriter, value any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -188,7 +195,7 @@ func EnrollAgent(ctx context.Context, i Invitation, requestID string, key, csr [
 		return EnrollmentResult{}, ErrAdmission
 	}
 	var result EnrollmentResult
-	if readResponse(response, &result, 64<<10) != nil || !bytes.Equal(root, result.CA) || VerifyAgentMaterial(i.NodeID, result.Certificate, key, root, time.Now()) != nil {
+	if readResponse(response, &result, 64<<10) != nil || !bytes.Equal(root, result.CA) || ValidateEnrollmentTrust(root, result.PeerCA, time.Now()) != nil || VerifyAgentMaterial(i.NodeID, result.Certificate, key, root, time.Now()) != nil {
 		return EnrollmentResult{}, ErrAdmission
 	}
 	return result, nil

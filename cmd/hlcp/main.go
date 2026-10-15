@@ -270,6 +270,8 @@ Options:
   --config <file>     explicit client JSON configuration (otherwise user hlcp/cli.json)
 
 First-time client setup (run as the actual CLI user, not sudo):
+	Managed PKI: hlcp pairing create|list|revoke --help; hlcp certificates
+	Verified artifacts: hlcp verify-release --help; hlcp package-backup --help
   hlcp configure --api-token-file <private-token-file>
   hlcp configure --token-stdin
   hlcp configure --help

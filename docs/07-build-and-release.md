@@ -1,5 +1,30 @@
 # Build, CI and dependency review
 
+## Signed managed distribution
+
+From one clean source SHA and pinned Go 1.27.2, use an actual chosen numeric
+version and NEW directories:
+
+```sh
+go run ./tools/release -version vX.Y.Z-preview.N -out dist/candidate-a \
+  -signing-key /private/release.key
+go run ./tools/release -version vX.Y.Z-preview.N -out dist/candidate-b \
+  -signing-key /private/release.key
+```
+
+The signer must match `deploy/install/release.pub`; a build never generates it.
+`tools/release-signing` is an explicit no-clobber provisioning tool, not a CI
+fallback. Back up the private key off-host; never commit/publish it or distribute
+a fixture key. Public trust is pinned in helper and verifier. Compare both
+SHA256SUMS and both exact detached manifest/checksum signatures before publication.
+
+Artifacts include `hlcp-install.sh`; the deployment archive includes the managed
+Quick Start, migration/live gate and public trust anchor. Builds without
+`-signing-key` remain development/CI artifacts; the verified helper rejects them.
+`--allow-dirty` likewise cannot produce an installable verified manifest. These
+commands publish no release, alter no tags and change no repository visibility.
+See [Quick Start](49-managed-quick-start.md) and [live gate](51-managed-live-acceptance.md).
+
 ## Pinned toolchain and local checks
 
 `.go-version` selects Go 1.27.2 and `go.mod` declares Go 1.27.0 with the 1.27.2
