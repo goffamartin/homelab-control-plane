@@ -48,11 +48,15 @@ func (h nativeAgentServiceHost) InspectAgent(ctx context.Context, profile AgentS
 // Shared source validation; each caller supplies its own resource evidence.
 // Activation always uses PlanResourceReadiness and cannot adopt probe evidence.
 func (h nativeAgentServiceHost) inspectAgentSource(ctx context.Context, profile AgentServiceProfile, resources func(agent.Config) ([32]byte, error)) (AgentActivationSnapshot, error) {
-	fail := func() (AgentActivationSnapshot, error) { return AgentActivationSnapshot{}, ErrAgentActivationProfile }
+	check := "account_and_scope"
+	fail := func() (AgentActivationSnapshot, error) {
+		return AgentActivationSnapshot{}, &agentActivationCheckError{check: check}
+	}
 	uid, gid, err := h.Caller(ctx)
 	if err != nil || !validAgentServiceProfile(profile) || (profile.Scope == "user" && (uid == 0 || gid == 0)) || (profile.Scope == "system" && (uid != 0 || gid != 0)) {
 		return fail()
 	}
+	check = "installed_agent_binary"
 	self, err := os.Executable()
 	if err != nil {
 		return fail()
@@ -65,10 +69,12 @@ func (h nativeAgentServiceHost) inspectAgentSource(ctx context.Context, profile 
 	if err != nil {
 		return fail()
 	}
+	check = "service_manager_binary"
 	manager, err := activationFile("/usr/bin/systemctl", 64<<20, true)
 	if err != nil {
 		return fail()
 	}
+	check = "account_home"
 	account, err := user.LookupId(strconv.FormatUint(uint64(uid), 10))
 	if err != nil {
 		return fail()
@@ -85,10 +91,12 @@ func (h nativeAgentServiceHost) inspectAgentSource(ctx context.Context, profile 
 		}
 		home = account.HomeDir
 		directory = filepath.Join(home, ".config", "hlcp")
+		check = "user_runtime_directory_and_bus"
 		runtimeProof, err = agentRuntimeEvidence(uid, gid)
 		if err != nil {
 			return fail()
 		}
+		check = "user_service_manager"
 		data, err := agentServiceProcess(ctx, profile, "manager", "", 3*time.Second)
 		if err != nil {
 			return fail()
@@ -97,6 +105,7 @@ func (h nativeAgentServiceHost) inspectAgentSource(ctx context.Context, profile 
 		if err != nil || properties["ActiveState"] != "active" {
 			return fail()
 		}
+		check = "user_linger_query"
 		data, err = agentServiceProcess(ctx, profile, "linger", "", 3*time.Second)
 		if err != nil {
 			return fail()
@@ -107,6 +116,7 @@ func (h nativeAgentServiceHost) inspectAgentSource(ctx context.Context, profile 
 		}
 		result.Linger = properties["Linger"] == "yes"
 	} else {
+		check = "system_service_account"
 		accountProof, err = serviceActivationAccount("hlcp")
 		if err != nil {
 			return fail()
@@ -116,14 +126,19 @@ func (h nativeAgentServiceHost) inspectAgentSource(ctx context.Context, profile 
 		stateGID, _ := strconv.ParseUint(fields[3], 10, 32)
 		stateOwner = setup.Owner{UID: uint32(stateUID), GID: uint32(stateGID)}
 	}
+	check = "service_properties"
 	data, err := agentServiceProcess(ctx, profile, "show", profile.Unit, 3*time.Second)
 	if err != nil {
 		return fail()
 	}
 	properties, err := agentPropertyMap(data, strings.Split(activationProperties, ","))
+	if err == nil && properties["NeedDaemonReload"] == "yes" {
+		check = "service_manager_reload_required"
+	}
 	if err != nil || validateAgentUnitProperties(properties, profile, false) != nil {
 		return fail()
 	}
+	check = "packaged_service_unit"
 	unit, err := activationFile(properties["FragmentPath"], 64*1024, false)
 	if err != nil {
 		return fail()
@@ -134,6 +149,7 @@ func (h nativeAgentServiceHost) inspectAgentSource(ctx context.Context, profile 
 	}
 	var peerUnit setup.Snapshot
 	if profile.Scope == "user" {
+		check = "peer_service_profile"
 		peer := AgentServiceProfile{Scope: "user", Unit: "hlcp-agent-podman.service"}
 		if profile.Unit == peer.Unit {
 			peer.Unit = "hlcp-agent.service"
@@ -162,9 +178,14 @@ func (h nativeAgentServiceHost) inspectAgentSource(ctx context.Context, profile 
 			}
 		}
 	}
+	check = "private_config_tls_and_managed_identity"
 	config, err := agentServiceConfig(ctx, directory, setup.Owner{UID: uid, GID: gid}, profile, home, time.Now())
 	if errors.Is(err, ErrAgentActivationResources) {
 		return AgentActivationSnapshot{}, err
+	}
+	var configCheck *agentActivationCheckError
+	if errors.As(err, &configCheck) {
+		return AgentActivationSnapshot{}, configCheck
 	}
 	if err != nil {
 		return fail()
@@ -181,9 +202,11 @@ func (h nativeAgentServiceHost) inspectAgentSource(ctx context.Context, profile 
 	if profile.Scope == "user" {
 		journal = filepath.Join(home, ".local", "state", "hlcp", "command-journal.json")
 	}
+	check = "private_journal_path_and_permissions"
 	if agentJournalReadiness(journal, stateOwner) != nil {
 		return fail()
 	}
+	check = "process_groups_and_evidence"
 	groups, err := os.Getgroups()
 	if err != nil {
 		return fail()
@@ -262,7 +285,13 @@ func validateAgentUnitProperties(p map[string]string, profile AgentServiceProfil
 	return nil
 }
 
-func agentServiceConfig(ctx context.Context, directory string, owner setup.Owner, profile AgentServiceProfile, home string, now time.Time) ([]setup.Snapshot, error) {
+func agentServiceConfig(ctx context.Context, directory string, owner setup.Owner, profile AgentServiceProfile, home string, now time.Time) (snapshots []setup.Snapshot, failure error) {
+	check := "private_config_directory"
+	defer func() {
+		if failure != nil && errors.Is(failure, ErrAgentActivationProfile) {
+			failure = &agentActivationCheckError{check: check}
+		}
+	}()
 	if !validAgentServiceProfile(profile) {
 		return nil, ErrAgentActivationProfile
 	}
@@ -271,6 +300,7 @@ func agentServiceConfig(ctx context.Context, directory string, owner setup.Owner
 		return nil, ErrAgentActivationProfile
 	}
 	defer p.Close()
+	check = "config_transaction_state"
 	status, err := p.Inspect(ctx)
 	if err != nil || (status.State != "none" && status.State != "committed") {
 		return nil, ErrAgentActivationProfile
@@ -279,6 +309,7 @@ func agentServiceConfig(ctx context.Context, directory string, owner setup.Owner
 	files := make([]setup.Snapshot, 5)
 	intents := make([]setup.Intent, 5)
 	for index, name := range names {
+		check = "private_file_" + strings.ReplaceAll(name, ".", "_")
 		files[index], err = p.Snapshot(name, setup.MaximumFileBytes)
 		if err != nil || !files[index].Exists || files[index].Mode != 0600 {
 			return nil, ErrAgentActivationProfile
@@ -291,10 +322,12 @@ func agentServiceConfig(ctx context.Context, directory string, owner setup.Owner
 			return nil
 		}}
 	}
+	check = "yaml_syntax_and_schema"
 	config, err := agent.Parse(files[0].Data)
 	if err != nil {
 		return nil, ErrAgentActivationProfile
 	}
+	check = "controller_address_and_server_name"
 	address, port, e1 := net.SplitHostPort(config.ControllerAddress)
 	number, e2 := strconv.Atoi(port)
 	if e1 != nil || e2 != nil || !validHost(address) || !validHost(config.ServerName) || number < 1 || number > 65535 {
@@ -306,11 +339,13 @@ func agentServiceConfig(ctx context.Context, directory string, owner setup.Owner
 		certDir = "/run/credentials/hlcp-agent.service"
 		journal = "/var/lib/hlcp/command-journal.json"
 	}
+	check = "packaged_identity_and_journal_paths"
 	if config.CertificateFile != filepath.Join(certDir, "agent.crt") || config.PrivateKeyFile != filepath.Join(certDir, "agent.key") || config.CAFile != filepath.Join(certDir, "ca.crt") || config.JournalFile != journal {
 		return nil, ErrAgentActivationProfile
 	}
 	material, err := NewImportedTLS(files[1].Data, files[2].Data, files[3].Data, files[4].Data)
 	if config.ManagedDirectory != "" {
+		check = "managed_identity_path_and_permissions"
 		managedPath := filepath.Join(home, ".local", "state", "hlcp", "managed")
 		stateOwner := owner
 		if profile.Scope == "system" {
@@ -339,6 +374,7 @@ func agentServiceConfig(ctx context.Context, directory string, owner setup.Owner
 		if e != nil || !snapshot.Exists || snapshot.Mode != 0600 {
 			return nil, ErrAgentActivationProfile
 		}
+		check = "managed_identity_validity_and_root"
 		chain, key, root, e := managed.IdentityMaterial(snapshot.Data, config.NodeID, now)
 		if e != nil || !bytes.Equal(root, files[3].Data) {
 			return nil, ErrAgentActivationProfile
@@ -346,12 +382,15 @@ func agentServiceConfig(ctx context.Context, directory string, owner setup.Owner
 		material, err = NewImportedTLS(chain, key, root, root)
 		files = append(files, snapshot)
 	}
+	check = "tls_material"
 	if err != nil {
 		return nil, ErrAgentActivationProfile
 	}
+	check = "tls_identity_purpose_and_validity"
 	if _, err = material.Validate(Identity{Role: "agent", NodeID: config.NodeID}, now); err != nil {
 		return nil, ErrAgentActivationProfile
 	}
+	check = "private_config_snapshot_recheck"
 	plan, err := p.Build(ctx, intents)
 	if err != nil || p.Recheck(ctx, plan) != nil {
 		return nil, ErrAgentActivationProfile

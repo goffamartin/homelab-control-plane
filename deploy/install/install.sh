@@ -8,19 +8,46 @@ unset GH_DEBUG GH_FORCE_TTY
 GH_HOST=github.com
 GH_PROMPT_DISABLED=1
 export GH_HOST GH_PROMPT_DISABLED
+json=no
+for option in "$@";do [ "$option" != --json ]||json=yes;done
+# Reserve original stdout for exactly one JSON result. All progress/child output
+# goes to stderr; machine consumers must use stdout and the process exit status.
+exec 3>&1
+[ "$json" = no ]||exec 1>&2
+phase=options;changed=false;uncertain=false;completed='';success=no;stage=
+record(){ if [ -n "$completed" ];then completed="$completed,\"$1\"";else completed="\"$1\"";fi; }
+finish(){
+ result=$?
+ if [ -n "$stage" ]&&command -v cleanup >/dev/null 2>&1;then cleanup||echo 'Staging cleanup incomplete; inspect the private staging directory.' >&2;fi
+ if [ "$result" -ne 0 ];then echo "Installation incomplete at $phase (changed=$changed, uncertain=$uncertain). Inspect state before retrying." >&2;fi
+ if [ "$json" = yes ];then
+  status=failed;code=INSTALL_INCOMPLETE
+  if [ "$result" -eq 0 ];then status=ok;code=OK
+  elif [ "$uncertain" = true ];then status=uncertain
+  elif [ "$changed" = true ];then status=partial;fi
+  printf '{"schema_version":1,"operation":"install","status":"%s","code":"%s","phase":"%s","changed":%s,"uncertain":%s,"completed":[%s]}\n' "$status" "$code" "$phase" "$changed" "$uncertain" "$completed" >&3
+ fi
+}
+trap finish EXIT
 usage() {
- echo 'Usage: sh install.sh controller|agent --version vX.Y.Z [--public|--from-directory /artifacts] [--scope system|user] [--update] [--restart] [--configure] [--apply --yes]'
+ echo 'Usage: sh install.sh controller|agent --version vX.Y.Z [--public|--from-directory /artifacts] [--scope system|user] [--update] [--restart] [--configure] [--json] [--apply --yes]'
  echo 'Default verifies/downloads only. Private GitHub uses your existing gh login, never a PAT argument. Update snapshots config/state and never restores an old journal.'
  echo 'Advanced: --unit hlcp-agent-podman.service (user compatibility profile); --offline-stopped only for non-booted image maintenance, never live restart.'
 }
-fail(){ echo "HLCP installation refused: $*" >&2; exit 1; }
+fail(){
+ if [ "$uncertain" = true ];then echo "Installation stopped during $phase; last operation outcome is unverified: $*" >&2
+ elif [ "$changed" = true ];then echo "Installation stopped after changes during $phase: $*" >&2
+ else echo "Installation did not proceed past $phase: $*" >&2;fi
+ echo 'Inspect actual state before retrying. No automatic state or journal rollback was performed.' >&2
+ exit 1
+}
 role=${1:-}
 case "$role" in controller|agent) shift;; --help|-h) usage;exit 0;; *) usage;exit 2;;esac
 version=;public=no;source_dir=;scope=system;update=no;restart=no;configure=no;apply=no;yes=no;offline=no;unit=
 while [ "$#" -gt 0 ];do
  case "$1" in
   --version|--from-directory|--scope|--unit) [ "$#" -ge 2 ]||fail 'missing option value';key=$1;shift;case "$key" in --version) version=$1;;--from-directory) source_dir=$1;;--scope) scope=$1;;--unit) unit=$1;;esac;;
-  --public) public=yes;;--update) update=yes;;--restart) restart=yes;;--configure) configure=yes;;--offline-stopped) offline=yes;;--apply) apply=yes;;--yes) yes=yes;;--help|-h) usage;exit 0;;*) fail 'unknown option';;
+  --json) :;;--public) public=yes;;--update) update=yes;;--restart) restart=yes;;--configure) configure=yes;;--offline-stopped) offline=yes;;--apply) apply=yes;;--yes) yes=yes;;--help|-h) usage;exit 0;;*) fail 'unknown option';;
  esac;shift
 done
 [ "$apply" = "$yes" ]||fail '--apply and --yes are both required for changes'
@@ -28,6 +55,7 @@ done
 [ "$role" != controller ]||[ "$scope" = system ]||fail 'controller requires system scope'
 [ "$restart" = no ]||[ "$update" = yes ]||fail '--restart is only for updates; use --configure on a fresh install'
 [ "$configure" = no ]||[ "$update" = no ]||fail 'update never reruns provisioning'
+[ "$json" = no ]||[ "$configure" = no ]||fail '--json cannot open an interactive setup; install first, then run setup/join separately'
 if [ -z "$unit" ];then unit="hlcp-$role.service";fi
 case "$role:$scope:$unit" in controller:system:hlcp-controller.service|agent:system:hlcp-agent.service|agent:user:hlcp-agent.service|agent:user:hlcp-agent-podman.service);;*)fail 'unsupported service profile';;esac
 if [ "$offline" = yes ];then
@@ -39,11 +67,11 @@ command -v dpkg >/dev/null||fail 'Debian dpkg required'
 arch=$(dpkg --print-architecture)
 case "$arch" in amd64|arm64);;*)fail 'unsupported architecture';;esac
 for dependency in openssl sha256sum awk mktemp dpkg-deb;do command -v "$dependency" >/dev/null||fail "install prerequisite: $dependency";done
+phase=verify
 stage=$(mktemp -d /tmp/hlcp-install.XXXXXXXX)
 chmod 700 "$stage"
 # Deliberately retain this bounded staging/recovery evidence; no recursive delete.
 echo "Private download staging: $stage"
-success=no
 cleanup(){
  if [ "$success" = yes ];then
   case "$stage" in /tmp/hlcp-install.*)
@@ -52,7 +80,6 @@ cleanup(){
   esac
  else echo "Inspection files retained privately: $stage" >&2;fi
 }
-trap cleanup EXIT
 cat >"$stage/release.pub" <<'HLCP_RELEASE_TRUST'
 -----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAOw51flSK7qPQF9bSBlzqYTGqpwAl+ydiSJQ7fUD0PUw=
@@ -100,13 +127,16 @@ if [ -n "$installed" ];then
  [ "$update" = yes ]||fail 'package already exists; use explicit --update'
 fi
 echo "Verified hlcp-$role: ${installed:-not installed} -> $target_version ($arch, scope=$scope, protocol=1, managed=1, journal=3, ledger=1)."
+record release_verified
 if [ "$apply" = no ];then echo 'Read-only verification complete. No package, service or configuration changed.';success=yes;exit 0;fi
+phase=service_preflight
 root(){ if [ "$(id -u)" -eq 0 ];then "$@";else sudo -- "$@";fi; }
 systemctl_scope(){ if [ "$scope" = user ];then [ "$(id -u)" -ne 0 ]||fail 'run user-scope installation as the real resource owner, not root';systemctl --user --no-ask-password "$@";else root systemctl --system --no-ask-password "$@";fi; }
 if [ "$update" = yes ]&&[ -n "$installed" ];then
  if [ "$offline" = yes ];then active=inactive;else active=$(systemctl_scope show "$unit" --property=ActiveState --value)||fail 'cannot inspect service';fi
- case "$active" in active) [ "$restart" = yes ]||fail 'stop service first or explicitly request --restart';systemctl_scope stop "$unit"||fail 'service stop uncertain';;inactive);;*)fail 'service must be active or inactive; inspect failed/transitioning unit';;esac
+ case "$active" in active) [ "$restart" = yes ]||fail 'stop service first or explicitly request --restart';phase=stop_service;uncertain=true;systemctl_scope stop "$unit"||fail 'service stop uncertain';changed=true;uncertain=false;record service_stopped;;inactive);;*)fail 'service must be active or inactive; inspect failed/transitioning unit';;esac
  [ "$offline" = yes ]||[ "$(systemctl_scope show "$unit" --property=ActiveState --value)" = inactive ]||fail 'service did not stop'
+ phase=backup;uncertain=true
  stamp=$(date -u +%Y%m%dT%H%M%SZ)
  if [ "$scope" = user ];then
   account_home=$(getent passwd "$(id -u)"|cut -d: -f6)
@@ -117,16 +147,24 @@ if [ "$update" = yes ]&&[ -n "$installed" ];then
   backup="/var/backups/hlcp/$role-$stamp-$$.json"
   root "$stage/hlcp-linux-$arch" package-backup --role "$role" --scope system --output "$backup" --stopped-confirmed||fail 'state backup failed; no package installed'
  fi
+ changed=true;uncertain=false;record backup_saved
 fi
+phase=package_install;uncertain=true
 root apt-get install -y -o Dpkg::Options::=--force-confold "$stage/$package"||fail 'package install failed; inspect state and backup before retry'
+changed=true;uncertain=false;record package_installed
 if [ "$restart" = yes ];then
+ phase=activation;uncertain=true
  systemctl_scope daemon-reload||fail 'service manager reload failed; inspect the selected user/system manager'
  systemctl_scope start "$unit"||fail 'start failed; new package/state retained for inspection'
  [ "$(systemctl_scope show "$unit" --property=ActiveState --value)" = active ]||fail 'service not active'
+ uncertain=false;record service_started
  echo 'Service started. Verify controller registration/inventory before issuing actions.'
 fi
 if [ "$configure" = yes ];then
+ phase=configure;uncertain=true
  if [ "$role" = controller ];then root /usr/bin/hlcp-controller setup;elif [ "$scope" = user ];then /usr/bin/hlcp-agent join;else root /usr/bin/hlcp-agent join;fi
+ uncertain=false;record configuration_command_completed
 fi
 echo 'Verified installation complete. No journal/ledger rollback or implicit resource privileges.'
 success=yes
+phase=complete

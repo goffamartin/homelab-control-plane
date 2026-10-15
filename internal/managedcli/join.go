@@ -86,24 +86,35 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 	jsonOut := f.Bool("json", false, "redacted JSON")
 	if err := f.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
+			if has(args, "--json") {
+				return emitResult(out, true, Result{Operation: "agent.join", Status: "ok", Code: "HELP", Phase: "options", Message: "Use --pairing-stdin|--pairing-file|--resume, --scope user|system, --start, --enable, --apply --yes. JSON never opens the interactive wizard."})
+			}
 			fmt.Fprintln(out, "Profiles: --unit hlcp-agent.service (default) or user --unit hlcp-agent-podman.service. Non-booted stopped images alone can use --offline-stopped; never live activation.")
 			fmt.Fprintln(out, "Usage: hlcp-agent join [--scope user|system] [--pairing-stdin|--pairing-file /private/code|--resume] [--re-pair] [--start [--enable]] [--json] [--apply --yes]\nNo arguments opens an interactive wizard. Noninteractive defaults to read-only preview. Pairing codes are never accepted in argv. Re-pair preserves resources and journal; stop the old service first.")
 			return 0
 		}
-		return 2
+		return resultError(out, has(args, "--json"), "agent.join", "options", "INVALID_OPTIONS", "Invalid join options. Nothing changed.", "Use join --help.")
 	}
 	ui := newTerminal(input, out)
 	interactive := len(args) == 0
+	progress := Result{Operation: "agent.join", Phase: "preflight", Status: "failed", Next: "Inspect state; use --resume for an interrupted join. Do not reset identity, resources or journal."}
 	fail := func(code string) int {
-		if *jsonOut {
-			_ = json.NewEncoder(out).Encode(map[string]any{"status": "failed", "code": code, "retry": "inspect state; use --resume for interrupted join"})
-		} else {
-			fmt.Fprintln(out, "Join refused:", code, "No journal or resource was reset.")
+		progress.Code = code
+		progress.Message = "Join did not complete. No journal or resource reset was requested."
+		if progress.Changed {
+			progress.Status = "partial"
+			progress.Message = "Join stopped after changes. Completed steps were retained; no rollback was performed."
 		}
-		return 1
+		if strings.HasPrefix(code, "CONFIGURED_") {
+			progress.Message = "Agent pairing and YAML configuration are complete; service activation did not complete."
+		}
+		if progress.Uncertain {
+			progress.Status = "uncertain"
+		}
+		return emitResult(out, *jsonOut, progress)
 	}
 	if f.NArg() != 0 || !validAgentProfile(*scope, *unit) || *apply != *yes || (*enable && !*start) || (*codeFile != "" && *codeStdin) || (*resume && (*codeFile != "" || *codeStdin)) || (*resume && *repair) {
-		return 2
+		return fail("INVALID_OPTIONS")
 	}
 	if runtime.GOOS != "linux" {
 		return fail("LINUX_REQUIRED")
@@ -161,8 +172,7 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 		}
 	}
 	if !*apply {
-		_ = json.NewEncoder(out).Encode(map[string]any{"status": "preview", "read_only": true, "scope": *scope, "node": invitation.NodeID, "controller": invitation.URL, "resume": *resume})
-		return 0
+		return emitResult(out, *jsonOut, Result{Operation: "agent.join", Status: "preview", Phase: "preflight", Code: "JOIN_PREVIEW", Message: "Pairing preview only. No enrollment or configuration changes were made.", Data: map[string]any{"scope": *scope, "node": invitation.NodeID, "controller": invitation.URL, "resume": *resume}})
 	}
 	ctx = phases.operation()
 	// Refuse changing a live service before consuming the one-use invitation.
@@ -188,10 +198,13 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 			}
 		}
 		if *enable && *scope == "user" && checkLinger(ctx) != nil {
-			fmt.Fprintln(out, "Before boot startup run as yourself: sudo hlcp-agent prepare-user --user \"$(id -un)\" --apply --yes")
 			return fail("RUN_PREPARE_USER_FIRST")
 		}
 	}
+	progress.Phase = "prepare_private_state"
+	_, configLockErr := os.Lstat(filepath.Join(p.directory, ".managed.lock"))
+	_, stateLockErr := os.Lstat(filepath.Join(p.state, ".managed.lock"))
+	progress.Uncertain = true // Directory/account/store operations can have effects before returning an error.
 	if *scope == "system" {
 		p.uid, p.gid, err = ensureAccount(ctx, "hlcp")
 		if err != nil {
@@ -211,6 +224,9 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 		return fail("STOP_AGENT_OR_INSPECT_STATE")
 	}
 	defer state.Close()
+	progress.Uncertain = false
+	progress.Changed = os.IsNotExist(configLockErr) || os.IsNotExist(stateLockErr)
+	progress.Completed = append(progress.Completed, "private_state_opened")
 	var pending joinPending
 	before, pendingErr := state.Read("join-pending.json")
 	if pendingErr == nil {
@@ -219,8 +235,7 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 		}
 		if *resume {
 			if pending.Completed {
-				fmt.Fprintln(out, "Join already completed; use hlcp-agent activate to start the service.")
-				return 0
+				return emitResult(out, *jsonOut, Result{Operation: "agent.join", Status: "ok", Code: "JOIN_ALREADY_COMPLETED", Phase: "inspect", Changed: progress.Changed, Message: "Pairing was already completed. No new pairing was performed.", Next: "Use hlcp-agent activate to inspect/start the selected service."})
 			}
 			invitation, err = managed.ParseInvitation(pending.Invitation)
 			if err != nil {
@@ -248,6 +263,8 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 		return fail("EXISTING_CONFIG_UNREADABLE")
 	}
 	if !*resume {
+		progress.Phase = "persist_pending_request"
+		progress.Uncertain = true
 		if pendingErr == nil {
 			if state.Update(ctx, "join-before-repair.json", func([]byte) ([]byte, error) { return before, nil }) != nil {
 				return fail("BACKUP_FAILED")
@@ -265,11 +282,16 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 		if savePending(ctx, state, pending) != nil {
 			return fail("PENDING_PERSIST_FAILED")
 		}
+		progress.Uncertain = false
+		progress.Changed = true
+		progress.Completed = append(progress.Completed, "pending_request_saved")
 	}
 	if pending.Node != invitation.NodeID || len(pending.Key) == 0 || len(pending.CSR) == 0 {
 		return fail("PENDING_STATE_INVALID")
 	}
 	if pending.Result == nil {
+		progress.Phase = "enrollment"
+		progress.Uncertain = true // Controller admission may succeed even if its response is lost.
 		result, e := managed.EnrollAgent(ctx, invitation, pending.RequestID, pending.Key, pending.CSR)
 		if e != nil {
 			return fail("ENROLLMENT_FAILED_RESUME_SUPPORTED")
@@ -278,6 +300,9 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 		if savePending(ctx, state, pending) != nil {
 			return fail("ENROLLMENT_RESPONSE_PERSIST_FAILED")
 		}
+		progress.Uncertain = false
+		progress.Changed = true
+		progress.Completed = append(progress.Completed, "enrollment_response_saved")
 	}
 	result := *pending.Result
 	if managed.VerifyAgentMaterial(pending.Node, result.Certificate, pending.Key, result.CA, time.Now()) != nil {
@@ -309,10 +334,17 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 	}
 	files := map[string][]byte{"agent.yaml": data, "agent.crt": result.Certificate, "agent.key": pending.Key, "ca.crt": result.CA, "issuer-ca.crt": result.CA}
 	if oldErr == nil && (*repair || *resume) {
+		progress.Phase = "backup_existing_config"
+		progress.Uncertain = true
 		if e = backupJoin(ctx, configStore, pending.RequestID, files); e != nil {
 			return fail("CONFIG_BACKUP_FAILED")
 		}
+		progress.Uncertain = false
+		progress.Changed = true
+		progress.Completed = append(progress.Completed, "previous_config_backup_saved")
 	}
+	progress.Phase = "persist_identity_and_config"
+	progress.Uncertain = true
 	if e = managed.ProvisionAgentIdentity(ctx, state, pending.Node, invitation.URL, pending.Key, pending.CSR, result, *repair || *resume); e != nil {
 		return fail("IDENTITY_PERSIST_FAILED")
 	}
@@ -341,17 +373,44 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 	}
 	_ = state.Close()
 	_ = configStore.Close()
+	progress.Uncertain = false
+	progress.Changed = true
+	progress.Completed = append(progress.Completed, "paired", "yaml_saved")
+	progress.Next = "Pairing and configuration are saved. Inspect activation, then start the selected service; do not create another pairing code."
 	if *start {
-		activate := []string{"--scope", *scope, "--unit", *unit, "--apply", "--yes"}
+		progress.Phase = "activation"
+		if reloadManager(ctx, *scope) != nil {
+			return fail("CONFIGURED_SERVICE_MANAGER_RELOAD_FAILED")
+		}
+		activate := []string{"--scope", *scope, "--unit", *unit, "--apply", "--yes", "--json"}
 		if *enable {
 			activate = append(activate, "--enable")
 		}
-		if onboarding.AgentActivationCLI(activate, io.Discard) != 0 {
+		var activation bytes.Buffer
+		if onboarding.AgentActivationCLI(activate, &activation) != 0 {
+			var details map[string]any
+			if json.Unmarshal(activation.Bytes(), &details) == nil {
+				progress.Data = map[string]any{"activation": details}
+				if check, ok := details["check"].(string); ok {
+					progress.Next += " Activation check: " + check + "."
+				}
+				if r, ok := details["result"].(map[string]any); ok {
+					progress.Uncertain, _ = r["uncertain"].(bool)
+				}
+			}
 			return fail("CONFIGURED_ACTIVATION_INCOMPLETE")
 		}
+		progress.Completed = append(progress.Completed, "service_started")
 	}
-	_ = json.NewEncoder(out).Encode(map[string]any{"status": "configured", "node": pending.Node, "scope": *scope, "managed": true, "started": *start, "enabled": *enable, "resources_preserved": oldErr == nil, "journal_preserved": true})
-	return 0
+	progress.Status = "ok"
+	progress.Code = "JOIN_CONFIGURED"
+	progress.Message = "Agent paired and YAML saved."
+	progress.Next = ""
+	if *start {
+		progress.Message = "Agent paired, YAML saved and service activation completed. Verify online registration on the controller."
+	}
+	progress.Data = map[string]any{"node": pending.Node, "scope": *scope, "started": *start, "enabled": *enable, "resources_preserved": oldErr == nil, "journal_preserved": true}
+	return emitResult(out, *jsonOut, progress)
 }
 func savePending(ctx context.Context, s *managed.Store, p joinPending) error {
 	data, e := json.Marshal(p)

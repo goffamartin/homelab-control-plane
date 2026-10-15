@@ -106,19 +106,22 @@ func PackageBackup(args []string, out io.Writer) int {
 	scope := f.String("scope", "system", "system or user")
 	output := f.String("output", "", "new private backup path")
 	stopped := f.Bool("stopped-confirmed", false, "explicitly confirm services stopped")
+	jsonOut := f.Bool("json", has(args, "--json"), "versioned JSON")
 	if err := f.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
+			if *jsonOut {
+				return emitResult(out, true, Result{Operation: "package.backup", Status: "ok", Code: "HELP", Phase: "options", Message: "Usage: hlcp package-backup --role controller|agent --scope system|user --output /private/new-backup.json --stopped-confirmed [--json]. No automatic restore or journal rollback."})
+			}
 			fmt.Fprintln(out, "Usage: hlcp package-backup --role controller|agent --scope system|user --output /private/new-backup.json --stopped-confirmed\nBounded no-follow private snapshot. Stop the affected service first. No automatic restore or journal rollback.")
 			return 0
 		}
-		return 2
+		return resultError(out, *jsonOut, "package.backup", "options", "INVALID_OPTIONS", "Invalid backup options. Nothing changed.", "Use package-backup --help.")
 	}
 	if f.NArg() != 0 || !*stopped || *output == "" {
-		return 2
+		return resultError(out, *jsonOut, "package.backup", "options", "INVALID_OPTIONS", "Invalid backup options. Nothing changed.", "Use package-backup --help.")
 	}
 	fail := func() int {
-		fmt.Fprintln(out, "Backup refused: service/state lock, ownership, private paths or size invalid. No installation should proceed.")
-		return 1
+		return resultError(out, *jsonOut, "package.backup", "inspect", "BACKUP_PREFLIGHT_FAILED", "Backup did not complete: inspect service/state lock, ownership, private paths and size. No installation should proceed.", "Inspect retained private directories; source state was not restored or reset.")
 	}
 	ctx, cancel := boundedContext()
 	defer cancel()
@@ -154,7 +157,7 @@ func PackageBackup(args []string, out io.Writer) int {
 		state = p.state
 		runtimeUID, runtimeGID = uid, gid
 	} else {
-		return 2
+		return resultError(out, *jsonOut, "package.backup", "options", "INVALID_ROLE_OR_SCOPE", "Invalid backup role or scope. Nothing changed.", "Use package-backup --help.")
 	}
 	if _, err := os.Lstat(state); err == nil {
 		s, e := managed.OpenStoreAsOwner(state, runtimeUID, runtimeGID)
@@ -185,11 +188,13 @@ func PackageBackup(args []string, out io.Writer) int {
 		return fail()
 	}
 	data, err := json.Marshal(archive)
-	if err != nil || writeNewArchive(*output, data) != nil {
+	if err != nil {
 		return fail()
 	}
-	fmt.Fprintln(out, "Private recovery snapshot saved:", *output, "Do not restore an older command journal automatically.")
-	return 0
+	if writeNewArchive(*output, data) != nil {
+		return emitResult(out, *jsonOut, Result{Operation: "package.backup", Status: "uncertain", Code: "BACKUP_WRITE_UNVERIFIED", Phase: "write_archive", Uncertain: true, Message: "Recovery archive write did not complete cleanly. A partial or fully written private archive may remain. No installation should proceed.", Next: "Inspect the destination before retrying; never restore an older journal automatically."})
+	}
+	return emitResult(out, *jsonOut, Result{Operation: "package.backup", Status: "ok", Code: "BACKUP_SAVED", Phase: "write_archive", Changed: true, Completed: []string{"private_archive_saved"}, Message: "Private recovery snapshot saved. Never restore an older journal automatically.", Data: map[string]any{"path": *output}})
 }
 func writeNewArchive(path string, data []byte) error {
 	if !filepath.IsAbs(path) || filepath.Clean(path) != path || len(data) > 96<<20 {

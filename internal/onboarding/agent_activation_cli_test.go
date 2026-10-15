@@ -2,10 +2,32 @@ package onboarding
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
 )
+
+type diagnosticAgentHost struct {
+	*agentActivationFake
+	check string
+}
+
+func (h diagnosticAgentHost) InspectAgent(context.Context, AgentServiceProfile) (AgentActivationSnapshot, error) {
+	return AgentActivationSnapshot{}, &agentActivationCheckError{check: h.check}
+}
+
+func TestAgentActivationRetainsSafeDiagnosticThroughAdapter(t *testing.T) {
+	for _, check := range []string{"private_file_agent_yaml", "private_journal_path_and_permissions", "service_manager_reload_required"} {
+		host := diagnosticAgentHost{newAgentActivationFake(), check}
+		var out bytes.Buffer
+		code := runAgentActivationCLI([]string{"--json"}, &out, host)
+		var report agentActivationReport
+		if code != 1 || json.Unmarshal(out.Bytes(), &report) != nil || report.Check != check || report.SchemaVersion != 1 || !report.ReadOnly || len(host.actions) != 0 || report.Next == "" {
+			t.Fatal(code, out.String())
+		}
+	}
+}
 
 func TestAgentActivationCLIHelpOptionsAndPreview(t *testing.T) {
 	for _, args := range [][]string{{"--help"}, {"--apply"}, {"--yes"}, {"--scope", "remote"}, {"--scope", "system", "--unit", "hlcp-agent-podman.service"}, {"--unknown"}} {

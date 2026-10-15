@@ -84,6 +84,10 @@ func (a agentActivationAdapter) Inspect(ctx context.Context) (ControllerActivati
 		return ControllerActivationSnapshot{}, ErrAgentActivationProfile
 	}
 	snapshot, err := a.host.InspectAgent(ctx, a.profile)
+	var checkError *agentActivationCheckError
+	if errors.As(err, &checkError) {
+		return ControllerActivationSnapshot{}, checkError
+	}
 	if errors.Is(err, ErrAgentActivationResources) {
 		return ControllerActivationSnapshot{}, err
 	}
