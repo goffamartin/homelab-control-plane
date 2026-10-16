@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"fmt"
+	"hlcp/deploy/completion"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +28,7 @@ func packageAgentDeb(out, version, revision, arch string) (artifact, error) {
 		return artifact{}, err
 	}
 	data = append(data, debEntry{"usr/bin/hlcp-agent", 0755, binary})
+	data = append(data, debEntry{"usr/share/bash-completion/", 0755, nil}, debEntry{"usr/share/bash-completion/completions/", 0755, nil}, debEntry{"usr/share/bash-completion/completions/hlcp-agent", 0644, []byte(completion.Bash("hlcp-agent"))})
 	for _, profile := range []struct{ source, target string }{
 		{"deploy/systemd/user/hlcp-agent.service", "usr/lib/systemd/user/hlcp-agent.service"},
 		{"deploy/systemd/user/hlcp-agent-podman.service", "usr/lib/systemd/user/hlcp-agent-podman.service"},
@@ -64,6 +66,7 @@ func packageAgentDeb(out, version, revision, arch string) (artifact, error) {
 		installedSize += (len(entry.data) + 1023) / 1024
 	}
 	controlText := fmt.Sprintf("Package: hlcp-agent\nVersion: %s\nArchitecture: %s\nMaintainer: Martin Goffa <goffamartin@gmail.com>\nSection: admin\nPriority: optional\nInstalled-Size: %d\nDepends: adduser, systemd (>= 252)\nSuggests: dbus-user-session\nHomepage: https://github.com/goffamartin/homelab-control-plane\nDescription: HomeLab runtime-independent agent\n Native mTLS agent with opt-in system and user units; no automatic startup.\n", packageVersion, arch, installedSize)
+	controlText = strings.Replace(controlText, "Homepage:", "Recommends: bash-completion\nHomepage:", 1)
 	filename := "hlcp-agent_" + strings.ReplaceAll(packageVersion, "~", "-") + "_" + arch + ".deb"
 	preinst, err := debSource("deploy/debian/agent/preinst", true)
 	if err != nil {

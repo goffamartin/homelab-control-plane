@@ -32,8 +32,10 @@ func (h *agentActivationFake) ChangeAgent(_ context.Context, profile AgentServic
 	h.actions = append(h.actions, action)
 	if action == ControllerEnable {
 		h.snapshot.Service.Enabled = true
-	} else if action == ControllerStart {
+	} else if action == ControllerStart || action == AgentRestart {
 		h.snapshot.Service.Active = "active"
+	} else if action == AgentStop {
+		h.snapshot.Service.Active = "inactive"
 	} else {
 		panic("unexpected service mutation")
 	}

@@ -2,7 +2,7 @@
 
 Stav původního P05m: implementovaný a testovaný interní core bez native hostu.
 Navazující [P05n](36-native-resource-readiness.md) již přidává Linux host a user-scope
-napojení do `hlcp-agent activate`. Tento dokument popisuje samostatný core;
+napojení do `hlcp-agent start`. Tento dokument popisuje samostatný core;
 preview.4 se nemění. System-scope resources mají nadále samostatnou otevřenou bránu.
 
 ## Co tento blok připravuje

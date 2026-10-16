@@ -216,6 +216,9 @@ Custom commands require the `script` capability in addition to the adapter's
 capability. They run only when explicitly requested, never as automatic hooks.
 Empty `commands: {}` from older generated YAML remains valid.
 See [administrative output contract](55-administrative-output.md) for `--json`.
+After YAML edits, `hlcp-agent restart` validates first and then restarts the
+selected service; `restart --dry-run` previews. `start`, `stop`, `status` and
+Bash Tab completion are described in [service commands](57-agent-service-and-bash-completion.md).
 
 On the controller:
 

@@ -51,8 +51,14 @@ func TestAgentPackageContentsAndReproducibility(t *testing.T) {
 		members := readDebMembers(t, data)
 		control := readDebTar(t, members["control.tar.gz"])
 		payload := readDebTar(t, members["data.tar.gz"])
-		if len(control) != 2 || len(payload) != 25 {
+		if len(control) != 2 || len(payload) != 28 {
 			t.Fatal("unexpected package files / maintainer scripts")
+		}
+		if c := payload["usr/share/bash-completion/completions/hlcp-agent"]; c.mode != 0644 || !bytes.Contains(c.data, []byte("__complete")) || !bytes.Contains(c.data, []byte("complete -F _hlcp_complete hlcp-agent")) {
+			t.Fatal("missing/invalid agent Bash completion")
+		}
+		if !strings.Contains(string(control["control"].data), "Recommends: bash-completion\n") {
+			t.Fatal("completion runtime recommendation missing")
 		}
 		if !strings.Contains(string(control["control"].data), "Depends: adduser, systemd (>= 252)\n") {
 			t.Fatal("core package must provide its native service/account prerequisites")

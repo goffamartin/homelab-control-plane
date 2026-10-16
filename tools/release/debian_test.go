@@ -178,8 +178,13 @@ func TestControllerPackageContents(t *testing.T) {
 			t.Fatal("script permissions/LF")
 		}
 	}
-	if len(payload) != 30 {
-		t.Fatalf("unexpected files: %v", payload)
+	if len(payload) != 34 {
+		t.Fatalf("unexpected file count: %d", len(payload))
+	}
+	for _, name := range []string{"hlcp", "hlcp-controller"} {
+		if c := payload["usr/share/bash-completion/completions/"+name]; c.mode != 0644 || !bytes.Contains(c.data, []byte("complete -F _hlcp_complete "+name+"\n")) {
+			t.Fatal("missing controller completion", name)
+		}
 	}
 	if string(payload["usr/share/hlcp-controller/nodes.json"].data) != "[]\n" {
 		t.Fatal("non-empty default allowlist")

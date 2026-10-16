@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"hlcp/deploy/completion"
 	"hlcp/internal/agent"
 	"hlcp/internal/buildinfo"
 	"hlcp/internal/doctor"
@@ -17,6 +18,9 @@ import (
 )
 
 func main() {
+	if handled, code := completion.Handle("hlcp-agent", os.Args[1:], os.Stdout); handled {
+		os.Exit(code)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "configure" {
 		os.Exit(managedcli.Configure(os.Args[2:], os.Stdin, os.Stdout))
 	}
@@ -38,8 +42,8 @@ func main() {
 	if len(os.Args) > 1 && os.Args[1] == "--internal-sandbox-inspector" {
 		os.Exit(onboarding.SandboxInspectorCLI(os.Args[2:], os.Stdin, os.Stdout))
 	}
-	if len(os.Args) > 1 && os.Args[1] == "activate" {
-		os.Exit(onboarding.AgentActivationCLI(os.Args[2:], os.Stdout))
+	if len(os.Args) > 1 && (os.Args[1] == "start" || os.Args[1] == "restart" || os.Args[1] == "stop" || os.Args[1] == "status") {
+		os.Exit(onboarding.AgentServiceCLI(os.Args[1], os.Args[2:], os.Stdout))
 	}
 	if len(os.Args) > 1 && os.Args[1] == "probe-resources" {
 		os.Exit(onboarding.SandboxProbeCLI(os.Args[2:], os.Stdout))
@@ -54,10 +58,14 @@ func main() {
 	checkConfig := flag.Bool("check-config", false, "validate configuration and exit")
 	version := flag.Bool("version", false, "print build metadata and exit")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: hlcp-agent join|configure|check-config|resources|certificates|prepare-user|setup|activate|probe-resources|doctor [options]\nRuntime options:")
+		fmt.Fprintln(os.Stderr, "Usage: hlcp-agent join|configure|check-config|resources|certificates|prepare-user|setup|start|restart|stop|status|probe-resources|doctor|completion bash [options]\nRuntime options:")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+	if flag.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "Unknown agent command. Use start, restart, stop, status or --help; activate has been removed.")
+		os.Exit(2)
+	}
 	if *version {
 		fmt.Println(buildinfo.String())
 		return

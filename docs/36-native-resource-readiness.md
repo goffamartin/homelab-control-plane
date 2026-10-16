@@ -1,6 +1,6 @@
 # P05n — Native Linux resource metadata preflight
 
-Stav: zdrojová implementace, součást native user-scope `hlcp-agent activate`.
+Stav: zdrojová implementace, součást native user-scope `hlcp-agent start`.
 Není v publikovaném preview.4. P05/checkpoint B ani live package/VM acceptance
 se tímto neuzavírají. Žádné nové konfigurační přepínače ani permission profily.
 

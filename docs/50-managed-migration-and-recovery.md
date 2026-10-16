@@ -75,7 +75,7 @@ separately reviewed maintenance migration, not inferred trust expansion.
    ```sh
    hlcp-agent join --scope user --unit hlcp-agent-podman.service \
      --pairing-stdin --re-pair --apply --yes
-   hlcp-agent activate --scope user --unit hlcp-agent-podman.service --apply --yes
+   hlcp-agent start --scope user --unit hlcp-agent-podman.service --apply --yes
    ```
 
    The new identity trusts the managed root and temporary old server root. Existing

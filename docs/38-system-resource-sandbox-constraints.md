@@ -13,7 +13,7 @@ uvidí či provede. Žádné automatické sudo, grants, drop-ins ani oslabení s
 
 ## Co report nově vysvětluje
 
-`hlcp-agent activate --scope system` po úspěšném config/TLS/profile preflightu
+`hlcp-agent start --scope system` po úspěšném config/TLS/profile preflightu
 nadále vrátí RESOURCE_PREFLIGHT_REQUIRED. U resources navíc vrací pole
 `constraints` v JSON, nebo `Constraint: <code>` v textu:
 

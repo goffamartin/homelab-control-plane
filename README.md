@@ -21,6 +21,7 @@ PKI remains supported via explicit `hlcp-controller setup --imported`.
 
 ## Documentation map
 
+- [Agent service commands and Bash Tab completion](docs/57-agent-service-and-bash-completion.md)
 - [Read-only Docker/Podman log history and live streaming](docs/56-container-logs.md)
 - [Project vision and scope](docs/00-project-vision.md)
 - [HLCP v1 design draft](docs/01-hlcp-v1-design-draft.md)
