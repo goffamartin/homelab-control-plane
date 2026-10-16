@@ -14,6 +14,7 @@ type InboundEvent struct {
 	Result       *protocol.CommandResultPayload
 	CommandState *protocol.CommandStatePayload
 	StateUpdate  *protocol.StateUpdate
+	LogEvent     *protocol.LogEvent
 	ReceivedAt   time.Time
 }
 
@@ -41,6 +42,13 @@ func StartInbound(ctx context.Context, connection net.Conn) *Inbound {
 			}
 			event := InboundEvent{ReceivedAt: time.Now()}
 			switch frame.Header.Type {
+			case protocol.MessageLogEvent:
+				value := new(protocol.LogEvent)
+				err = protocol.DecodePayload(frame.Payload, value)
+				if err == nil {
+					err = value.Validate()
+				}
+				event.LogEvent = value
 			case protocol.MessageHeartbeat:
 				value := new(protocol.HeartbeatPayload)
 				err = protocol.DecodePayload(frame.Payload, value)

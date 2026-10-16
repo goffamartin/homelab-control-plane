@@ -74,7 +74,7 @@ func (resource ResourceConfig) validateCommands() error {
 		if !contains(resource.Actions, action) {
 			return fmt.Errorf("resource %q: command %q is not enabled in actions", resource.ID, action)
 		}
-		if resource.Adapter != "script" && nativeAction(action) {
+		if resource.Adapter != "script" && (nativeAction(action) || (action == "logs" && (resource.Adapter == "docker" || resource.Adapter == "podman"))) {
 			return fmt.Errorf("resource %q: command %q conflicts with a reserved native action", resource.ID, action)
 		}
 		if err := command.validate(); err != nil {
@@ -82,6 +82,9 @@ func (resource ResourceConfig) validateCommands() error {
 		}
 	}
 	for _, action := range resource.Actions {
+		if action == "logs" && (resource.Adapter == "docker" || resource.Adapter == "podman") {
+			continue
+		}
 		if _, exists := resource.Commands[action]; !exists && (resource.Adapter == "script" || !nativeAction(action)) {
 			return fmt.Errorf("resource %q: action %q has no local command", resource.ID, action)
 		}

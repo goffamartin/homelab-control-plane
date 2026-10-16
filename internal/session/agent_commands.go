@@ -11,18 +11,43 @@ import (
 
 // The reader never waits for execution. Result waiters are bounded by the
 // dispatcher's admitted jobs and are joined when this connection ends.
-func RunAgentCommandLoop(parent context.Context, connection net.Conn, writer *Writer, dispatcher *command.Dispatcher) error {
+func RunAgentCommandLoop(parent context.Context, connection net.Conn, writer *Writer, dispatcher *command.Dispatcher, logHandlers ...LogHandler) error {
 	ctx, cancel := context.WithCancel(parent)
 	stop := context.AfterFunc(ctx, func() { _ = connection.Close() })
 	var waiters sync.WaitGroup
 	var mutex sync.Mutex
 	watching := make(map[*command.Job]bool)
 	watchSlots := make(chan struct{}, command.QueueCapacity)
-	defer func() { cancel(); _ = connection.Close(); waiters.Wait(); stop() }()
+	logs := newAgentLogs(ctx, writer, logHandlers)
+	defer func() { cancel(); _ = connection.Close(); waiters.Wait(); logs.workers.Wait(); stop() }()
 	for {
 		frame, err := protocol.Decode(connection)
 		if err != nil {
 			return err
+		}
+		if frame.Header.Type == protocol.MessageLogRequest {
+			var r protocol.LogRequest
+			if err := protocol.DecodePayload(frame.Payload, &r); err != nil {
+				return err
+			}
+			if err := r.Validate(); err != nil {
+				return err
+			}
+			if err := logs.request(r); err != nil {
+				return err
+			}
+			continue
+		}
+		if frame.Header.Type == protocol.MessageLogCancel {
+			var r protocol.LogCancel
+			if err := protocol.DecodePayload(frame.Payload, &r); err != nil {
+				return err
+			}
+			if err := r.Validate(); err != nil {
+				return err
+			}
+			logs.cancel(r.RequestID)
+			continue
 		}
 		if frame.Header.Type != protocol.MessageCommand && frame.Header.Type != protocol.MessageCommandQuery {
 			return fmt.Errorf("unexpected agent message type %d", frame.Header.Type)

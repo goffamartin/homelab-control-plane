@@ -91,6 +91,9 @@ func (server *Server) Resolve(nodeID string, payload protocol.CommandPayload) (R
 		if !hasCapability(resource.Actions, payload.Action) {
 			return Resolution{}, resolveError(http.StatusUnprocessableEntity, "ACTION_NOT_SUPPORTED", "action is not supported by resource")
 		}
+		if resource.Type == "container" && payload.Action == "logs" {
+			return Resolution{}, resolveError(422, "READ_ONLY_LOG_API_REQUIRED", "use the container logs read API, not command execution")
+		}
 		if record.State != liveness.NodeOnline {
 			return Resolution{}, resolveError(http.StatusServiceUnavailable, "NODE_OFFLINE", "node is not online")
 		}

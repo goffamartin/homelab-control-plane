@@ -61,6 +61,11 @@ resources:
 and systemd use the same extension model while retaining their original type
 and target. On native adapters, `status`, `start`, `stop`, and `restart` are
 reserved even if not enabled: commands cannot override them. Every custom name
+except the container-native `logs` action must map to a local command. On Docker
+and Podman, `logs` is also reserved and uses the separate read-only
+[log API](56-container-logs.md), not script execution or the command journal.
+On script and systemd resources, an explicitly configured command named `logs`
+remains an ordinary script action. Every other custom name
 must appear in `actions` and have exactly one command; unused commands fail
 validation rather than being silently enabled. Script-only resources retain
 their existing behavior, including a potentially mutating script named `status`.

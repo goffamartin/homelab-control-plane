@@ -1,5 +1,13 @@
 package cli
 
+import "hlcp/internal/protocol"
+
+type LogOptions struct {
+	Query  protocol.LogQuery
+	Cursor string
+	Limit  int
+}
+
 // Request contains syntax and transport options only. The controller owns
 // resource/action resolution and admission policy.
 type Request struct {
@@ -18,4 +26,5 @@ type Request struct {
 	CommandID         string
 	Lookup            bool
 	ConfigFile        string
+	Logs              *LogOptions
 }

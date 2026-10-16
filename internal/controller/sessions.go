@@ -25,10 +25,11 @@ type ActiveSessions struct {
 	active   map[string]activeSession
 	tracker  *CommandTracker
 	policy   RetryPolicy
+	logs     *containerLogBroker
 }
 
 func NewActiveSessions(tracker *CommandTracker) *ActiveSessions {
-	return &ActiveSessions{registry: NewRegistry(), active: make(map[string]activeSession), tracker: tracker, policy: DefaultRetryPolicy()}
+	return &ActiveSessions{registry: NewRegistry(), active: make(map[string]activeSession), tracker: tracker, policy: DefaultRetryPolicy(), logs: newContainerLogBroker()}
 }
 
 func (sessions *ActiveSessions) Publish(registration session.Registration, synchronization session.Synchronization, at time.Time, writer *session.Writer, cancel context.CancelFunc) {
@@ -45,6 +46,7 @@ func (sessions *ActiveSessions) PublishGuarded(registration session.Registration
 	sessions.tracker.telemetry.SetGauge(telemetry.Sessions, len(sessions.active))
 	sessions.registry.mutex.Unlock()
 	if exists {
+		sessions.logs.failWriter(previous.writer)
 		sessions.tracker.telemetry.Record(telemetry.Event{Kind: telemetry.SessionReplaced, NodeID: registration.NodeID, SessionID: registration.SessionID})
 		previous.cancel()
 		_ = previous.writer.Close()
@@ -55,6 +57,7 @@ func (sessions *ActiveSessions) Remove(nodeID string, writer *session.Writer) {
 	sessions.registry.mutex.Lock()
 	defer sessions.registry.mutex.Unlock()
 	if current := sessions.active[nodeID]; current.writer == writer {
+		sessions.logs.failWriter(writer)
 		delete(sessions.active, nodeID)
 		record := sessions.registry.nodes[nodeID]
 		record.State = "offline"

@@ -17,6 +17,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"slices"
 	"strings"
 	"time"
 )
@@ -49,6 +50,10 @@ func main() {
 	}
 	request, err := cli.Parse(os.Args[1:])
 	if err != nil {
+		if slices.Contains(os.Args[1:], "--json") {
+			_ = json.NewEncoder(os.Stdout).Encode(map[string]any{"schema_version": 1, "kind": "error", "code": "INVALID_OPTIONS", "message": "Invalid CLI options. No request was made. Use --help for usage."})
+			os.Exit(2)
+		}
 		fmt.Fprintln(os.Stderr, err)
 		fmt.Fprintln(os.Stderr, "Use --help for usage.")
 		os.Exit(2)
@@ -107,6 +112,11 @@ func main() {
 	case "resource":
 		get(api + "/v1/nodes/" + url.PathEscape(request.Node) + "/resources/" + url.PathEscape(request.Resource))
 	case "command":
+		if request.Action == "logs" {
+			if handled, code := containerLogsCLI(request, api, os.Stdout, os.Stderr); handled {
+				os.Exit(code)
+			}
+		}
 		id := request.CommandID
 		if id == "" {
 			id = randomID()
@@ -268,6 +278,15 @@ Options:
   --api <url>         controller loopback API (default: ` + defaultAPI + `)
   --api-token-file    private bearer token file (default: /etc/hlcp/api.token)
   --config <file>     explicit client JSON configuration (otherwise user hlcp/cli.json)
+
+Container logs (explicitly enable logs in the resource's agent YAML actions):
+  hlcp -n NODE -r CONTAINER -a logs [--tail 100] [--limit 100] [--json]
+  hlcp -n NODE -r CONTAINER -a logs --since RFC3339 --until RFC3339
+  hlcp -n NODE -r CONTAINER -a logs --contains TEXT --stream stdout|stderr|both
+  hlcp -n NODE -r CONTAINER -a logs --cursor CURSOR [--limit 100]
+  hlcp -n NODE -r CONTAINER -a logs --follow [--tail 0] [--json]
+Logs are read-only, not command results. No shell, stdin, attach or exec.
+JSON follow is NDJSON. Stream labels describe runtime pipes; TTY may merge output.
 
 First-time client setup (run as the actual CLI user, not sudo):
 	Managed PKI: hlcp pairing create|list|revoke --help; hlcp certificates

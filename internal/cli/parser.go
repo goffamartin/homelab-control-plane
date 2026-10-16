@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"hlcp/internal/protocol"
+	"strconv"
 )
 
 // Parse accepts selectors with optional values: -n lists nodes, -n ID selects one.
@@ -66,6 +67,43 @@ func Parse(args []string) (Request, error) {
 			request.Output = "json"
 		case "--dry-run":
 			request.DryRun = true
+		case "--follow", "--tail", "--since", "--until", "--contains", "--stream", "--cursor", "--limit":
+			if request.Logs == nil {
+				request.Logs = &LogOptions{Query: protocol.DefaultLogQuery(), Limit: 100}
+			}
+			if argument == "--follow" {
+				request.Logs.Query.Follow = true
+				break
+			}
+			if index+1 >= len(args) {
+				return Request{}, fmt.Errorf("log option requires a value")
+			}
+			index++
+			value := args[index]
+			switch argument {
+			case "--tail":
+				n, err := strconv.Atoi(value)
+				if err != nil {
+					return Request{}, fmt.Errorf("invalid log tail")
+				}
+				request.Logs.Query.Tail = n
+			case "--limit":
+				n, err := strconv.Atoi(value)
+				if err != nil {
+					return Request{}, fmt.Errorf("invalid log page limit")
+				}
+				request.Logs.Limit = n
+			case "--since":
+				request.Logs.Query.Since = value
+			case "--until":
+				request.Logs.Query.Until = value
+			case "--contains":
+				request.Logs.Query.Contains = value
+			case "--stream":
+				request.Logs.Query.Stream = value
+			case "--cursor":
+				request.Logs.Cursor = value
+			}
 		case "--api":
 			target = &request.API
 		case "--api-token-file":
@@ -89,6 +127,18 @@ func Parse(args []string) (Request, error) {
 	}
 	if request.Help || request.Version {
 		return request, nil
+	}
+	if request.Logs != nil {
+		l := request.Logs
+		if request.Node == "" || request.Resource == "" || request.Action != "logs" || request.Lookup || request.CommandID != "" || l.Query.Validate() != nil || l.Limit < 1 || l.Limit > 200 || len(l.Cursor) > 160 {
+			return Request{}, fmt.Errorf("invalid log options; select a container and action logs")
+		}
+		if l.Query.Follow && (l.Cursor != "" || seen["--limit"]) {
+			return Request{}, fmt.Errorf("streaming does not accept a cursor or page limit")
+		}
+		if l.Cursor != "" && (seen["--tail"] || seen["--since"] || seen["--until"] || seen["--contains"] || seen["--stream"]) {
+			return Request{}, fmt.Errorf("cursor pages reuse the original filters")
+		}
 	}
 	if (request.ResourceSpecified || request.ActionSpecified || request.Lookup) && request.Node == "" {
 		return Request{}, fmt.Errorf("resource, action and result selectors require a selected node")

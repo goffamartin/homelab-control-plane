@@ -294,6 +294,18 @@ func Allowed(ctx context.Context, node, resource string, execute bool) bool {
 	return ok && auth.principal.allows(node, resource, execute)
 }
 
+// Rechecked at every streamed page/chunk, not only when a long-lived request
+// was authenticated. Any policy replacement revokes the old request snapshot.
+func CurrentRead(ctx context.Context, node, resource string) bool {
+	auth, ok := ctx.Value(authKey{}).(*authentication)
+	if !ok {
+		return false
+	}
+	auth.owner.mutex.RLock()
+	defer auth.owner.mutex.RUnlock()
+	return auth.owner.policy == auth.policy && auth.principal.allows(node, resource, false)
+}
+
 func GlobalRead(ctx context.Context) bool {
 	auth, ok := ctx.Value(authKey{}).(*authentication)
 	return ok && auth.principal.scope.AllNodes

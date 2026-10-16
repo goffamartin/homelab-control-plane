@@ -9,6 +9,7 @@ import (
 
 // InboundHandlers handles optional command queries and live resource updates.
 type InboundHandlers struct {
+	LogEvent     func(protocol.LogEvent) bool
 	CommandState func(protocol.CommandStatePayload) bool
 	StateUpdate  func(protocol.StateUpdate) bool
 }
@@ -41,6 +42,9 @@ func RunInboundLoop(ctx context.Context, inbound *Inbound, tracker *liveness.Tra
 				return <-inbound.Errors
 			}
 			valid := event.Heartbeat != nil
+			if event.LogEvent != nil && len(handlers) > 0 && handlers[0].LogEvent != nil {
+				valid = handlers[0].LogEvent(*event.LogEvent)
+			}
 			if event.Ack != nil && onAck != nil {
 				valid = onAck(*event.Ack)
 			}
