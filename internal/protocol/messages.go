@@ -25,11 +25,14 @@ const (
 	MessageMetric
 	MessageCommandQuery
 	MessageCommandState
+	MessageLogRequest
+	MessageLogCancel
+	MessageLogEvent
 )
 
 // IsKnown reports whether messageType belongs to the HLCP v1 message set.
 func (messageType MessageType) IsKnown() bool {
-	return messageType >= MessageHello && messageType <= MessageCommandState
+	return messageType >= MessageHello && messageType <= MessageLogEvent
 }
 
 // Flags are per-message transport hints. Their detailed semantics are added

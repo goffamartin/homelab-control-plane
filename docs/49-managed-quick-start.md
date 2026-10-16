@@ -230,6 +230,16 @@ Check online registration and expected inventory before any mutating action.
 Retain a command ID for result lookup after a timeout; never issue a new ID just
 because a prior result was lost.
 
+## Optional container logs
+
+On a Docker/Podman resource, explicitly add `logs` to its YAML `actions`, then
+validate and apply/restart the agent using the normal configuration workflow.
+No script command or extra `script` capability is required for native logs.
+On the controller, read history with `hlcp -n debian-01 -r app -a logs`, or follow
+with `hlcp -n debian-01 -r app -a logs --follow`. Add `--json` for a versioned
+page or NDJSON stream. This is read-only log transport, not an interactive shell.
+See [filters, permissions and bounded-stream behavior](56-container-logs.md).
+
 ## Certificates and updates
 
 Managed leaves last up to 90 days and renew after about 30 days while the valid

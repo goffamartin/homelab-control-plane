@@ -31,6 +31,7 @@ func (server *Server) HTTPHandlerWithAuthorizer(authorizer *localapi.Authorizer)
 		})
 	}
 	server.registerDiagnostics(handle)
+	server.registerContainerLogs(handle)
 	handle("POST /v1/nodes/{node}/resolve", func(writer http.ResponseWriter, request *http.Request) {
 		payload, ok := decodeCommand(writer, request)
 		if !ok {

@@ -52,6 +52,18 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 	}
 	dispatcher := command.NewObservedDispatcher(journal, config.Telemetry, config.NodeID)
 	for _, resource := range config.Resources {
+		commandActions := append([]string(nil), resource.Actions...)
+		if resource.Adapter == "docker" || resource.Adapter == "podman" {
+			commandActions = nil
+			for _, action := range resource.Actions {
+				if action != "logs" {
+					commandActions = append(commandActions, action)
+				}
+			}
+			if len(commandActions) == 0 {
+				continue
+			}
+		}
 		commands := make(map[string]adapter.ScriptCommand, len(resource.Commands))
 		for action, spec := range resource.Commands {
 			environment := make(map[string]string, len(spec.Environment))
@@ -66,6 +78,9 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 			defer config.requestRefresh()
 			if !contains(resource.Actions, action) {
 				return protocol.CommandResultPayload{Code: "ACTION_NOT_SUPPORTED", Message: "action is not enabled"}
+			}
+			if action == "logs" && (resource.Adapter == "docker" || resource.Adapter == "podman") {
+				return protocol.CommandResultPayload{Code: "READ_ONLY_LOG_API_REQUIRED", Message: "Use the container log read API; logs are never stored as command results."}
 			}
 			if _, custom := scripts.Commands[action]; custom {
 				return scripts.Execute(executionContext, action)
@@ -82,9 +97,9 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 		// Only native status is read-only. Script-only resources may call a
 		// mutating command "status"; mixed resources reserve all native names.
 		if resource.Adapter == "script" {
-			dispatcher.RegisterMutating(resource.ID, execute, resource.Actions...)
+			dispatcher.RegisterMutating(resource.ID, execute, commandActions...)
 		} else {
-			dispatcher.Register(resource.ID, execute, resource.Actions...)
+			dispatcher.Register(resource.ID, execute, commandActions...)
 		}
 	}
 	return dispatcher, nil
@@ -114,6 +129,7 @@ type Config struct {
 	ObservationInterval time.Duration        `yaml:"observation_interval"`
 	Telemetry           *telemetry.Collector `yaml:"-"`
 	runner              adapter.CommandRunner
+	logReader           func(context.Context, string, string, protocol.LogQuery, func(protocol.LogRecord) error) string
 	refresh             chan struct{}
 }
 
@@ -149,7 +165,7 @@ func (config Config) Validate() error {
 	if config.ControllerAddress == "" || config.ServerName == "" || config.CertificateFile == "" || config.PrivateKeyFile == "" || config.CAFile == "" || config.JournalFile == "" {
 		return errors.New("agent TLS/controller and command journal configuration is required")
 	}
-	hello := protocol.HelloPayload{ProtocolVersions: []uint8{protocol.ProtocolVersion}, NodeID: config.NodeID, AgentVersion: config.AgentVersion, Capabilities: config.Capabilities}
+	hello := config.hello()
 	if err := hello.Validate(); err != nil {
 		return err
 	}
@@ -201,7 +217,7 @@ func (resource ResourceConfig) validate() error {
 	return resource.validateCommands()
 }
 func (config Config) hello() protocol.HelloPayload {
-	return protocol.HelloPayload{ProtocolVersions: []uint8{protocol.ProtocolVersion}, NodeID: config.NodeID, AgentVersion: config.AgentVersion, Capabilities: config.Capabilities}
+	return protocol.HelloPayload{ProtocolVersions: []uint8{protocol.ProtocolVersion}, NodeID: config.NodeID, AgentVersion: config.AgentVersion, Capabilities: config.logCapabilities()}
 }
 func (config Config) synchronization() (session.Synchronization, error) {
 	inventory := protocol.InventorySnapshot{Revision: 1}
@@ -331,7 +347,7 @@ func runSession(ctx context.Context, config Config, tlsConfig *tls.Config, synch
 	commandDone := make(chan struct{})
 	go func() {
 		defer close(commandDone)
-		commandErrors <- session.RunAgentCommandLoop(ctx, connection, writer, dispatcher)
+		commandErrors <- session.RunAgentCommandLoop(ctx, connection, writer, dispatcher, config.logHandler)
 	}()
 	defer func() { _ = raw.Close(); <-commandDone }()
 	ticker := time.NewTicker(time.Duration(welcome.HeartbeatIntervalMillis) * time.Millisecond)

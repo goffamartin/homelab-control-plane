@@ -47,6 +47,8 @@ type Server struct {
 	ownTelemetry    bool
 	diagnosticsOnce sync.Once
 	diagnostics     *diagnostics
+	logHistoryOnce  sync.Once
+	logHistory      *containerLogHistory
 }
 
 func Listen(address string, config Config) (*Server, error) {
@@ -281,7 +283,9 @@ func (server *Server) handleConnection(parent context.Context, raw net.Conn) {
 		return server.sessions.HandleAck(registration.NodeID, writer, ack)
 	}, func(result protocol.CommandResultPayload) bool {
 		return server.sessions.HandleResult(registration.NodeID, writer, result)
-	}, session.InboundHandlers{CommandState: func(state protocol.CommandStatePayload) bool {
+	}, session.InboundHandlers{LogEvent: func(event protocol.LogEvent) bool {
+		return server.sessions.HandleLogEvent(registration.NodeID, writer, event)
+	}, CommandState: func(state protocol.CommandStatePayload) bool {
 		return server.sessions.HandleCommandState(registration.NodeID, writer, state)
 	}, StateUpdate: func(update protocol.StateUpdate) bool {
 		return server.sessions.HandleStateUpdate(registration.NodeID, writer, update)

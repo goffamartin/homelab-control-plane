@@ -49,6 +49,7 @@ var deploymentFiles = []string{
 	"docs/51-managed-live-acceptance.md",
 	"docs/54-setup-preflight-and-recovery.md",
 	"docs/55-administrative-output.md",
+	"docs/56-container-logs.md",
 }
 
 func writeDeployment(root string, output io.Writer) error {

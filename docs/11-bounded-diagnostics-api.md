@@ -2,8 +2,10 @@
 
 This API reads controller telemetry and its in-memory structured audit ring.
 It does not read arbitrary files, the system journal, agent journals, controller
-ledger files or container logs. Remote Docker/Podman log transport remains M2.
-No CLI grammar, wire message or durable persistence format changes in this phase.
+ledger files or container logs. Docker/Podman logs now have a separate
+[read-only history and live-stream API](56-container-logs.md); they are not
+controller diagnostics and their bodies never enter the audit ring.
+The diagnostics API itself does not change the command or persistence formats.
 
 ## Endpoints and permissions
 
