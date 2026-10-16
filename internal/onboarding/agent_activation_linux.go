@@ -228,7 +228,7 @@ func (h nativeAgentServiceHost) inspectAgentSource(ctx context.Context, profile 
 }
 func (h nativeAgentServiceHost) ChangeAgent(ctx context.Context, profile AgentServiceProfile, action ControllerServiceAction) error {
 	uid, gid, err := h.Caller(ctx)
-	if err != nil || !validAgentServiceProfile(profile) || (profile.Scope == "user" && (uid == 0 || gid == 0)) || (profile.Scope == "system" && (uid != 0 || gid != 0)) || (action != ControllerStart && action != ControllerEnable) {
+	if err != nil || !validAgentServiceProfile(profile) || (profile.Scope == "user" && (uid == 0 || gid == 0)) || (profile.Scope == "system" && (uid != 0 || gid != 0)) || (action != ControllerStart && action != ControllerEnable && action != AgentRestart && action != AgentStop) {
 		return ErrAgentActivationProfile
 	}
 	_, err = agentServiceProcess(ctx, profile, string(action), profile.Unit, 30*time.Second)
@@ -497,7 +497,7 @@ func agentServiceProcess(parent context.Context, profile AgentServiceProfile, op
 			args = append(args, "--user")
 		}
 		args = append(args, "show", unit, "--property="+activationProperties)
-	case "enable", "start":
+	case "enable", "start", "restart", "stop":
 		if unit != profile.Unit {
 			return nil, ErrAgentActivationProfile
 		}

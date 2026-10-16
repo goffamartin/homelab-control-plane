@@ -1,7 +1,7 @@
 # P05k — Agent service activation core a system credentials
 
 Interní zdrojové jádro od 2026-10-14. Zatím bez native agent systemd adaptéru
-a bez příkazu `hlcp-agent activate`. Nespouští služby na VM; preview.4 se nemění.
+a bez příkazu `hlcp-agent start`. Nespouští služby na VM; preview.4 se nemění.
 P05/checkpoint B a live booted-systemd/reboot acceptance zůstávají otevřené.
 Navazující [P05l](34-native-agent-activation-cli.md) přidává native bridge a CLI
 pro počáteční imported setup; tento dokument popisuje samostatný core kontrakt.

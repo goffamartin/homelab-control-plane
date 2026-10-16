@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"fmt"
+	"hlcp/deploy/completion"
 	"io"
 	"os"
 	"path/filepath"
@@ -130,6 +131,10 @@ func packageControllerDeb(out, version, revision, arch string) (artifact, error)
 		data = append(data, debEntry{dir, 0755, nil})
 	}
 	data = append(data, debEntry{"etc/hlcp/controller/", 0700, nil})
+	data = append(data, debEntry{"usr/share/bash-completion/", 0755, nil}, debEntry{"usr/share/bash-completion/completions/", 0755, nil})
+	for _, command := range []string{"hlcp", "hlcp-controller"} {
+		data = append(data, debEntry{"usr/share/bash-completion/completions/" + command, 0644, []byte(completion.Bash(command))})
+	}
 	for _, binary := range []string{"hlcp-controller", "hlcp"} {
 		contents, err := debSource(filepath.Join(out, binary+"-linux-"+arch), false)
 		if err != nil {
@@ -165,6 +170,7 @@ func packageControllerDeb(out, version, revision, arch string) (artifact, error)
 		installedSize += (len(entry.data) + 1023) / 1024
 	}
 	controlText := fmt.Sprintf("Package: hlcp-controller\nVersion: %s\nArchitecture: %s\nMaintainer: Martin Goffa <goffamartin@gmail.com>\nSection: admin\nPriority: optional\nInstalled-Size: %d\nDepends: adduser, systemd (>= 252)\nHomepage: https://github.com/goffamartin/homelab-control-plane\nDescription: HomeLab controller and local CLI\n Native mTLS control plane. Credentials must be provisioned before startup.\n", packageVersion, arch, installedSize)
+	controlText = strings.Replace(controlText, "Homepage:", "Recommends: bash-completion\nHomepage:", 1)
 	control := []debEntry{{"control", 0644, []byte(controlText)}}
 	for _, name := range []string{"preinst", "postinst", "prerm", "postrm"} {
 		script, err := debSource(filepath.Join("deploy/debian/controller", name), true)

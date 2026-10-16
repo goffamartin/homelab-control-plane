@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"hlcp/deploy/completion"
 	"hlcp/internal/buildinfo"
 	"hlcp/internal/controller"
 	"hlcp/internal/doctor"
@@ -27,6 +28,9 @@ import (
 )
 
 func main() {
+	if handled, code := completion.Handle("hlcp-controller", os.Args[1:], os.Stdout); handled {
+		os.Exit(code)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "pki" {
 		os.Exit(managedcli.ControllerPKI(os.Args[2:], os.Stdin, os.Stdout))
 	}
@@ -69,7 +73,7 @@ func main() {
 	ledgerFile := flag.String("ledger-file", "/var/lib/hlcp/controller-operations.json", "durable controller operation ledger")
 	stateMaxAge := flag.Duration("resource-state-max-age", time.Minute, "maximum age of a received resource observation")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: hlcp-controller setup|pki|configure-client|activate|doctor [options]\nManaged setup is the default; setup --imported retains external PKI.\nRuntime options:")
+		fmt.Fprintln(os.Stderr, "Usage: hlcp-controller setup|pki|configure-client|activate|doctor|completion bash [options]\nManaged setup is the default; setup --imported retains external PKI.\nRuntime options:")
 		flag.PrintDefaults()
 	}
 	flag.Parse()

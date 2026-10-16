@@ -13,6 +13,30 @@ type diagnosticAgentHost struct {
 	check string
 }
 
+// Keep the old engine tests explicitly in preview mode, not a public alias.
+func runAgentActivationCLI(args []string, out *bytes.Buffer, host AgentActivationHost) int {
+	args = append([]string{"--scope", "user"}, args...)
+	hasScope := false
+	for _, arg := range args[2:] {
+		if arg == "--scope" {
+			hasScope = true
+		}
+	}
+	if hasScope {
+		args = args[2:]
+	}
+	apply := false
+	for _, arg := range args {
+		if arg == "--apply" {
+			apply = true
+		}
+	}
+	if !apply {
+		args = append(args, "--dry-run")
+	}
+	return runAgentServiceCLI("start", args, out, host)
+}
+
 func (h diagnosticAgentHost) InspectAgent(context.Context, AgentServiceProfile) (AgentActivationSnapshot, error) {
 	return AgentActivationSnapshot{}, &agentActivationCheckError{check: h.check}
 }
@@ -61,7 +85,7 @@ func TestAgentActivationCLIConsentAndControlledErrors(t *testing.T) {
 		if fail == "" && (code != 0 || report.Status != "applied") {
 			t.Fatal(out.String())
 		}
-		if fail != "" && (code != 1 || report.Code != "ACTIVATION_INCOMPLETE" || !report.Result.Uncertain || len(report.Result.Completed) != 1) {
+		if fail != "" && (code != 1 || report.Code != "SERVICE_OPERATION_INCOMPLETE" || !report.Result.Uncertain || len(report.Result.Completed) != 1) {
 			t.Fatal(out.String())
 		}
 	}

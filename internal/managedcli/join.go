@@ -235,7 +235,7 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 		}
 		if *resume {
 			if pending.Completed {
-				return emitResult(out, *jsonOut, Result{Operation: "agent.join", Status: "ok", Code: "JOIN_ALREADY_COMPLETED", Phase: "inspect", Changed: progress.Changed, Message: "Pairing was already completed. No new pairing was performed.", Next: "Use hlcp-agent activate to inspect/start the selected service."})
+				return emitResult(out, *jsonOut, Result{Operation: "agent.join", Status: "ok", Code: "JOIN_ALREADY_COMPLETED", Phase: "inspect", Changed: progress.Changed, Message: "Pairing was already completed. No new pairing was performed.", Next: "Use hlcp-agent status to inspect or hlcp-agent start to start the selected service."})
 			}
 			invitation, err = managed.ParseInvitation(pending.Invitation)
 			if err != nil {
@@ -387,7 +387,7 @@ func Join(args []string, input io.Reader, out io.Writer) int {
 			activate = append(activate, "--enable")
 		}
 		var activation bytes.Buffer
-		if onboarding.AgentActivationCLI(activate, &activation) != 0 {
+		if onboarding.AgentServiceCLI("start", activate, &activation) != 0 {
 			var details map[string]any
 			if json.Unmarshal(activation.Bytes(), &details) == nil {
 				progress.Data = map[string]any{"activation": details}

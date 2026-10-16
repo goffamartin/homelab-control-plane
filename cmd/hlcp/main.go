@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hlcp/deploy/completion"
 	"hlcp/internal/buildinfo"
 	"hlcp/internal/cli"
 	"hlcp/internal/doctor"
@@ -30,6 +31,13 @@ var outputMode string
 var operationIntent string
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "__complete" {
+		completeHLCP(os.Args[2:], os.Stdout)
+		return
+	}
+	if handled, code := completion.Handle("hlcp", os.Args[1:], os.Stdout); handled {
+		os.Exit(code)
+	}
 	if len(os.Args) > 1 && os.Args[1] == "verify-release" {
 		os.Exit(verifyReleaseCLI(os.Args[2:], os.Stdout))
 	}
@@ -268,6 +276,7 @@ Explicit forms:
   --actions | --action <name>
 
 Options:
+  completion bash    print Bash Tab completion (Debian packages install it)
   -n, -r, -a          navigational selectors; value is optional
   -h, --help          show this help
   --version           print build metadata without contacting the API

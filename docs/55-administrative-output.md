@@ -7,6 +7,11 @@ installer for machine consumers. Never parse English messages or terminal tables
 The existing controller API CLI `hlcp --json` retains its API payload shapes;
 it is not the administrative result envelope described below.
 
+Agent service commands `start|restart|stop|status --json` have the versioned
+[service result contract](57-agent-service-and-bash-completion.md), including
+read-only, completed, uncertain and state fields. They perform the named
+operation unless `--dry-run` is supplied; JSON is not an implicit preview.
+
 New administrative results use `schema_version: 1`, `operation`, `status`,
 `code`, `phase`, `changed`, `uncertain`, `completed` (an array), optional `next`
 and command-specific `data`. Human messages are not a stable machine contract.

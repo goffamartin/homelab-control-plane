@@ -77,7 +77,7 @@ func configurationCommand(args []string, input io.Reader, out io.Writer, check b
 	editErr := cmd.Run()
 	after, readErr := readPrivate(path, p.owner)
 	changed := readErr == nil && !bytes.Equal(before, after)
-	r := Result{Operation: operation, Status: "ok", Code: "EDITOR_CLOSED", Phase: "editor", Changed: changed, Message: "Editor closed; YAML contents are unchanged.", Data: data, Next: "Run hlcp-agent check-config, then explicitly restart the selected systemd service to load changes."}
+	r := Result{Operation: operation, Status: "ok", Code: "EDITOR_CLOSED", Phase: "editor", Changed: changed, Message: "Editor closed; YAML contents are unchanged.", Data: data, Next: "Run hlcp-agent restart to validate and load changes, or restart --dry-run for a read-only plan. Use the same --scope/--unit as your installed service."}
 	if changed {
 		r.Message = "Agent YAML was edited. No validation or service restart was performed."
 		r.Completed = []string{"yaml_edited"}

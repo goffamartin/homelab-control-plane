@@ -415,7 +415,8 @@ Windows full test/vet, Linux full race/test/vet a ARM64 compile-only prošly;
 native agent activation CLI, service/account/state readiness a booted Debian
 package/VM/release acceptance zůstávají otevřené. Preview.4 se nemění.
 
-P05l native agent activation CLI: `hlcp-agent activate` má default user preview,
+P05l původně mělo default user preview; aktuální `hlcp-agent start` operaci
+provádí přímo a preview vybírá `--dry-run` (viz [aktuální kontrakt](57-agent-service-and-bash-completion.md));
 system scope root, fixed generic/compatibility profily, explicitní enable/apply,
 local user manager/bus/linger/peer a imported config/TLS/journal-metadata preflight.
 Žádný restart, account/permission repair, journal read/reset či implicitní linger.

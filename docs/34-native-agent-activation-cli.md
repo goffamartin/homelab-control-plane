@@ -1,27 +1,33 @@
-# P05l — Native agent activate pro počáteční imported setup
+# Native agent start a ovládání služby
 
-Zdrojová implementace od 2026-10-14. Příkaz není v publikovaném preview.4 a není
-ověřeným live systemd/VM deployem. P05/checkpoint B zůstává otevřený.
+Původní P05l implementace vznikla 2026-10-14. Aktuální rozhraní používá
+`start`, `restart`, `stop`, `status`; `activate` je odstraněno bez aliasu.
+Úplný aktuální kontrakt včetně Bash doplňování je v
+[ovládání služby a completion](57-agent-service-and-bash-completion.md).
+Následující bezpečnostní popis zachovává původní start/preflight jádro;
+není potvrzením live systemd/VM acceptance nové verze.
 
 ## Použití a aktuální omezení
 
 ```sh
 # Přímo jako skutečný owner, bez sudo: default user manager / generic unit.
-/usr/bin/hlcp-agent activate
-/usr/bin/hlcp-agent activate --enable --apply --yes
+/usr/bin/hlcp-agent start --dry-run
+/usr/bin/hlcp-agent start --enable
 
 # Compatibility name, stále stejný user manager a stejné config/state paths.
-/usr/bin/hlcp-agent activate --unit hlcp-agent-podman.service
+/usr/bin/hlcp-agent start --unit hlcp-agent-podman.service --dry-run
 
 # Oddělený system manager; root caller, ale runtime účet hlcp.
-sudo /usr/bin/hlcp-agent activate --scope system
-sudo /usr/bin/hlcp-agent activate --scope system --enable --apply --yes
+sudo /usr/bin/hlcp-agent start --scope system --dry-run
+sudo /usr/bin/hlcp-agent start --scope system --enable
 ```
 
-Výchozí režim jen ukáže plán. --apply a --yes vyžadují jeden druhý; --enable
-samostatně požaduje persistent boot aktivaci. --json dává redigovaný report.
-Help/neplatné options neprovádějí host inspection. Žádný restart aktivní služby,
-stop/reset peeru, automatický linger nebo account/config změna.
+Výchozí režim provede pojmenovanou operaci. `--dry-run` jen ukáže plán.
+Volitelná dvojice --apply a --yes musí být zadána spolu; --enable u start
+požaduje persistent boot aktivaci. --json mění výstup, ne záměr provedení.
+Help/neplatné options neprovádějí host inspection. Start již běžící službu
+nerestartuje; k tomu slouží restart. Žádný stop/reset peeru, automatický linger
+nebo account/config změna.
 
 Původní P05l bridge vyžadoval prázdné resources/capabilities. Navazující P05n
 rozšiřuje user scope o read-only metadata preflight Docker/Podman/scripts a

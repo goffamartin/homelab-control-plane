@@ -12,6 +12,7 @@ import (
 
 // Explicit source allowlist: never package a directory walk or local secrets.
 var deploymentFiles = []string{
+	"deploy/completion/bash.tpl",
 	"deploy/install/install.sh",
 	"deploy/install/release.pub",
 	"deploy/debian/inspect-onboarding-host.sh",
@@ -50,6 +51,7 @@ var deploymentFiles = []string{
 	"docs/54-setup-preflight-and-recovery.md",
 	"docs/55-administrative-output.md",
 	"docs/56-container-logs.md",
+	"docs/57-agent-service-and-bash-completion.md",
 }
 
 func writeDeployment(root string, output io.Writer) error {
