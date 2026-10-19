@@ -80,7 +80,8 @@ are secrets regardless of output format.
 | Command family | Machine contract |
 |---|---|
 | `hlcp` inventory/actions/results | Existing API payload for that command |
-| Agent/controller administration | Versioned administrative report |
+| Managed setup/join/configuration/resources/certificates | Versioned administrative report |
+| Imported setup, `configure-client`, doctor | Existing command-specific report; not the new common envelope |
 | Agent service commands | Versioned service report, including actual state |
 | Container log history | Versioned snapshot with records and continuity flags |
 | Container log follow | Versioned newline-delimited JSON events |
