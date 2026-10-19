@@ -12,7 +12,7 @@ local file; the CLI reads the same token from its local configuration or an
 explicit file option.
 
 The credential model is refined by accepted [ADR-0005](0005-management-node-and-api-adapters.md)
-and the [F10B permission contract](../10-scoped-api-credentials.md): policy mode
+and the [F10B permission contract](../reference/10-scoped-api-credentials.md): policy mode
 supports separate scoped principals; legacy token mode remains an explicit
 unrestricted operator profile. Loopback networking and browser protections remain.
 

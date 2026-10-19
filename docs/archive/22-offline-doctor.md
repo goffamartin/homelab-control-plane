@@ -1,0 +1,276 @@
+> Historical design/evidence snapshot. Not an installation guide or a current release-readiness claim. Start at [current documentation](../README.md); current validation scope is in [validation](../validation.md).
+
+# Offline doctor — první blok P04c
+
+Implementováno 2026-10-14, zatím pouze ve zdrojové větvi, ne v preview.4.
+
+```console
+hlcp doctor --server-name 192.168.0.15
+hlcp-controller doctor --server-name 192.168.0.15 --json
+hlcp-agent doctor --config /home/martin/.config/hlcp/agent.yaml
+hlcp doctor --role agent --config /home/martin/.config/hlcp/agent.yaml
+hlcp doctor --help
+hlcp-agent doctor --config /home/martin/.config/hlcp/agent.yaml --host-checks --scope user
+hlcp-agent doctor --config /home/martin/.config/hlcp/agent.yaml --host-checks --scope user --unit hlcp-agent-podman.service
+hlcp doctor --setup-dir /etc/hlcp/controller --json
+hlcp-agent doctor --config /home/martin/.config/hlcp/agent.yaml --probe --json
+sudo hlcp-agent doctor --user martin --scope user --config /home/martin/.config/hlcp/agent.yaml --host-checks --json
+```
+
+Controller role standardně čte controller.crt/controller.key/ca.crt v
+/etc/hlcp/controller; explicitní absolutní cesty lze zadat přes --cert/--key/--ca.
+Agent role čte TLS cesty a identitu ze své konfigurace; controller TLS přepínače
+se pro agent role nepoužijí. User agent nemá implicitní HOME/SUDO_USER discovery:
+cestu konfigurace zadejte explicitně. Privátní root soubory vyžadují odpovídající
+přístup (typicky sudo pro controller); doctor jejich práva neopravuje.
+
+## Co kontroluje
+
+- Linux amd64/arm64 platformu; jiný OS dostane upozornění a native filesystem
+  kontroly odmítnou předstírat POSIX ownership.
+- Bounded agent YAML (1 MiB), stejné strict schema a semantic validátory jako Load.
+- Syntaxi controller endpointu včetně číselného portu.
+- Pouze nakonfigurované runtime soubory: PATH lookup a základní kontrolu
+  regular/executable/non-writable file a owner. Nic nespouští; nejde o test
+  socket access ani Podman health. Script readiness má samostatný kontrakt níže.
+  Script-only agent nevyžaduje Docker/Podman.
+- Bounded cert/key/trust čtení, absolutní clean cesty, non-symlink ancestors,
+  regular single-link files, owner root nebo aktuální effective UID,
+  group/other write zákaz a private input bez group/other read.
+- Key match, leaf/CA rozlišení, leaf validity, role EKU, agent node URI;
+  controller hostname coverage jen s --server-name.
+- Strict CA PEM bundle a validity každého CA. Expiry <=30 dní je warning,
+  přesný okamžik NotAfter již failure; NotBefore v budoucnu také failure.
+
+Nemění obsah/práva souborů, nevytváří state/lock/backup, neotvírá journal/ledger,
+nevolá setup Apply/Recover, žádné aktivační service/script příkazy ani remote HLCP spojení.
+Čtení může stejně jako jiné čtení ovlivnit filesystem atime; nejde o snapshot
+garanci proti útočníkovi se stejným UID/root ani proti změnám celé directory tree.
+Linux read používá NOFOLLOW/NONBLOCK a porovnání pre-open/FD identity:
+FIFO/device/symlink substituce se nepřečte jako běžná konfigurace.
+
+## Výstup a návratový kód
+
+Text nebo --json: read_only=true, offline=true (false při explicitním TLS probe),
+checks s code/state/message.
+Stavy ok/warn/fail/skip. Výstup neobsahuje raw parser/OS chyby, config contents,
+PEM, tokeny, argv/env nebo nakonfigurované script cesty. Nepředávejte secrets
+v přepínačích; ty neslouží pro zadávání klíčového materiálu.
+
+Exit 0: žádný fail (warnings/skips **neznamenají kompletní připravenost**).
+Exit 1: diagnostický fail. Exit 2: nesprávné options nebo chyba výstupu.
+Help funguje bez konfigurace, API tokenu a běžící služby.
+
+## Otevřené brány P04c/P05
+
+Tento blok není kompletní doctor ani hotové P04:
+Explicitní účet pod rootem je nyní dostupný přes --user (kontrakt níže). Script interpreter/cwd,
+transaction inspect a opt-in TLS probe jsou níže;
+nejde o potvrzení skutečného script/runtime chování.
+Remote peer chain verification není nahrazena kontrolou lokálního CA bundle;
+issuer leafu může být jiný než trust pro peer a nebude se automaticky předpokládat
+společná CA. Controller env/API policy/node allowlist zatím nevaliduje.
+Setup wizard a aktivace služby následují v P05.
+
+Testy používají fake read-only Host bez mutačních/síťových metod a skutečné Linux
+soubory pro permissions/link/FIFO checks. Cert fixtures pokrývají expiry hranice,
+NotBefore, hostname/node mismatch, key mismatch a malformed trust. Report nečte
+journal ani generic-agent runtime; oversized/invalid inputs a usage chyby jsou
+secret-free. Publikované preview.4 tento příkaz neobsahuje.
+
+Lokální evidence 2026-10-14: Windows full test/vet prošly; po doplnění port/runtime
+testu prošly i cílené doctor testy. Finální Linux full race/test/vet prošly v
+golang:1.27.2-bookworm bez sítě. Linux arm64 doctor test binary compile-only
+prošel (nikoli živá ARM akceptace). Všechny tři skutečné CLI doctor --help
+vstupy prošly bez načtení tokenu/konfigurace; git diff --check čistý.
+
+## Navazující host readiness blok
+
+Standardní invocation zůstává čistě souborová. --host-checks výslovně povolí
+kernel clock query a pevně vymezené lokální systemd property dotazy.
+--scope system je default; controller podporuje pouze system scope.
+--scope user bez --user spouštějte přímo jako runtime uživatel, nikoli přes sudo.
+Effective UID a primární GID se ověří přes OS account lookup; HOME/SUDO_USER
+nejsou zdrojem identity. NSS lookup respektuje OS konfiguraci (např. vzdálený
+directory provider); offline zde znamená bez remote HLCP probe, ne potlačení NSS.
+Samotný --scope user účet nepřepíná; root vyžaduje explicitní --user (viz níže).
+
+Clock query používá Linux adjtimex s Modes=0, bez změny času a bez aktivace
+timedated. Kontroluje kernel STA_UNSYNC; nejde o potvrzení dostupnosti NTP serveru.
+
+Service queries používají jen root-owned /usr/bin/systemctl a /usr/bin/loginctl
+po kontrole vyřešené cesty/ancestorů, bez PATH fallback nebo shellu:
+show HLCP unit, show user@UID.service a show-user UID Linger.
+Žádné start/enable/reload/enable-linger operace. Čtecí D-Bus dotaz není
+garance nulového manager cache/log účinku, ale nezadává aktivaci cílové služby.
+Pro každý probe platí 3s deadline, 250ms wait-delay a 4KiB stdout/stderr limit.
+Environment je allow-list, bez inherited secrets a externích D-Bus adres.
+User bus adresa se sestaví z ověřeného effective UID a private /run/user/UID.
+Raw stderr a property hodnoty/cesty se do reportu nevypisují.
+
+Kontroluje loaded/masked/missing, active/failed, persistent/runtime-only enablement
+a existenci lokálního fragmentu/drop-in. Zjištěná override je upozornění, nikoli
+chyba nebo pokyn k odstranění; vendor content se neporovnává s balíčkem.
+Agent default unit je hlcp-agent.service; starší rootless instalaci vyberte
+výslovně přes --unit hlcp-agent-podman.service. Arbitrary unit/command nepodporuje.
+User scope doplní user manager a linger. Pouze pokud validní agent konfigurace
+obsahuje Podman, přečte /etc/subuid a /etc/subgid a ověří odpovídající username/UID,
+numeric bounds a souvislý rozsah alespoň 65536 IDs. Nepotvrzuje absence overlaps
+s jinými účty, NSS subordinate provider, mapping helpers, storage/cgroups/socket
+ani úspěšný start kontejneru. Generic/Docker profil tyto rozsahy nevyžaduje.
+
+Unavailable systemd/logind je warning, nikoli předstíraný OK; masked/failed service,
+root user-scope a chybějící požadované subid range jsou fail.
+Nevalidní agent config ukončí agent diagnostiku ještě před host probes.
+Kontrakty dotazů odpovídají systemd dokumentaci:
+[unit properties](https://www.freedesktop.org/wiki/Software/systemd/dbus/),
+[loginctl show-user/linger](https://www.freedesktop.org/software/systemd/man/252/loginctl.html).
+
+Host-blok evidence 2026-10-14: Windows full test/vet a Linux full race/test/vet
+prošly; Linux testuje i 4KiB overflow a timeout skutečného child procesu. Account,
+unit/linger/manager/mask/override a subid hranice jsou testované přes fake query
+provider; žádné živé VM/systemd acceptance tím není nahrazeno. Nápověda funguje
+bez probes. Linux arm64 compile-only prošel, nikoli live ARM. Žádný nový preview.
+
+## Script readiness a setup inspect
+
+Validní script resources dostávají samostatné check codes script.executable,
+script.directory, script.interpreter/format a script.execution. Akce se
+kontrolují deterministicky v seřazeném pořadí, bez vypsání jejich argv, prostředí
+a cest. Žádná testovací akce, interpreter --version ani script --help se nevolá.
+
+Linux kontroluje regular single-link executable bez special bits a group/other
+write, owner root/effective UID, a mode execute/search podle effective account
+včetně supplementary groups. Working directory musí být clean absolute,
+existující non-symlink bezpečný adresář s dostupnými rodiči; nemění se jeho práva.
+Symlinky standardních executable/interpreter cest (např. /bin/sh) lze vyřešit;
+kontrolují se resolved parents a original resolved parent. Mutable symlink chains,
+ACL, noexec mount nebo souběžný root/same-UID editor nejsou tímto snapshotem
+plně vyloučeny. Nejvýše 256 bytes executable header se čte přes
+NOFOLLOW/NONBLOCK FD s pre-open identity a post-read metadata checks.
+
+ELF magic je pouze rozpoznání formátu (skip pro loader/arch/libraries).
+Shebang vyžaduje newline v bounded header, bez CR/NUL a s dostupným absolutním
+interpreter souborem. /usr/bin/env je warning: nepředstírá se vyřešení command
+podle nakonfigurovaného prostředí. Unknown header/missing interpreter je fail;
+valid script bez shebang není pro přímý exec podporován. Pokud executable je
+např. /bin/sh a argv obsahuje cestu jiného scriptu, doctor ji neinterpretuje:
+libovolné argv semantics a environment dependencies zůstávají skip.
+Native filesystem readiness je Linux-only; jiný OS nepotvrdí úspěch.
+
+--setup-dir je explicitní a nezávislý na konfiguraci role. Neodvozuje se z HOME,
+není to journal/ledger cesta a není to oprávnění k recovery. Existující adresář
+musí splnit stejný kontrakt setup.OpenPlanner: mode 0700, effective UID a jeho
+registrovaný primary GID, bezpečné ancestors, Linux descriptor-relative reads.
+Root neodhadne jiný účet; pro user-owned setup vyberte explicitně --user.
+
+Příkaz volá výhradně Planner.Inspect: žádný Build/Apply/Recover/DiscardBackup,
+flock, vytvoření adresáře, přepis souborů ani cleanup. None je ok, committed backup
+warning, pending/discarding fail vyžadující samostatně schválený recovery postup.
+Missing directory je warning (nebude vytvořen); corrupt/conflicting/unsafe
+state je fail (bude zachován). Výstup neobsahuje manifest fields, hashes, names,
+privátní staged contents ani raw errors. Inspect při souběžném setupu není
+globálně zamčený snapshot; přechodný nekonzistentní stav může vyžadovat opakování.
+
+Linux test fixtures dokazují neexistenci execution markeru po script inspection
+a shodu bytes/modes/mtimes i struktury setup directory před/po clean, committed,
+pending a corrupt inspekci. Zálohu pro fixture vytváří explicitní test Apply,
+nikoli doctor. Fake provider pokrývá stavy, redakci a opt-in; VM acceptance
+a skutečné exec/runtime chování tím nejsou potvrzené. Nový preview se nevydává.
+
+Lokální evidence tohoto bloku 2026-10-14: Windows full test/vet a Linux full
+race/test/vet prošly. Linux arm64 test binary compile-only prošel (ne live ARM).
+Skutečný hlcp doctor --help vstup prošel bez konfigurace/tokenu a bez inspekce.
+git diff --check čistý; VM se v tomto bloku neměnily.
+
+## Výslovný agent TLS probe
+
+--probe podporuje jen agent role. Cílová adresa, server_name a cert/key/trust
+pocházejí z validované konfigurace; žádný další remote endpoint se nehádá.
+Bez přepínače není žádný probe; help nečte ani síť ani konfiguraci.
+Jakýkoli lokální fail zabrání dialu. Unsupported probe provider je fail, ne OK.
+Sonda používá již bezpečně bounded načtené PEM snapshoty, neopakuje jejich čtení.
+
+ClientTLSConfigFromPEM sdílí konstruktor TLS politiky s běžným ClientTLSConfig:
+TLS >=1.3, hlcp/1 ALPN, předepsané server_name a vlastní CA (ne system trust
+fallback), verified chain a explicitní server-auth EKU. Standardní ověření
+certifikátu není vypnuté. Lokální doctor EKU/identity kontrola byla zároveň
+sjednocena s runtime: explicitní client/server-auth, AgentNodeID URI kontrakt,
+nikoli implicitní Any/no-EKU fallback.
+
+Celkem 3s context deadline omezuje dial/DNS/TLS, socket má stejnou deadline,
+žádné retry/scan/proxy ani application-level exchange. TLS validity v sondě se
+ověřuje k zachycenému doctor clock snapshotu. Po handshake se raw connection
+uzavře; nepošle se HELLO, inventory, heartbeat, API token ani command.
+read_only znamená bez změn HLCP config/state/operací: síťová sonda samozřejmě
+odešle TLS handshake včetně client certificate identity a může přidat audit/log
+záznamy na serveru (authenticated nebo registration rejected po close).
+Nenahrazuje ani nepřeruší registrovanou agentní session tím, že by poslala HELLO.
+
+tls.peer=ok potvrzuje server identity/trust/name/EKU/ALPN, nikoli přijetí našeho
+client certifikátu, allowlist, registry admission, resources či command oprávnění.
+TLS1.3 client handshake completion samo o sobě takové potvrzení nedává;
+tls.admission proto zůstává skip. Nedostupnost endpointu, timeout a TLS chyba
+mají kontrolované obecné messages, bez raw DNS/x509/socket chyb nebo secrets.
+offline=false označuje výslovnou sondu; pokud ji preflight zablokuje, zůstane true.
+
+Testy používají jen lokální loopback: valid peer, jiná CA/name, expired leaf,
+implicitní EKU, chybějící ALPN, TLS1.2-only server a silent TCP timeout.
+TLS test server nezaznamená žádné application bytes. Integrační test se skutečným
+controller.Server zachová existující node record beze změny, žádná registrace.
+Fake provider ověřuje opt-in, společnou TLS policy, deadline a redakci errors.
+Jde o lokální test evidence, nikoli spojení na uživatelovy VM nebo live ARM.
+
+Evidence TLS bloku 2026-10-14: Windows full test/vet a Linux full race/test/vet
+prošly; finální controller integration/snapshot test prošel na Windows a Linux
+race/vet. ARM64 doctor binary compile-only prošel, nikoli live ARM. Skutečný
+agent doctor --help funguje bez konfigurace a bez sondy. git diff --check čistý.
+Repo preview.4 se nemění; uživatelské VM ani jejich certifikáty se neměnily.
+
+## Explicitní --user při root inspekci
+
+Pouze agent role + --scope user. --user je účet z OS account databáze,
+nikoli cesta, script, UID odhadnuté z prostředí nebo oprávnění ke změně účtu.
+Root target, neznámý/nekonzistentní účet a výběr jiného UID neprivilegovaným
+callerem jsou odmítnuty. Původní default agent config zůstává /etc/hlcp/agent.yaml:
+user config cestu zadejte výslovně přes --config; HOME discovery se nepřidává.
+
+Root validuje UID, primary GID, reverse UID lookup a nejvýše 128 supplementary
+group IDs. Poté spustí vlastní root-owned instalovanou binárku s Credential
+UID/GID/groups vybraného účtu; rodič předtím nečte agent YAML, TLS, scripts
+ani setup directory. Žádné globální setuid změny procesu nebo simulace permissions
+pod rootem. Native path/owner/mode kontroly tak používají skutečné child credentials.
+Registrovaná členství skupin mohou sama mít privilegované dopady (např. Docker);
+doctor je nepřidává ani nepřejímá rootovy skupiny.
+
+Stejný již neprivilegovaný UID může --user použít bez re-exec; zachovává svá
+aktuální skutečná process credentials. Pro user-scope root bez --user platí
+původní fail, ne implicitní root-to-user inference.
+
+Pro root re-exec musí vlastní executable i jeho resolved ancestors splnit
+root-owned/non-writable/no-special-bits kontrolu. Zdrojové go run/test binárky
+v /tmp nebo user-writable checkout nejsou trusted installed path a odmítnou se.
+Předává se jen sestavený allow-list doctor options, vždy --json, nikdy --user
+(žádná rekurze), shell nebo obecná command line. Child environment obsahuje jen
+pevný PATH=/usr/bin:/bin a C locale, bez HOME/SUDO_USER/LD_PRELOAD/API credentials.
+User bus adresu případně sestaví až child z vlastního ověřeného UID.
+Proto nejde ani o přesnou simulaci libovolného interaktivního PATH/environment.
+
+Child má 20s total deadline, samostatnou process group pro timeout kill a 250ms
+wait-delay; stdout je omezen na 256KiB, stderr na 4KiB a nikdy se nepřeposílá.
+Rodič ověří JSON report shape/read_only/check states a soulad exit 0/1 s fail
+stavem; timeout/start/output/lookup problém znamená sanitizovaný diagnostic fail.
+OS NSS lookup před spuštěním child respektuje vlastní provider a může čekat
+podle jeho policy; neslibujeme 20s limit celé NSS resolution fáze. Reader/mount,
+ACL a same-UID/root attacker omezení ostatních doctor kontrol platí dál.
+Jde o snížení credentials, nikoli nový sandbox proti nepřátelskému local account.
+
+Evidence 2026-10-14: Windows full test/vet a Linux full race/test/vet prošly.
+Root-only Linux test přes id/env potvrzuje UID/GID, úplné nahrazení groups a
+odstranění zděděného prostředí. Další explicitní container gate přeloží vlastní
+CLI do /usr/local/bin a ověří celý root-to-user re-exec: private root config
+selže, následná config vlastněná nobody projde čtením, setup inspection zůstane
+read-only a snapshot bytes/modes/mtimes/struktury se nemění.
+Bez HLCP_DOCTOR_TEST_BINARY tento installed-binary test záměrně skipuje;
+uvedená samostatná Linux gate jej skutečně spustila. Arm64 compile-only prošel,
+nikoli živá ARM/user-systemd VM akceptace. Preview.4 se nemění.

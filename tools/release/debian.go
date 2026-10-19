@@ -157,13 +157,9 @@ func packageControllerDeb(out, version, revision, arch string) (artifact, error)
 		return artifact{}, err
 	}
 	data = append(data, debEntry{"usr/share/hlcp-controller/api-policy.json", 0644, policy})
-	for _, name := range []string{"07-build-and-release.md", "09-telemetry-and-audit.md", "10-scoped-api-credentials.md",
-		"11-bounded-diagnostics-api.md", "12-debian-management-deployment.md", "13-debian-controller-package.md", "14-cli-setup-and-agent-installation.md", "17-generic-agent-profiles.md", "15-onboarding-and-agent-profile-design-notes.md", "16-plug-and-play-implementation-plan.md", "18-script-resource-contract.md", "37-controller-package-setup.md"} {
-		contents, err := debSource(filepath.Join("docs", name), true)
-		if err != nil {
-			return artifact{}, err
-		}
-		data = append(data, debEntry{"usr/share/doc/hlcp-controller/" + name, 0644, contents})
+	data, err = appendOperatorDocumentation(data, "hlcp-controller")
+	if err != nil {
+		return artifact{}, err
 	}
 	installedSize := 0
 	for _, entry := range data {
