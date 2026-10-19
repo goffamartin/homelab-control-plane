@@ -49,17 +49,16 @@ func packageAgentDeb(out, version, revision, arch string) (artifact, error) {
 		{"deploy/config/agent-system.yaml", "usr/share/hlcp-agent/agent-system.yaml"},
 		{"deploy/config/agent-script.yaml", "usr/share/hlcp-agent/agent-script.yaml"},
 		{"deploy/systemd/hlcp-agent-docker.conf", "usr/share/hlcp-agent/hlcp-agent-docker.conf"},
-		{"docs/14-cli-setup-and-agent-installation.md", "usr/share/doc/hlcp-agent/14-cli-setup-and-agent-installation.md"},
-		{"docs/17-generic-agent-profiles.md", "usr/share/doc/hlcp-agent/17-generic-agent-profiles.md"},
-		{"docs/15-onboarding-and-agent-profile-design-notes.md", "usr/share/doc/hlcp-agent/15-onboarding-and-agent-profile-design-notes.md"},
-		{"docs/16-plug-and-play-implementation-plan.md", "usr/share/doc/hlcp-agent/16-plug-and-play-implementation-plan.md"},
-		{"docs/18-script-resource-contract.md", "usr/share/doc/hlcp-agent/18-script-resource-contract.md"},
 	} {
 		contents, err := debSource(source.path, true)
 		if err != nil {
 			return artifact{}, err
 		}
 		data = append(data, debEntry{source.target, 0644, contents})
+	}
+	data, err = appendOperatorDocumentation(data, "hlcp-agent")
+	if err != nil {
+		return artifact{}, err
 	}
 	installedSize := 0
 	for _, entry := range data {

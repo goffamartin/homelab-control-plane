@@ -117,18 +117,11 @@ func TestDebArchiveDeterministic(t *testing.T) {
 
 func TestControllerPackageContents(t *testing.T) {
 	root := t.TempDir()
-	for _, name := range []string{
+	for _, name := range append([]string{
 		"deploy/systemd/hlcp-controller.service", "deploy/config/api-policy.json",
 		"deploy/debian/controller/preinst", "deploy/debian/controller/postinst",
 		"deploy/debian/controller/prerm", "deploy/debian/controller/postrm",
-		"docs/07-build-and-release.md", "docs/09-telemetry-and-audit.md", "docs/10-scoped-api-credentials.md",
-		"docs/11-bounded-diagnostics-api.md", "docs/12-debian-management-deployment.md", "docs/13-debian-controller-package.md",
-		"docs/14-cli-setup-and-agent-installation.md",
-		"docs/17-generic-agent-profiles.md",
-		"docs/15-onboarding-and-agent-profile-design-notes.md", "docs/16-plug-and-play-implementation-plan.md",
-		"docs/18-script-resource-contract.md",
-		"docs/37-controller-package-setup.md",
-	} {
+	}, operatorDocumentationSources()...) {
 		contents, err := os.ReadFile(filepath.Join("..", "..", filepath.FromSlash(name)))
 		if err != nil {
 			t.Fatal(err)
@@ -178,7 +171,7 @@ func TestControllerPackageContents(t *testing.T) {
 			t.Fatal("script permissions/LF")
 		}
 	}
-	if len(payload) != 34 {
+	if len(payload) != 38 {
 		t.Fatalf("unexpected file count: %d", len(payload))
 	}
 	for _, name := range []string{"hlcp", "hlcp-controller"} {

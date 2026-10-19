@@ -11,7 +11,7 @@ import (
 )
 
 // Explicit source allowlist: never package a directory walk or local secrets.
-var deploymentFiles = []string{
+var deploymentFiles = append([]string{
 	"deploy/completion/bash.tpl",
 	"deploy/install/install.sh",
 	"deploy/install/release.pub",
@@ -32,27 +32,7 @@ var deploymentFiles = []string{
 	"deploy/config/agent-system.yaml",
 	"deploy/config/agent-script.yaml",
 	"examples/api-policy.json",
-	"docs/07-build-and-release.md",
-	"docs/09-telemetry-and-audit.md",
-	"docs/10-scoped-api-credentials.md",
-	"docs/11-bounded-diagnostics-api.md",
-	"docs/12-debian-management-deployment.md",
-	"docs/13-debian-controller-package.md",
-	"docs/14-cli-setup-and-agent-installation.md",
-	"docs/17-generic-agent-profiles.md",
-	"docs/15-onboarding-and-agent-profile-design-notes.md",
-	"docs/16-plug-and-play-implementation-plan.md",
-	"docs/18-script-resource-contract.md",
-	"docs/47-debian-onboarding-acceptance.md",
-	"docs/48-managed-plug-and-play-delivery.md",
-	"docs/49-managed-quick-start.md",
-	"docs/50-managed-migration-and-recovery.md",
-	"docs/51-managed-live-acceptance.md",
-	"docs/54-setup-preflight-and-recovery.md",
-	"docs/55-administrative-output.md",
-	"docs/56-container-logs.md",
-	"docs/57-agent-service-and-bash-completion.md",
-}
+}, operatorDocumentationSources()...)
 
 func writeDeployment(root string, output io.Writer) error {
 	gz := gzip.NewWriter(output)

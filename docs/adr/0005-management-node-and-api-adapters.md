@@ -31,7 +31,7 @@ adapter would not enforce read-only access at the controller boundary.
 ## Consequences and adoption gate
 
 This ADR accepts the architecture, not completion of all adapters/deployment.
-F10B implements the [scoped credential contract](../10-scoped-api-credentials.md):
+F10B implements the [scoped credential contract](../reference/10-scoped-api-credentials.md):
 observer/operator roles, explicit node/resource scope, strict private policy,
 atomic reload and authorization serialized with durable admission. It refines
 ADR-0002's single-credential model; its networking contract is unchanged.
@@ -39,6 +39,6 @@ Log transport, MCP and web remain subsequent implementation phases.
 Loopback networking remains unchanged. MCP transport/auth interoperability must
 be tested with the chosen real client; the initial endpoint stays private.
 
-The [implementation plan](../08-management-node-and-mcp-plan.md) separates core
+The [implementation plan](../archive/08-management-node-and-mcp-plan.md) separates core
 F10/F11 acceptance from later HomeLab extensions. Web UI and mutating MCP remain
 outside the original semester MVP; deployment needs operator-selected hosts.
