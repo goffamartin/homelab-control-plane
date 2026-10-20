@@ -82,3 +82,35 @@ func TestOperatorDocumentationPackageContents(t *testing.T) {
 		}
 	}
 }
+
+func TestPublicInstallationGuide(t *testing.T) {
+	checked := 0
+	for _, name := range []string{"getting-started.md", "operations.md"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", "docs", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		text := strings.ReplaceAll(string(data), "\r\n", "\n")
+		text = strings.ReplaceAll(text, "\\\n", " ")
+		for _, line := range strings.Split(text, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "gh auth login") || strings.HasPrefix(line, "gh release download") {
+				t.Errorf("%s: public quick start must not require authenticated GitHub CLI", name)
+			}
+			if !strings.HasPrefix(line, "sh hlcp-install.sh ") {
+				continue
+			}
+			checked++
+			public := false
+			for _, flag := range strings.Fields(line) {
+				public = public || flag == "--public"
+			}
+			if !public {
+				t.Errorf("%s: installer example requires explicit --public", name)
+			}
+		}
+	}
+	if checked < 7 {
+		t.Fatal("expected fresh controller/agent and preview/apply update examples")
+	}
+}
