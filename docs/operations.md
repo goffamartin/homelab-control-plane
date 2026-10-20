@@ -18,20 +18,22 @@ of controller connectivity.
 
 Use a trusted helper downloaded for the intended release, as described in
 [Getting started](getting-started.md). Set `VERSION=v1.0.0` for this release.
-Keep a consistent private backup first. Update the controller before agents.
+Public downloads need `curl` and the explicit `--public` flag, not a GitHub
+account or token. Keep a consistent private backup first. Update the controller
+before agents. Do not use fresh-install `--configure` on an existing installation.
 
 On the controller, preview, then explicitly allow the service restart:
 
 ```sh
-sh hlcp-install.sh controller --version "$VERSION" --update
-sh hlcp-install.sh controller --version "$VERSION" --update --restart --apply --yes
+sh hlcp-install.sh controller --version "$VERSION" --public --update
+sh hlcp-install.sh controller --version "$VERSION" --public --update --restart --apply --yes
 ```
 
 On the user agent, as its owner:
 
 ```sh
-sh hlcp-install.sh agent --version "$VERSION" --scope user --update
-sh hlcp-install.sh agent --version "$VERSION" --scope user --update --restart --apply --yes
+sh hlcp-install.sh agent --version "$VERSION" --public --scope user --update
+sh hlcp-install.sh agent --version "$VERSION" --public --scope user --update --restart --apply --yes
 ```
 
 The helper refuses a running service unless a restart was explicitly requested;

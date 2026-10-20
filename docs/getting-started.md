@@ -23,7 +23,7 @@ On both hosts:
 
 ```sh
 sudo apt update
-sudo apt install ca-certificates openssl gh bash-completion
+sudo apt install ca-certificates curl openssl bash-completion
 ```
 
 On the agent, install and verify rootless Podman separately:
@@ -43,17 +43,20 @@ setup, including subordinate UID/GID mappings if needed, before configuring HLCP
 On each host, in a new working directory:
 
 ```sh
-mkdir -p ~/hlcp
-cd ~/hlcp
 VERSION=v1.0.0
-gh auth login
-gh release download "$VERSION" --repo goffamartin/homelab-control-plane \
-  --pattern hlcp-install.sh
+HLCP_DOWNLOAD_DIR=$(mktemp -d "$HOME/hlcp-download.XXXXXXXX")
+cd "$HLCP_DOWNLOAD_DIR"
+curl --disable --proto '=https' --proto-redir '=https' --tlsv1.2 \
+  --fail --show-error --location --max-redirs 3 \
+  --connect-timeout 10 --max-time 120 --output hlcp-install.sh \
+  "https://github.com/goffamartin/homelab-control-plane/releases/download/$VERSION/hlcp-install.sh"
 ```
 
-The repository currently requires authorized GitHub access. Do not put a GitHub
-token into an HLCP YAML file. If the file already exists, inspect it or use a
-new directory; do not silently overwrite an unknown installer.
+The repository and release assets are public: no GitHub account, token or `gh`
+installation is required. The new directory avoids overwriting an older helper.
+Keep the same shell open for the following steps so `VERSION` remains set.
+Use `--public` on every installer invocation below: the helper retains its
+authenticated download mode by default for compatibility with private repositories.
 
 Bootstrap trust matters: the helper must come from a repository/release you
 trust. Review its source and compare its SHA-256 with the release's trusted
@@ -74,8 +77,8 @@ release key before installation. It does not run a download piped into a shell.
 On the controller, preview first, then apply:
 
 ```sh
-sh hlcp-install.sh controller --version "$VERSION"
-sh hlcp-install.sh controller --version "$VERSION" --configure --apply --yes
+sh hlcp-install.sh controller --version "$VERSION" --public
+sh hlcp-install.sh controller --version "$VERSION" --public --configure --apply --yes
 ```
 
 The wizard asks for:
@@ -111,7 +114,7 @@ follow its reported next step; do not delete existing identity/history to retry.
 On the agent, as the actual Podman owner:
 
 ```sh
-sh hlcp-install.sh agent --version "$VERSION" --scope user --apply --yes
+sh hlcp-install.sh agent --version "$VERSION" --public --scope user --apply --yes
 sudo hlcp-agent prepare-user --user "$(id -un)" --apply --yes
 systemctl --user is-system-running
 loginctl show-user "$(id -un)" -p Linger
