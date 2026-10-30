@@ -46,6 +46,11 @@ func completeHLCP(args []string, out io.Writer) {
 				return nil
 			}
 			path += "/" + url.PathEscape(node) + "/resources"
+		case "tags":
+			if !cli.CompletionWord(node) {
+				return nil
+			}
+			path += "/" + url.PathEscape(node) + "/tags"
 		case "actions":
 			if !cli.CompletionWord(node) || !cli.CompletionWord(resource) {
 				return nil
@@ -54,6 +59,13 @@ func completeHLCP(args []string, out io.Writer) {
 		case "nodes":
 		default:
 			return nil
+		}
+		if kind == "tags" && len(request.Tags) > 0 {
+			query := url.Values{}
+			for _, tag := range request.Tags {
+				query.Add("tag", tag)
+			}
+			path += "?" + query.Encode()
 		}
 		r, err := http.NewRequestWithContext(ctx, http.MethodGet, api+path, nil)
 		if err != nil {
@@ -72,12 +84,16 @@ func completeHLCP(args []string, out io.Writer) {
 		if response.StatusCode != 200 {
 			return nil
 		}
-		data, err := io.ReadAll(io.LimitReader(response.Body, (256<<10)+1))
-		if err != nil || len(data) > 256<<10 {
+		bodyLimit := int64(256 << 10)
+		if kind == "tags" {
+			bodyLimit = 512 << 10
+		}
+		data, err := io.ReadAll(io.LimitReader(response.Body, bodyLimit+1))
+		if err != nil || int64(len(data)) > bodyLimit {
 			return nil
 		}
 		var values []string
-		if kind == "actions" {
+		if kind == "actions" || kind == "tags" {
 			if json.Unmarshal(data, &values) != nil {
 				return nil
 			}

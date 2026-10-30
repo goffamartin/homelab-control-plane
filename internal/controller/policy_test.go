@@ -45,6 +45,12 @@ func TestScopedAPIInventoryResultsAndExecutionDenied(t *testing.T) {
 		}
 		tracker.CompleteNode("n", protocol.CommandResultPayload{CommandID: resource, Success: true, Code: "OK", Message: resource})
 	}
+	for _, node := range []string{"n", "hidden-node"} {
+		record := server.registry.nodes[node]
+		record.Inventory.Resources[0].Tags = []string{"shared", "visible"}
+		record.Inventory.Resources[1].Tags = []string{"shared", "hidden-secret-tag"}
+		server.registry.nodes[node] = record
+	}
 	before, err := os.ReadFile(filepath.Join(dir, "ledger.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -56,6 +62,10 @@ func TestScopedAPIInventoryResultsAndExecutionDenied(t *testing.T) {
 	}{
 		{"GET", "/v1/nodes", "", 200}, {"GET", "/v1/nodes/n", "", 200}, {"GET", "/v1/nodes/n/actions", "", 200},
 		{"GET", "/v1/nodes/n/resources", "", 200}, {"GET", "/v1/nodes/n/resources/catalog", "", 200}, {"GET", "/v1/nodes/n/resources/catalog/actions", "", 200},
+		{"GET", "/v1/nodes/n/resources?tag=shared", "", 200},
+		{"GET", "/v1/nodes/n/resources?tag=hidden-secret-tag", "", 200},
+		{"GET", "/v1/nodes/n/tags", "", 200}, {"GET", "/v1/nodes/n/tags?tag=shared", "", 200},
+		{"GET", "/v1/nodes/hidden-node/tags", "", 403},
 		{"GET", "/v1/nodes/hidden-node", "", 403}, {"GET", "/v1/nodes/n/resources/hidden-resource", "", 403}, {"GET", "/v1/nodes/n/resources/hidden-resource/actions", "", 403},
 		{"GET", "/v1/nodes/n/commands/catalog", "", 200}, {"GET", "/v1/nodes/n/commands/hidden-resource", "", 404},
 		{"POST", "/v1/nodes/n/resolve", `{"command_id":"preview","resource_id":"catalog","action":"restart"}`, 200},

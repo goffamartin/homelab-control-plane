@@ -31,9 +31,13 @@ type ResourceDescriptor struct {
 	ID      string   `cbor:"id" json:"id"`
 	Type    string   `cbor:"type" json:"type"`
 	Actions []string `cbor:"actions" json:"actions"`
+	Tags    []string `cbor:"tags,omitempty" json:"tags,omitempty"`
 }
 
 func (resource ResourceDescriptor) validate() error {
+	if err := ValidateTags(resource.Tags); err != nil {
+		return err
+	}
 	if !isIdentifier(resource.ID, maxResourceIDLength) || !isIdentifier(resource.Type, maxResourceTypeLength) {
 		return ErrInvalidResource
 	}

@@ -1,6 +1,9 @@
 package cli
 
-import "strings"
+import (
+	"hlcp/internal/protocol"
+	"strings"
+)
 
 type CompletionLookup func(kind, node, resource string) []string
 
@@ -33,6 +36,15 @@ func CompletionRequest(args []string) (Request, bool) {
 	for i := 0; i < len(args)-1; i++ {
 		var target *string
 		switch args[i] {
+		case "-t", "--tag":
+			if i+1 < len(args)-1 {
+				i++
+				r.Tags = append(r.Tags, args[i])
+				if protocol.ValidateTags(r.Tags) != nil {
+					return Request{}, false
+				}
+			}
+			continue
 		case "-n", "--node":
 			target = &r.Node
 		case "-r", "--resource":
@@ -51,7 +63,7 @@ func CompletionRequest(args []string) (Request, bool) {
 			}
 			continue
 		}
-		if target != nil && i+1 < len(args)-1 {
+		if target != nil && i+1 < len(args)-1 && !strings.HasPrefix(args[i+1], "-") {
 			i++
 			*target = args[i]
 		}
@@ -70,8 +82,9 @@ func CompletionCandidates(command string, args []string, lookup CompletionLookup
 	for i := 0; i < len(words); i++ {
 		prev = words[i]
 		switch words[i] {
-		case "-n", "--node", "-r", "--resource", "-a", "--action", "--api", "--api-token-file", "--config", "--tail", "--since", "--until", "--contains", "--stream", "--cursor", "--limit", "--command-id", "--result", "--scope", "--unit", "--adapter", "--output-file":
-			if i+1 < len(words) {
+		case "-n", "--node", "-r", "--resource", "-a", "--action", "-t", "--tag", "--api", "--api-token-file", "--config", "--tail", "--since", "--until", "--contains", "--stream", "--cursor", "--limit", "--command-id", "--result", "--scope", "--unit", "--adapter", "--output-file":
+			selector := words[i] == "-n" || words[i] == "-r" || words[i] == "-a" || words[i] == "--node" || words[i] == "--resource" || words[i] == "--action"
+			if i+1 < len(words) && !(selector && strings.HasPrefix(words[i+1], "-")) {
 				i++
 				prev = ""
 			}
@@ -85,6 +98,10 @@ func CompletionCandidates(command string, args []string, lookup CompletionLookup
 		}
 	}
 	switch prev {
+	case "-t", "--tag":
+		if command == "hlcp" && CompletionWord(r.Node) && len(r.Tags) < protocol.MaxResourceTags {
+			dynamic("tags")
+		}
 	case "--scope":
 		add("user system")
 	case "--unit":
@@ -104,7 +121,7 @@ func CompletionCandidates(command string, args []string, lookup CompletionLookup
 			dynamic("nodes")
 		}
 	case "-r", "--resource":
-		if command == "hlcp" && CompletionWord(r.Node) {
+		if command == "hlcp" && CompletionWord(r.Node) && len(r.Tags) == 0 {
 			dynamic("resources")
 		}
 	case "-a", "--action":
@@ -149,7 +166,7 @@ func CompletionCandidates(command string, args []string, lookup CompletionLookup
 				}
 			}
 			if !admin {
-				add("-n -r -a --node --nodes --resource --resources --action --actions --result --command-id --api --api-token-file --config --json --dry-run --help --version --tail --since --until --contains --stream --cursor --limit --follow")
+				add("-n -r -a -t --tag --node --nodes --resource --resources --action --actions --result --command-id --api --api-token-file --config --json --dry-run --help --version --tail --since --until --contains --stream --cursor --limit --follow")
 			}
 		} else if command == "hlcp-agent" {
 			if len(words) == 0 {
@@ -212,6 +229,11 @@ func CompletionCandidates(command string, args []string, lookup CompletionLookup
 	result := []string{}
 	seen := map[string]bool{}
 	for _, c := range candidates {
+		if prev == "-t" || prev == "--tag" {
+			if !protocol.ValidTag(c) || protocol.MatchesTags(r.Tags, []string{c}) {
+				continue
+			}
+		}
 		safe := CompletionWord(c) || strings.HasPrefix(c, "-") && safeCompletionFlag(c)
 		if safe && strings.HasPrefix(c, prefix) && !seen[c] {
 			result = append(result, c)

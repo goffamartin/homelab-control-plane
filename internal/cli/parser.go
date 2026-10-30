@@ -12,6 +12,17 @@ func Parse(args []string) (Request, error) {
 	seen := make(map[string]bool)
 	for index := 0; index < len(args); index++ {
 		argument := args[index]
+		if argument == "-t" || argument == "--tag" {
+			if index+1 >= len(args) {
+				return Request{}, fmt.Errorf("tag requires a value")
+			}
+			index++
+			request.Tags = append(request.Tags, args[index])
+			if protocol.ValidateTags(request.Tags) != nil {
+				return Request{}, protocol.ErrInvalidTags
+			}
+			continue
+		}
 		group := argument
 		switch argument {
 		case "-n", "--node", "--nodes":
@@ -127,6 +138,9 @@ func Parse(args []string) (Request, error) {
 	}
 	if request.Help || request.Version {
 		return request, nil
+	}
+	if len(request.Tags) != 0 && (request.Node == "" || !request.ResourceSpecified || request.Resource != "" || request.ActionSpecified || request.Lookup || request.CommandID != "" || request.DryRun || request.Logs != nil) {
+		return Request{}, fmt.Errorf("tags filter a selected node's resource list only; use -n NODE -r -t TAG")
 	}
 	if request.Logs != nil {
 		l := request.Logs

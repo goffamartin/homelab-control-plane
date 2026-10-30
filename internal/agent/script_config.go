@@ -66,7 +66,7 @@ func (resource ResourceConfig) ScriptActions() []string {
 }
 
 func (resource ResourceConfig) validateCommands() error {
-	inventory := protocol.InventorySnapshot{Revision: 1, Resources: []protocol.ResourceDescriptor{{ID: resource.ID, Type: resource.Type, Actions: resource.Actions}}}
+	inventory := protocol.InventorySnapshot{Revision: 1, Resources: []protocol.ResourceDescriptor{{ID: resource.ID, Type: resource.Type, Actions: resource.Actions, Tags: resource.Tags}}}
 	if err := inventory.Validate(); err != nil {
 		return err
 	}
