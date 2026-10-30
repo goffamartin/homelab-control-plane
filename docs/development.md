@@ -48,9 +48,9 @@ new output directories. The signing key must match `deploy/install/release.pub`;
 never generate a replacement key as a build fallback or publish the private key.
 
 ```sh
-go run ./tools/release -version v1.0.0 -out dist/first \
+go run ./tools/release -version v1.1.0 -out dist/first \
   -signing-key /private/release.key
-go run ./tools/release -version v1.0.0 -out dist/second \
+go run ./tools/release -version v1.1.0 -out dist/second \
   -signing-key /private/release.key
 diff -u dist/first/SHA256SUMS dist/second/SHA256SUMS
 (cd dist/first && sha256sum -c SHA256SUMS)

@@ -43,7 +43,7 @@ setup, including subordinate UID/GID mappings if needed, before configuring HLCP
 On each host, in a new working directory:
 
 ```sh
-VERSION=v1.0.0
+VERSION=v1.1.0
 HLCP_DOWNLOAD_DIR=$(mktemp -d "$HOME/hlcp-download.XXXXXXXX")
 cd "$HLCP_DOWNLOAD_DIR"
 curl --disable --proto '=https' --proto-redir '=https' --tlsv1.2 \

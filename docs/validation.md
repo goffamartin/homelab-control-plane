@@ -1,4 +1,24 @@
-# v1.0 validation and limitations
+# Validation and limitations
+
+## v1.1.0 resource tags — 2026-10-30
+
+Automated validation covers YAML/tag limits, optional CBOR metadata and frozen
+v1 descriptor compatibility, registry deep copies, scoped HTTP filtering/catalogs,
+CLI text/JSON, rejection of filters against older controllers, and safe Bash
+completion. The real CLI/mTLS recovery test transfers tags from agent to controller,
+checks AND filtering without actions, and on Linux exercises actual Bash tag
+completion against the authenticated catalog. Windows tests/vet and Linux race
+tests/vet passed locally. No runtime dependency or persistence format changed.
+
+Production VM tag filtering has not yet been observed for this release. On
+2026-10-30 an operator's preview.10 deployment listed four application containers
+plus a tunnel resource, returned a running application status and read another
+application's retained logs. That proves the existing integration path, not
+deployment or live tag acceptance of the new binaries. Update controller/CLI
+before the agent and only then add tag fields. Earlier deferred recovery,
+certificate, runtime/platform and research gates below remain deferred.
+
+## v1.0 baseline
 
 Status date: **2026-10-19**. This page separates observed behavior from proposed
 tests. The v1.0 release scope is the single-controller Debian/rootless-Podman

@@ -1,6 +1,6 @@
 # Documentation
 
-These guides describe the v1.0 operator interface. Start with the first guide;
+These guides describe the v1.1 operator interface. Start with the first guide;
 advanced internals are optional.
 Unreleased additions are explicitly marked and require new binaries before use.
 

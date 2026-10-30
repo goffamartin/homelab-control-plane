@@ -64,10 +64,10 @@ No `resources configure/remove` mutation workflow exists; edit YAML instead.
 After restart/reconnect, inspect inventory from the controller with `hlcp -n
 debian-01 -r`. Changing YAML does not create, pull, start or delete containers.
 
-## Resource tags (unreleased)
+## Resource tags (since 1.1.0)
 
 This addition is not in v1.0.0 or preview.10. Upgrade the controller/local CLI
-first and then the agent to a release containing tag support **before** adding
+first and then the agent to 1.1.0 or newer **before** adding
 `tags` to YAML; older agents correctly reject the unknown configuration field.
 
 Resources can belong to multiple logical groups without changing their ID,
