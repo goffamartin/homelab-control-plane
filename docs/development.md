@@ -1,9 +1,15 @@
 # Development and releases
 
 HLCP uses Go and CBOR. The pinned compiler is recorded in `.go-version` and
-`go.mod` (Go 1.27.2 for this release). YAML and CBOR dependencies are pinned in
+`go.mod` (Go 1.27.3 for this release). YAML and CBOR dependencies are pinned in
 `go.mod`/`go.sum`; YAML v4 is currently a release-candidate dependency, not a
 claim of a stable upstream v4. Review dependency changes with the full suite.
+
+Go 1.27.3 incorporates the `crypto/x509` certificate-distrust update described in
+[GO-2026-6809](https://pkg.go.dev/vuln/GO-2026-6809). The source scanner identified
+a reachable `Certificate.Verify` call with the previous compiler. Rebuild runtime
+binaries with the new compiler; changing a host's installed Go alone does not
+patch an existing HLCP binary. This is not evidence of a compromised HLCP identity.
 
 ## Local checks
 

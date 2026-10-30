@@ -10,6 +10,11 @@ checks AND filtering without actions, and on Linux exercises actual Bash tag
 completion against the authenticated catalog. Windows tests/vet and Linux race
 tests/vet passed locally. No runtime dependency or persistence format changed.
 
+Release preparation subsequently found GO-2026-6809 in Go 1.27.2's `crypto/x509`.
+The release compiler is pinned to the fixed Go 1.27.3. Release qualification
+requires all gates to pass with that compiler; earlier green runs with 1.27.2
+do not substitute for that check. See the release's exact-commit CI evidence.
+
 Production VM tag filtering has not yet been observed for this release. On
 2026-10-30 an operator's preview.10 deployment listed four application containers
 plus a tunnel resource, returned a running application status and read another
