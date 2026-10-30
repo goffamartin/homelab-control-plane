@@ -114,7 +114,7 @@ func main() {
 	case "node-actions":
 		get(api + "/v1/nodes/" + url.PathEscape(request.Node) + "/actions")
 	case "resources":
-		get(api + "/v1/nodes/" + url.PathEscape(request.Node) + "/resources")
+		getResources(api, request)
 	case "actions":
 		get(api + "/v1/nodes/" + url.PathEscape(request.Node) + "/resources/" + url.PathEscape(request.Resource) + "/actions")
 	case "resource":
@@ -149,6 +149,36 @@ func get(url string) {
 	}
 	defer response.Body.Close()
 	outputResponse(response)
+}
+
+func getResources(api string, request cli.Request) {
+	address := api + "/v1/nodes/" + url.PathEscape(request.Node) + "/resources"
+	query := url.Values{}
+	for _, tag := range request.Tags {
+		query.Add("tag", tag)
+	}
+	if len(query) != 0 {
+		address += "?" + query.Encode()
+	}
+	response, err := authenticatedRequest(http.MethodGet, address, nil)
+	if err != nil {
+		fail(err)
+	}
+	defer response.Body.Close()
+	if err := requireTagFiltering(response, request.Tags); err != nil {
+		if outputMode == "json" {
+			output(map[string]any{"schema_version": 1, "code": "TAGS_UNSUPPORTED", "message": err.Error()})
+		}
+		exitError(err, 4)
+	}
+	outputResponse(response)
+}
+
+func requireTagFiltering(response *http.Response, tags []string) error {
+	if len(tags) != 0 && response.StatusCode >= http.StatusOK && response.StatusCode < http.StatusMultipleChoices && response.Header.Get(localapi.ResourceTagsHeader) != "1" {
+		return fmt.Errorf("controller does not support resource tag filtering; upgrade the controller before using --tag")
+	}
+	return nil
 }
 
 func post(url string, value any) {
@@ -282,6 +312,7 @@ Options:
   --version           print build metadata without contacting the API
   --dry-run           validate without sending a command
   --json              machine-readable output
+  -t, --tag <tag>      filter a selected node's resource list; repeat for AND
   --command-id <id>   stable ID for a resource action (otherwise generated)
   --result <id>       read-only result lookup; requires --node / -n <id>
   --api <url>         controller loopback API (default: ` + defaultAPI + `)
@@ -309,6 +340,8 @@ Configure does not grant access, change controller policy, or start services.
 
 Selectors cannot be repeated or combined with their singular/plural alternatives.
 Resource/action discovery requires a selected node. Long singular forms require values.
+Tags are exact lowercase metadata, not authorization or a bulk-action selector.
+Example: hlcp -n debian-01 -r -t kostka -t production --json
 Default output is text; --json preserves API JSON on stdout. Diagnostics and the
 command ID before submission go to stderr. Dry-run validates a snapshot only.
 Action names come from the resource inventory (including custom script actions).

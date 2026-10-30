@@ -83,6 +83,7 @@ hlcp -n <Tab>                        # visible node IDs
 hlcp -n debian-01 -r <Tab>            # visible resources
 hlcp -n debian-01 -r app -a <Tab>     # enabled resource action names
 hlcp -n debian-01 -r app -a logs --stream <Tab>
+hlcp -n debian-01 -r -t <Tab>           # tags; unreleased, requires new controller
 ```
 
 Static command/flag completion is offline. Dynamic node/resource/action lists

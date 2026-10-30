@@ -27,4 +27,5 @@ type Request struct {
 	Lookup            bool
 	ConfigFile        string
 	Logs              *LogOptions
+	Tags              []string
 }

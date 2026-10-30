@@ -30,6 +30,12 @@ func renderText(out io.Writer, value any) error {
 			break
 		}
 		keys := []string{"id", "type", "actions"}
+		for _, item := range value {
+			if row, ok := item.(map[string]any); ok && row["tags"] != nil {
+				keys = []string{"id", "type", "tags", "actions"}
+				break
+			}
+		}
 		if _, nodes := first["node_id"]; nodes {
 			keys = []string{"node_id", "state", "agent_version", "last_activity"}
 		}

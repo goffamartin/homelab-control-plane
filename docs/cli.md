@@ -34,6 +34,58 @@ Reusing an ID with a different payload is a conflict. Retention bounds replay
 protection; unknown outcomes require inspection, not blind retries. A successful
 runtime result does not prove the application is healthy.
 
+## Resource tag filters (unreleased)
+
+Requires a controller/CLI and agent release containing tag support; not available
+in v1.0.0/preview.10. Configure [resource tags](configuration.md) on the agent,
+then list matching resources on one selected node:
+
+```sh
+hlcp -n debian-01 -r --tag kostka
+hlcp -n debian-01 -r -t kostka -t production --json
+```
+
+`-t` and `--tag` are aliases; repeat for AND (all tags must match). Matching is
+exact and case-sensitive; use lowercase identifiers, not globs, expressions or
+comma-separated values. Unknown tags return an empty list. Without filters,
+untagged resources remain visible. Maximum 16 unique filters of 64 bytes each.
+Filters are valid only on resource lists, never a specific resource/action,
+result lookup or dry-run. They do not dispatch actions or grant permissions.
+
+Text lists show a `TAGS` column when any row has tags. JSON adds optional `tags`
+arrays to inventory descriptors; empty tags are omitted. Bash completes tag
+values from the selected node's authorized tag catalog. Already selected tags
+are excluded; additional suggestions come from resources matching prior filters.
+
+An older controller can ignore unknown query parameters. The new CLI therefore
+requires `X-HLCP-Resource-Tags: 1` on a successful filtered response; otherwise it
+exits 4 instead of showing an unfiltered list. JSON mode reports
+`schema_version: 1`, `code: TAGS_UNSUPPORTED` and a fixed upgrade message.
+Ordinary unfiltered navigation remains compatible. Old controllers discard
+unknown inventory tag fields, so upgrade the controller before relying on tags.
+
+### Local API for web clients
+
+```text
+GET /v1/nodes/{node}/resources?tag=kostka&tag=production
+GET /v1/nodes/{node}/tags
+GET /v1/nodes/{node}/tags?tag=kostka
+```
+
+The first returns the existing resource array filtered with AND. The catalog
+returns sorted unique tag strings belonging only to visible resources; optional
+filters restrict the contributing resources. Empty results are `[]`, not null.
+Both endpoints require the existing loopback/bearer/Host/Origin protections.
+Resource scope is applied before matching/catalog extraction. Unknown query keys,
+malformed encoding, invalid/empty/duplicate tags and queries over 2048 bytes
+return HTTP 400 `INVALID_QUERY`, without reflecting supplied values.
+
+Tags do not change CBOR protocol version, durable commands, journals or ledgers.
+The optional inventory map field is omitted when empty and ignored by v1's old
+decoder; it does not change old untagged wire encodings. YAML unknown-field
+validation remains strict on old agents. No remote YAML editor or tag mutation
+API is added.
+
 ## Container logs
 
 ```sh

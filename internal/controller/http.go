@@ -96,12 +96,29 @@ func (server *Server) HTTPHandlerWithAuthorizer(authorizer *localapi.Authorizer)
 		writeJSON(writer, []string{"status"})
 	})
 	handle("GET /v1/nodes/{node}/resources", func(writer http.ResponseWriter, request *http.Request) {
+		tags, valid := resourceTagQuery(writer, request)
+		if !valid {
+			return
+		}
 		record, ok := server.registry.Get(request.PathValue("node"))
 		if !ok {
 			localapi.Error(writer, http.StatusNotFound, "NODE_NOT_FOUND", "node not found")
 			return
 		}
-		writeJSON(writer, scopedRecord(request.Context(), record).Inventory.Resources)
+		writer.Header().Set(localapi.ResourceTagsHeader, "1")
+		writeJSON(writer, filterResourceTags(scopedRecord(request.Context(), record).Inventory.Resources, tags))
+	})
+	handle("GET /v1/nodes/{node}/tags", func(writer http.ResponseWriter, request *http.Request) {
+		tags, valid := resourceTagQuery(writer, request)
+		if !valid {
+			return
+		}
+		record, ok := server.registry.Get(request.PathValue("node"))
+		if !ok {
+			localapi.Error(writer, http.StatusNotFound, "NODE_NOT_FOUND", "node not found")
+			return
+		}
+		writeJSON(writer, resourceTags(filterResourceTags(scopedRecord(request.Context(), record).Inventory.Resources, tags)))
 	})
 	handle("GET /v1/nodes/{node}/resources/{resource}/actions", func(writer http.ResponseWriter, request *http.Request) {
 		record, ok := server.registry.Get(request.PathValue("node"))

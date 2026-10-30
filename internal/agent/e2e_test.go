@@ -19,9 +19,11 @@ import (
 	"testing"
 	"time"
 
+	"hlcp/deploy/completion"
 	"hlcp/internal/command"
 	"hlcp/internal/controller"
 	"hlcp/internal/liveness"
+	"hlcp/internal/protocol"
 	"hlcp/internal/telemetry"
 	"hlcp/internal/transport"
 )
@@ -235,9 +237,37 @@ func TestE2ECLIWithMTLSAndDurableRecovery(t *testing.T) {
 				CertificateFile: clientFiles.CertificateFile, PrivateKeyFile: clientFiles.PrivateKeyFile, CAFile: clientFiles.CAFile,
 				NodeID: "debian-01", AgentVersion: "e2e", Capabilities: []string{"resource.control", "docker"},
 				JournalFile: filepath.Join(directory, "agent.json"), runner: runner,
-				Resources: []ResourceConfig{{ID: "catalog", Type: "container", Adapter: "docker", Target: "catalog", Actions: []string{"status", "restart"}}},
+				Resources: []ResourceConfig{{ID: "catalog", Type: "container", Adapter: "docker", Target: "catalog", Actions: []string{"status", "restart"}, Tags: []string{"kostka", "production"}}},
 			}
 			stopAgent := startE2EAgent(t, config)
+			e2eEventually(t, "tagged inventory through mTLS", func() bool {
+				r, ok := fixture.server.Registry().Get(config.NodeID)
+				return ok && len(r.Inventory.Resources) == 1 && len(r.Inventory.Resources[0].Tags) == 2
+			})
+			tagged := e2eCLI(binary, fixture.api.URL, token, "-r", "-t", "kostka", "--tag", "production")
+			requireE2ECLI(t, tagged, 0)
+			var taggedResources []protocol.ResourceDescriptor
+			if json.Unmarshal([]byte(tagged.stdout), &taggedResources) != nil || len(taggedResources) != 1 || taggedResources[0].ID != "catalog" || !protocol.MatchesTags(taggedResources[0].Tags, []string{"kostka", "production"}) {
+				t.Fatal("tagged CLI inventory lost metadata", tagged)
+			}
+			missing := e2eCLI(binary, fixture.api.URL, token, "-r", "-t", "kostka", "-t", "frontend")
+			requireE2ECLI(t, missing, 0)
+			if strings.TrimSpace(missing.stdout) != "[]" || runner.calls.Load() != 0 {
+				t.Fatal("AND filter returned a nonmatch or executed an action", missing, runner.calls.Load())
+			}
+			if runtime.GOOS == "linux" {
+				bash := exec.Command("/bin/bash", "--noprofile", "--norc")
+				bash.Env = append(os.Environ(), "PATH="+buildDirectory+":/usr/bin:/bin", "HLCP_TEST_API="+fixture.api.URL, "HLCP_TEST_TOKEN_FILE="+token)
+				bash.Stdin = strings.NewReader(completion.Bash("hlcp") + `
+COMP_WORDS=(hlcp --api "$HLCP_TEST_API" --api-token-file "$HLCP_TEST_TOKEN_FILE" -n debian-01 -r -t kostka --tag p)
+COMP_CWORD=11
+_hlcp_complete
+printf '%s\n' "${COMPREPLY[@]}"
+`)
+				if out, err := bash.CombinedOutput(); err != nil || string(out) != "production\n" || runner.calls.Load() != 0 {
+					t.Fatalf("real Bash tag completion: %q %v", out, err)
+				}
+			}
 			t.Cleanup(func() {
 				if t.Failed() {
 					data, err := os.ReadFile(config.JournalFile)

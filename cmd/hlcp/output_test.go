@@ -12,6 +12,7 @@ func TestTextRendering(t *testing.T) {
 		{`[]`, "(none)"}, {`null`, "(none)"}, {`["status","restart"]`, "ACTION"},
 		{`[{"node_id":"n","state":"offline","agent_version":"dev"}]`, "offline"},
 		{`[{"id":"catalog","type":"container","actions":["status"]}]`, "catalog"},
+		{`[{"id":"plain","type":"container","actions":["status"]},{"id":"tagged","type":"container","tags":["kostka"],"actions":["status"]}]`, "TAGS"},
 		{`{"id":"catalog","observation":{"state":"stopped","stale":true}}`, "observation.stale"},
 		{`{"message":"bad\u001b[31m\nrow\tvalue"}`, "bad [31m row value"},
 	} {

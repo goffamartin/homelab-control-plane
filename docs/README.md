@@ -2,6 +2,7 @@
 
 These guides describe the v1.0 operator interface. Start with the first guide;
 advanced internals are optional.
+Unreleased additions are explicitly marked and require new binaries before use.
 
 1. [Getting started](getting-started.md): signed installation and first resource.
 2. [Configuration](configuration.md): YAML, container actions and local scripts.

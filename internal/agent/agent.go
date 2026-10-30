@@ -34,6 +34,7 @@ type ResourceConfig struct {
 	Adapter  string                         `yaml:"adapter"`
 	Target   string                         `yaml:"target"`
 	Actions  []string                       `yaml:"actions"`
+	Tags     []string                       `yaml:"tags,omitempty"`
 	Commands map[string]ScriptCommandConfig `yaml:"commands,omitempty"`
 }
 
@@ -223,7 +224,7 @@ func (config Config) synchronization() (session.Synchronization, error) {
 	inventory := protocol.InventorySnapshot{Revision: 1}
 	state := protocol.StateSnapshot{InventoryRevision: 1}
 	for _, r := range config.Resources {
-		inventory.Resources = append(inventory.Resources, protocol.ResourceDescriptor{ID: r.ID, Type: r.Type, Actions: r.Actions})
+		inventory.Resources = append(inventory.Resources, protocol.ResourceDescriptor{ID: r.ID, Type: r.Type, Actions: append([]string(nil), r.Actions...), Tags: append([]string(nil), r.Tags...)})
 		state.Resources = append(state.Resources, protocol.ResourceState{ResourceID: r.ID, State: "unknown", Code: "NOT_OBSERVED"})
 	}
 	if err := inventory.Validate(); err != nil {

@@ -117,6 +117,7 @@ func cloneInventory(inventory protocol.InventorySnapshot) protocol.InventorySnap
 	inventory.Resources = append([]protocol.ResourceDescriptor(nil), inventory.Resources...)
 	for index := range inventory.Resources {
 		inventory.Resources[index].Actions = cloneStrings(inventory.Resources[index].Actions)
+		inventory.Resources[index].Tags = cloneStrings(inventory.Resources[index].Tags)
 	}
 	return inventory
 }

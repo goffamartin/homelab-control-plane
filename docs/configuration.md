@@ -64,6 +64,40 @@ No `resources configure/remove` mutation workflow exists; edit YAML instead.
 After restart/reconnect, inspect inventory from the controller with `hlcp -n
 debian-01 -r`. Changing YAML does not create, pull, start or delete containers.
 
+## Resource tags (unreleased)
+
+This addition is not in v1.0.0 or preview.10. Upgrade the controller/local CLI
+first and then the agent to a release containing tag support **before** adding
+`tags` to YAML; older agents correctly reject the unknown configuration field.
+
+Resources can belong to multiple logical groups without changing their ID,
+adapter, permissions or actions. Merge the optional `tags` field into your
+existing resources, for example:
+
+```yaml
+capabilities: [resource.control, podman]
+resources:
+  - id: kostka-web
+    type: container
+    adapter: podman
+    target: kostka-web
+    tags: [kostka, production, frontend]
+    actions: [status, restart, logs]
+```
+
+Tags are exact lowercase identifiers: start with `a-z` or `0-9`, then use those
+characters or `.`, `_`, `-`. Maximum 16 unique tags per resource, 64 ASCII bytes
+per tag. Empty, duplicate, uppercase and malformed tags are refused, not silently
+normalized. Missing/null/empty lists mean untagged. No extra capability is needed.
+Tag values are visible inventory metadata; do not store secrets in them.
+
+Use application (`kostka`, `medaile`), environment (`production`) and component
+(`frontend`, `backend`, `tunnel`) tags as needed. There is no fixed vocabulary or
+single owner group; shared infrastructure can have several application tags.
+After editing, validate and restart the agent normally. Containers are not
+restarted by a metadata edit. Tags are filters, not authorization or dependency
+ordering, and do not enable bulk restart/stop commands.
+
 ## Custom named actions
 
 You can add fixed local scripts to any resource, including a container:
