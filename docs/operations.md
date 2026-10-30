@@ -17,7 +17,7 @@ of controller connectivity.
 ## Update an existing managed installation
 
 Use a trusted helper downloaded for the intended release, as described in
-[Getting started](getting-started.md). Set `VERSION=v1.0.0` for this release.
+[Getting started](getting-started.md). Set `VERSION=v1.1.0` for this release.
 Public downloads need `curl` and the explicit `--public` flag, not a GitHub
 account or token. Keep a consistent private backup first. Update the controller
 before agents. Do not use fresh-install `--configure` on an existing installation.
@@ -47,6 +47,12 @@ retrying an incomplete update.
 Verify installed versions on both hosts, agent service state, controller service
 state and `hlcp -n`, then query a known resource. Existing resources do not need
 re-pairing merely because binaries were upgraded.
+
+For resource tags, update both controller/CLI and agent to 1.1.0 before adding
+`tags` to YAML. Older agents reject that field; older controllers discard its
+inventory metadata. The new CLI refuses unsupported filtering rather than
+silently showing an unfiltered list. No journal/ledger reset or schema migration
+is needed. See [configuration](configuration.md) and [CLI](cli.md).
 
 ## Common problems
 

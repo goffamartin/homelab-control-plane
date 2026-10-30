@@ -34,9 +34,9 @@ Reusing an ID with a different payload is a conflict. Retention bounds replay
 protection; unknown outcomes require inspection, not blind retries. A successful
 runtime result does not prove the application is healthy.
 
-## Resource tag filters (unreleased)
+## Resource tag filters (since 1.1.0)
 
-Requires a controller/CLI and agent release containing tag support; not available
+Requires controller/CLI and agent 1.1.0 or newer; not available
 in v1.0.0/preview.10. Configure [resource tags](configuration.md) on the agent,
 then list matching resources on one selected node:
 

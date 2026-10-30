@@ -83,7 +83,7 @@ hlcp -n <Tab>                        # visible node IDs
 hlcp -n example-node -r <Tab>            # visible resources
 hlcp -n example-node -r app -a <Tab>     # enabled resource action names
 hlcp -n example-node -r app -a logs --stream <Tab>
-hlcp -n example-node -r -t <Tab>           # tags; unreleased, requires new controller
+hlcp -n example-node -r -t <Tab>           # tags; requires controller/CLI 1.1.0+
 ```
 
 Static command/flag completion is offline. Dynamic node/resource/action lists
