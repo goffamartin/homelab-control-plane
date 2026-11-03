@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "source": "Anonymized summary of operator-provided version and environment commands, 2026-11-03",
+  "classification": "experiment preparation, not a performance result",
+  "core_version": "v1.1.0",
+  "core_revision": "0f119514b1739652d709aee7b07db742d44dc0a0",
+  "go_version": "go1.27.3",
+  "platform": "linux/amd64",
+  "controller": {"available_processors_nproc": 2, "os_visible_total_memory_mib": 1906},
+  "agent": {"available_processors_nproc": 2, "os_visible_total_memory_mib": 1906, "podman_version": "5.4.2"},
+  "redactions": ["Internal addresses", "Hostnames and node identity", "Account names", "Application/container inventory", "Live operational state and exact activity timestamps"],
+  "limitations": [
+    "Reported memory describes the VM, not the HLCP service",
+    "nproc reports accessible processing units; hypervisor allocations are not independently confirmed",
+    "Exact OS release, kernel, CPU model, image digest and SSH version remain to be recorded",
+    "The agent shares resources with ordinary application workloads",
+    "Unredacted operator output is retained locally outside the public repository"
+  ]
+}

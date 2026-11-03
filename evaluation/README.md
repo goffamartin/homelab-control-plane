@@ -145,6 +145,8 @@ series; E4 event timeline; E5 expected/observed table. A finding may favor SSH.
 
 ## Artifacts and execution order
 
+- [Pilot runbook](pilot-runbook.md): setup and commands with placeholders for private
+  host/account details, including a preflight stop if SSH is not ready.
 - `report.md`: English working draft; results and conclusions explicitly pending.
 - `presentation-outline.md`: 12-minute results talk, extended by discussion to 15 minutes.
 - `scripts/collect-environment.sh`: read-only environment inventory, no config/token dumps.

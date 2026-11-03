@@ -99,6 +99,23 @@ outcome. This behavior matters for mutation safety even if it adds execution ove
 The complete planned protocol is in [evaluation/README.md](README.md). Before final
 submission, replace prospective statements here with the exact method actually used.
 
+The operator supplied an initial environment inventory on 3 November 2026. Both
+binaries report v1.1.0 revision `0f119514b1739652d709aee7b07db742d44dc0a0`, built with
+Go 1.27.3 for Linux amd64. This is preparation evidence, not a performance result.
+
+| Parameter | Controller | Agent |
+|---|---|---|
+| Available processors (`nproc`) | 2 | 2 |
+| OS-visible total memory (`free -m`) | 1906 MiB | 1906 MiB |
+| Podman | Not part of controller role | 5.4.2 |
+
+The agent also hosts ordinary application workloads. These remain outside
+the experiment's mutation targets but contribute normal background load. Whole-VM
+used memory is not a measurement of HLCP memory consumption. Exact kernel/CPU
+details, SSH configuration and the pinned test-container image remain to be recorded
+before a final series. Source provenance and limitations are in
+[the initial inventory](environment/2026-11-03-user-inventory.json).
+
 The primary comparison measures CLI invocation to a validated terminal result on the
 controller using a monotonic clock. The three paths are HLCP with an established agent
 session, fresh SSH and SSH over an established master connection. All inspect the same
