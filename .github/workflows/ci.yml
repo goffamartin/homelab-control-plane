@@ -29,6 +29,10 @@ jobs:
         with:
           go-version-file: .go-version
           cache-dependency-path: go.sum
+      - name: Check evaluation scripts without HomeLab access
+        run: |
+          sh -n evaluation/scripts/collect-environment.sh
+          python3 -m unittest discover -s evaluation/scripts -p 'test_*.py'
       - name: Verify modules and formatting
         shell: bash
         run: |
