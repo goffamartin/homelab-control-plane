@@ -1,0 +1,4 @@
+mode,attempts,successes,failures,timeouts,median_ms,p95_ms
+hlcp,300,300,0,0,80.0190425,101.093535
+ssh_fresh,300,300,0,0,181.4239515,201.835516
+ssh_mux,300,300,0,0,69.921827,97.131941
