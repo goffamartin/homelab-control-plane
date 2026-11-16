@@ -2,7 +2,7 @@
 
 Martin Goffa — ANI-COM
 
-**Working draft, 3 November 2026. Experimental results and conclusions are pending.**
+**Working draft, 16 November 2026. Status latency results are available. The other experiments are pending.**
 
 Code repository: https://github.com/goffamartin/homelab-control-plane
 
@@ -15,8 +15,7 @@ HLCP is a controller–agent application protocol for managing explicitly config
 HomeLab resources. The implementation provides resource discovery and named actions
 through a central interface, with authenticated transport and persistent command
 identifiers. This report examines its execution overhead relative to SSH and its
-behavior during connection failures and rejected requests. **Complete this abstract
-with measured findings after the experiments; no performance conclusion is available yet.**
+behavior during connection failures and rejected requests. For live status, the observed median was 80.02 ms for HLCP, 181.42 ms for fresh SSH, and 69.92 ms for multiplexed SSH. Recovery and policy results are pending.
 
 ## 1. Problem and research question
 
@@ -136,10 +135,26 @@ evidence of whether an action actually executed.
 
 ## 5. Results
 
-**Pending experiments.** Include the final environment/version table, latency
-distributions with success/failure counts, service CPU/memory series, a recovery
-timeline and the policy test matrix. Link every figure to its raw input and analysis
-command. Implementation test counts are not substitutes for these measurements.
+### Live container status latency
+
+The 16 November 2026 run recorded 930 observations: 30 warm-ups and 900 measured
+requests across three blocks. Each mode had 300 successful measured requests and
+zero failures or timeouts. Values below are transcribed from the operator's terminal
+summary for run `e1-final-20261116T083722Z`. Raw samples and run metadata are pending
+independent verification and publication.
+
+| Mode | Successful / attempted | Median (ms) | p95 (ms) |
+|---|---:|---:|---:|
+| HLCP | 300 / 300 | 80.02 | 101.09 |
+| Fresh SSH | 300 / 300 | 181.42 | 201.84 |
+| Multiplexed SSH | 300 / 300 | 69.92 | 97.13 |
+
+Fresh SSH had 2.27 times the median latency of HLCP. HLCP's median exceeded
+multiplexed SSH by 10.10 ms (14.4%). This ordering also held in each block.
+The comparison measures the end-to-end invocation paths, so it cannot attribute
+the differences to a single protocol component.
+
+CPU and memory measurements, restart timing, recovery and policy tests are pending.
 
 ## 6. Discussion and limitations
 
