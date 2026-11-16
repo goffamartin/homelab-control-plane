@@ -1,0 +1,3 @@
+role,samples,duration_s,cpu_time_s,cpu_pct_one_core,memory_median_mib,memory_max_mib
+controller,121,120.000292179,0.065026,0.054188,11.16015625,11.41015625
+agent,121,120.000369542,3.578632,2.982184,20.796875,21.04296875

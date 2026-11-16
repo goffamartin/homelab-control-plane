@@ -1,8 +1,9 @@
 # Semester evaluation
 
-Status: protocol prepared on 2026-11-03; **no HomeLab measurements have been collected**.
-The report and presentation must distinguish implementation evidence, automated tests
-and actual experiments. No numbers in this directory represent HomeLab results yet.
+The November 2026 evaluation is documented in the [English report](report.md)
+and [Czech report](report-cs.md). The [run register](data/results.md) links the
+measured samples and outcomes. The protocol below records the intended design.
+The reports and run notes describe the executed method, including deviations.
 
 Deliverables: a concise English report, code and raw data in this Git repository,
 and a 10–15 minute presentation. The original proposal's evaluation slide commits
