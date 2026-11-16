@@ -1,0 +1,9 @@
+{
+  "phase": "final",
+  "status": "complete",
+  "blocks": 3,
+  "samples_per_mode_per_block": 10,
+  "seed": 20261116,
+  "stabilization_s": 2,
+  "hlcp_version": "v1.1.0 revision=0f119514b1739652d709aee7b07db742d44dc0a0 go1.27.3 linux/amd64"
+}
