@@ -1,7 +1,8 @@
 # Measurement data
 
-No HomeLab experiment results are present yet. Do not treat generated fixtures,
-warm-ups or pilot runs as the final evaluation dataset.
+For the submitted reports and presentation, use the [final evaluation dataset](final-agent-720dcad/README.md). The [experiment register](results.md) also lists earlier runs and their dates.
+
+## Recording a new run
 
 Use a new immutable directory for every run, e.g. `2026-11-03-e1-pilot/`, containing:
 

@@ -1,21 +1,21 @@
 # HLCP results talk
 
-Allow 14 minutes 35 seconds for the thirteen slides. Use the deployed applications to introduce the problem, then use the dedicated test container for every performance claim.
+The [presentation](HLCP_final_results_EN.pptx) has 13 English slides with Czech speaker notes. The suggested pace is about 13 minutes 55 seconds.
 
 | Slide | Time | Point to make |
 |---|---|---|
-| 1. HomeLab Control Plane | 0:45 | Start with a service whose logs the operator needs to inspect. |
-| 2. Two deployed applications | 1:00 | One application spans three containers. Tags let the operator find its resources. The web client can open a log stream. |
-| 3. Controller and agent | 1:15 | Trace a named action to the local Podman adapter and a retained result. |
-| 4. Working features | 0:55 | Show the workflow from tag and log stream to a permitted command and retained result. |
-| 5. Experiment | 1:25 | Compare the same live operation with fresh SSH and an established SSH master on one VM pair. |
-| 6. Restart trial | 1:00 | Explain exactly when timing starts and stops and how the independent inspection detects a real restart. |
-| 7. Live status | 1:15 | Use the medians and p95 values in the chart to distinguish connection setup from command execution. |
-| 8. Restart | 1:10 | All 90 trials changed the start time of the same running container. Application readiness needs a separate probe. |
-| 9. CPU | 1:10 | At one live query per second the agent service used about 7% of one logical CPU. |
-| 10. Memory | 1:05 | The three loaded agent cgroup medians were 11.91, 12.83 and 12.88 MiB. These are two-minute windows. |
-| 11. Recovery | 1:25 | On loopback, the controller detected each silent pause in about 15 seconds. After resume, the first successful live status took progressively longer. |
-| 12. Policy | 1:05 | Show one rejected restart and one retained result. Each case ran on three disposable instances. |
-| 13. Conclusion | 1:05 | The operator gains named actions and retrievable outcomes. All 90 restarts passed an independent inspection. The three polling runs returned all 480 expected results. |
+| 1. HomeLab Control Plane | 0:25 | Introduce the semester project. |
+| 2. Why I built HLCP | 0:35 | Explain the problem of finding a service and acting on it from one place. |
+| 3. Find a container from the terminal | 0:55 | Use the example commands for synthetic-node and synthetic-second. |
+| 4. Check the same container in the browser | 0:55 | Open the detail page, find the logs and see the result of the example restart. |
+| 5. How HLCP runs a command | 1:15 | Follow a request from the terminal or browser through the controller to the agent and Podman. |
+| 6. How I compared HLCP with SSH | 1:35 | Explain the three access paths, sample counts and independent restart check. |
+| 7. Status latency | 1:15 | HLCP took about 80 ms at the median. An open SSH connection was about 14 ms faster. |
+| 8. Restart latency | 1:10 | HLCP had a 6 ms higher median and an 8 ms lower p95 than open SSH in this test. |
+| 9. Agent CPU | 1:10 | At one status check per second the agent used about 7% of one logical CPU. |
+| 10. Agent memory | 1:05 | Agent medians were 12.49, 13.46 and 13.50 MB across three runs. |
+| 11. Recovery | 1:25 | Show the time to reconnect across five consecutive pauses. Explain why the agent waits longer after short sessions. |
+| 12. What HLCP allows and blocks | 1:05 | Cover certificates, permission checks and lookup of saved results. |
+| 13. What HLCP adds to the HomeLab | 1:05 | Summarize remote control, security and recovery against the measured cost. |
 
-For questions about connection reuse, CPU accounting or repeated pauses, use the [report](report.md) and the [per-run data](data/final-agent-720dcad/README.md).
+[English report](report.md) · [Czech report](report-cs.md) · [Final measurements](data/final-agent-720dcad/README.md)

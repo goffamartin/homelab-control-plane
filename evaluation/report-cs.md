@@ -2,7 +2,7 @@
 
 Martin Goffa · ANI-COM · 18. listopadu 2026
 
-[Kód projektu](https://github.com/goffamartin/homelab-control-plane) · [Podklady k měření](data/final-agent-720dcad/README.md) · [Anglická verze](report.md)
+[Kód projektu](../README.md) · [Podklady k měření](data/final-agent-720dcad/README.md) · [Anglická verze](report.md)
 
 ## Abstrakt
 
@@ -22,7 +22,7 @@ U běžící aplikace jsme přes HLCP ověřili stav kontejneru. Start, zastaven
 
 ### Jak příkaz projde systémem
 
-Web i CLI posílají požadavky kontroleru. Kontroler ověří oprávnění a předá příkaz agentovi, který běží na stroji s kontejnery. Při dotazu na stav agent požádá přímo Podman o aktuální stav kontejneru. Kontroler uloží výsledek pod ID příkazu, takže se k němu správce může vrátit později. Pokud agent po provedení akce spadne dřív, než stihne uložit výsledek, může výsledek zůstat neznámý.
+[HLCP Web](https://github.com/goffamartin/hlcp-web) i CLI posílají požadavky kontroleru. Kontroler ověří oprávnění a předá příkaz agentovi, který běží na stroji s kontejnery. Při dotazu na stav agent požádá přímo Podman o aktuální stav kontejneru. Kontroler uloží výsledek pod ID příkazu, takže se k němu správce může vrátit později. Pokud agent po provedení akce spadne dřív, než stihne uložit výsledek, může výsledek zůstat neznámý.
 
 ## 3. Jak jsme měřili
 
@@ -47,28 +47,32 @@ V tabulce latencí uvádíme medián a p95. Hodnota p95 říká, do jakého čas
 | Restart · nové SSH | 30/30 | 272,37 | 301,17 |
 | Restart · sdílené SSH | 30/30 | 159,41 | 199,46 |
 
-Nejvyšší medián mělo u obou úloh nové SSH spojení. Sdílené SSH bylo v mediánu rychlejší než HLCP o 13,60 ms u stavu a o 5,90 ms u restartu. U všech 90 restartů nezávislé čtení potvrdilo stejný kontejner, nový čas startu a stav `running`. Připravenost aplikace přijímat požadavky by vyžadovala vlastní sondu.
+Nejvyšší medián mělo u obou úloh nové SSH spojení. Sdílené SSH bylo v mediánu rychlejší než HLCP o 13,60 ms u stavu a o 5,90 ms u restartu. Při restartu mělo HLCP p95 o 8,22 ms nižší než sdílené SSH. U všech 90 restartů nezávislé čtení potvrdilo stejný kontejner, nový čas startu a stav `running`. Připravenost aplikace přijímat požadavky by vyžadovala vlastní sondu.
 
 ### Spotřeba při pravidelném dotazování
 
-| Služba | CPU v klidu (%) | CPU při 1 dotazu/s (%) | Paměť při zátěži, medián každého běhu (MiB) |
+| Služba | CPU v klidu (%) | CPU při 1 dotazu/s (%) | Paměť při zátěži, medián každého běhu (MB) |
 |---|---:|---:|---:|
-| Kontroler | 0,052–0,054 | 0,47–1,01 | 11,52 / 14,48 / 15,46 |
-| Agent | 3,00–3,03 | 6,90–7,11 | 11,91 / 12,83 / 12,88 |
+| Kontroler | 0,052–0,054 | 0,47–1,01 | 12,08 / 15,18 / 16,21 |
+| Agent | 3,00–3,03 | 6,90–7,11 | 12,49 / 13,46 / 13,50 |
 
-Všechny tři série dokončily 160 ze 160 naplánovaných dotazů. Procenta CPU jsou průměry za jednotlivá 120sekundová okna vůči jednomu logickému CPU. Paměť udává spotřebu účtovanou celé cgroup služby. Nejvyšší zaznamenaný vzorek agenta při zátěži činil 13,42 MiB.
+Všechny tři série dokončily 160 ze 160 naplánovaných dotazů. Procenta CPU jsou průměry za jednotlivá 120sekundová okna vůči jednomu logickému CPU. Paměť udává spotřebu účtovanou celé cgroup služby. Nejvyšší zaznamenaný vzorek agenta při zátěži činil 14,07 MB.
 
 ![Využití CPU na obou službách](data/final-agent-720dcad/figures/cpu.png)
 
 ### Obnova a pravidla přístupu
 
-Po ukončení agenta kontroler zaznamenal stav offline za 8,26 ms v mediánu. Od opětovného spuštění do prvního úspěšného živého dotazu uplynulo 107,69 ms v mediánu. Při pozastavení procesu s otevřeným spojením nastal stav offline za 15,03 s v mediánu. Po obnovení jsme ve všech pěti případech ověřili novou relaci a živý stav. Doba do úspěšné odpovědi se pohybovala od 1,05 do 15,86 s. Pokusy následovaly krátce po sobě a prodleva mezi pokusy o připojení se mohla přenášet mezi relacemi.
+Při řádném ukončení agenta kontroler zaznamenal stav offline v mediánu za 8,26 ms. Po novém spuštění přišla první odpověď na dotaz za 107,69 ms v mediánu. [Data z řádného ukončení](data/final-agent-720dcad/clean/samples.csv)
+
+Při tichém výpadku jsme pětkrát po sobě pozastavili stejný proces s otevřeným spojením. Kontroler zaznamenal stav offline v mediánu za 15,03 s od pozastavení. Čas do nového spojení jsme měřili od chvíle, kdy jsme agenta nechali znovu běžet. Po prvním pozastavení to trvalo 0,97 s a po pátém 15,80 s. Po každém připojení prošel také dotaz na stav. [Data z opakovaných přerušení](data/final-agent-720dcad/silent/samples.csv)
+
+Agent záměrně prodlužuje prodlevu po krátkých spojeních, aby při opakovaných výpadcích nezkoušel připojení příliš často. Po alespoň minutě stabilního spojení se prodleva vrátí na výchozí hodnotu. V této sérii další pozastavení následovalo krátce po úspěšném dotazu, takže se prodleva mezi pokusy zvyšovala.
 
 TLS odmítlo spojení bez klientského certifikátu i s certifikátem od cizí autority. API vrátilo 401 při chybném tokenu, 422 při nepovoleném restartu a 409 při opětovném použití ID pro odlišný příkaz. Dohledání i zopakování původního požadavku vrátilo shodný výsledek. Všechny tři nezávislé série poskytly očekávané odpovědi.
 
 ## 5. Závěr
 
-HLCP v našem HomeLabu zjednodušilo běžný postup při kontrole služby. Z jednoho místa můžeme najít správný kontejner, podívat se do logu a zjistit, jak dopadla povolená akce. Při měření bylo HLCP časově blíž sdílenému SSH než navazování nového spojení pro každý příkaz.
+HLCP v našem HomeLabu zjednodušilo běžný postup při kontrole služby. Z jednoho místa můžeme najít správný kontejner, podívat se do logu a zjistit, jak dopadla povolená akce. Kontroler a agent se ověřují certifikáty a správce může spouštět jen povolené akce. Po přerušení se agent znovu připojí a správce může dohledat uložený výsledek. Proti sdílenému SSH přidalo HLCP v mediánu přibližně 14 ms u stavu a 6 ms u restartu. Při jednom dotazu za sekundu využíval agent asi 7 % jednoho logického CPU a jeho mediány paměti byly 12,49 až 13,50 MB.
 
 Latenci jsme měřili na jednom kontejneru a dvojici virtuálních strojů. Obnovu spojení jsme zkoušeli místně na jednom stroji a spotřebu sledovali v krátkých intervalech. Výsledky tak popisují běžné úkony v našem prostředí.
 
