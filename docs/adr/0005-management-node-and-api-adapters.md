@@ -39,6 +39,6 @@ Log transport, MCP and web remain subsequent implementation phases.
 Loopback networking remains unchanged. MCP transport/auth interoperability must
 be tested with the chosen real client; the initial endpoint stays private.
 
-The [implementation plan](../archive/08-management-node-and-mcp-plan.md) separates core
+The [original implementation plan](https://github.com/goffamartin/homelab-control-plane/blob/v1.0.0/docs/archive/08-management-node-and-mcp-plan.md) separates core
 F10/F11 acceptance from later HomeLab extensions. Web UI and mutating MCP remain
 outside the original semester MVP; deployment needs operator-selected hosts.

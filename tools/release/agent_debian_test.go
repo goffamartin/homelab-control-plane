@@ -51,7 +51,7 @@ func TestAgentPackageContentsAndReproducibility(t *testing.T) {
 		members := readDebMembers(t, data)
 		control := readDebTar(t, members["control.tar.gz"])
 		payload := readDebTar(t, members["data.tar.gz"])
-		if len(control) != 2 || len(payload) != 39 {
+		if len(control) != 2 || len(payload) != 37 {
 			t.Fatal("unexpected package files / maintainer scripts")
 		}
 		if c := payload["usr/share/bash-completion/completions/hlcp-agent"]; c.mode != 0644 || !bytes.Contains(c.data, []byte("__complete")) || !bytes.Contains(c.data, []byte("complete -F _hlcp_complete hlcp-agent")) {

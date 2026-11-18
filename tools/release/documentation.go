@@ -10,9 +10,7 @@ var operatorDocumentation = []string{
 	"reference/10-scoped-api-credentials.md",
 	"reference/11-bounded-diagnostics-api.md",
 	"reference/18-script-resource-contract.md",
-	"reference/55-administrative-output.md",
 	"reference/56-container-logs.md",
-	"reference/57-agent-service-and-bash-completion.md",
 }
 
 func operatorDocumentationSources() []string {

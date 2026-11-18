@@ -171,7 +171,7 @@ func TestControllerPackageContents(t *testing.T) {
 			t.Fatal("script permissions/LF")
 		}
 	}
-	if len(payload) != 38 {
+	if len(payload) != 36 {
 		t.Fatalf("unexpected file count: %d", len(payload))
 	}
 	for _, name := range []string{"hlcp", "hlcp-controller"} {
