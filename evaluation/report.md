@@ -1,15 +1,14 @@
-# HLCP: controlled service management in a HomeLab
+# HLCP — Managing containers in a HomeLab
 
 Martin Goffa — ANI-COM
 
 18 November 2026
 
-[Controller source at v1.1.0](https://github.com/goffamartin/homelab-control-plane/tree/v1.1.0) · [Measured agent source](https://github.com/goffamartin/homelab-control-plane/tree/720dcad18f0105f7fe65d33a1f55d4281a492a3c) ·
-[Evaluation scripts and data](https://github.com/goffamartin/homelab-control-plane/tree/90b730d631fceba9b57f402b14ba6557e3ebad3b/evaluation/data/final-agent-720dcad)
+[Project source](https://github.com/goffamartin/homelab-control-plane) · [Measurement data](data/final-agent-720dcad/README.md)
 
 ## Abstract
 
-HomeLab Control Plane (HLCP) gives an operator one interface to find a container, follow its output and invoke a permitted action. We deployed it for two applications. On a dedicated test container, median HLCP latency was 80.29 ms for live status and 165.31 ms for restart. Over an established SSH connection the same tasks took 66.69 and 159.41 ms. At one status request per second all 480 requests succeeded, and the agent used about 7% of one logical CPU.
+We run two applications across several containers in our HomeLab. We built HomeLab Control Plane (HLCP) so we could find a container, follow its logs and run an allowed action from one place. On a dedicated test container, a status check took about 80 ms through HLCP and a restart took 165 ms at the median. Opening a fresh SSH connection took longer for both tasks, while reusing one was slightly faster. At one status check per second, the agent used about 7% of one logical CPU.
 
 ## 1. Problem and research question
 
@@ -17,107 +16,33 @@ One application in our HomeLab spans three containers. A second runs in a single
 
 This deployment motivated two questions. How much time does the controller add to a live status check or restart compared with SSH? When an agent disconnects or a request exceeds its permissions, what does the operator actually observe? We timed the core CLI path on a dedicated test container. The deployed web client illustrates the workflow. Its response time and operator usability would require separate measurements.
 
-## 2. Technical background
+## 2. Design choices
 
-### Remote execution and connection reuse
+Opening an SSH connection takes time, and OpenSSH can share an existing connection across commands [1]. We measured both ways of using SSH because HLCP keeps its connection to the agent open.
 
-SSH combines an authenticated encrypted connection with remote command execution.
-Its performance depends partly on whether the client establishes a new connection
-for each command. OpenSSH supports connection sharing through ControlMaster and
-ControlPath, with ControlPersist controlling the master's lifetime [1]. The evaluation
-therefore includes both fresh and multiplexed SSH. Comparing HLCP's persistent
-agent connection only with fresh SSH would conflate connection reuse with application
-protocol overhead.
+The controller and agent authenticate each other with TLS certificates [2]. The controller checks which actions the caller may run, and the agent only exposes actions configured for each resource. They exchange messages encoded in CBOR [3], with a frame around each message so the receiver knows where it ends.
 
-### Transport authentication and application authorization
-
-HLCP runs as an application protocol over mutually authenticated TLS. TLS protects
-transport confidentiality and integrity and supports certificate authentication [2].
-The application still needs to bind an authenticated identity to a node and decide
-which resources and actions the caller may access. These checks belong to the
-application policy; an encrypted connection alone does not grant permission to
-restart a service. The controller's local management API has a separate credential
-boundary from the controller–agent connection.
-
-### Framing and data representation
-
-A byte stream does not preserve application message boundaries. HLCP defines bounded
-frames and typed messages for session setup, inventory, state, commands and results.
-Its Go implementation uses CBOR, a binary data representation specified in RFC 8949
-[3]. A compact representation can serve implementation goals, but this study does not
-infer a wire-size or serialization speed advantage without a separate controlled
-encoding experiment.
-
-### Uncertain command outcomes
-
-A caller can lose its connection after an operation starts and before the result
-arrives. The missing response does not reveal whether the operation ran. HLCP assigns
-a stable command identifier and persists command lifecycle information so a caller
-can query the original result and duplicate requests can be recognized. An external
-side effect and a journal update still have separate failure boundaries. A crash
-between these steps can leave the outcome unresolved.
+A restart can finish even if the operator loses the connection before hearing back. HLCP assigns each command an ID so the operator can look up a saved result later. If the agent crashes before saving the result, the outcome can remain unknown.
 
 ## 3. What we built and deployed
 
-| Component | What the operator can do | Evidence from the HomeLab |
-|---|---|---|
-| Controller and agent | Discover a node and its resources, inspect allowed actions and filter containers by application tag. | The deployed controller listed three containers under one application tag and one under the other. |
-| Container control | Request live status, start, stop or restart where configured. Look up the result by command ID. | The CLI returned the running state of a deployed application container. Every timed restart of the dedicated test container passed an independent inspection. |
-| Logs and web client | Read recent lines, filter them or follow new output in the CLI. The web dashboard provides node and resource pages and a live log view. | In the CLI we followed new output, interrupted the reader, then retrieved the last five lines after stopping the test container. We also read logs in the deployed web client. |
-| Installation and maintenance | Install Debian packages, pair a node, manage the agent service and complete commands in Bash. | After upgrading both ends to v1.1.0, the controller listed the agent online with the new version. |
+When an application has a problem, we usually start with its logs. In HLCP we can filter the container list by application and follow the output in the browser. The same containers are available from the command line. On a test container we checked that we could follow new output while it ran and read recent lines after it stopped.
+
+We also used HLCP to check the state of a live application container. Starting, stopping and restarting a container depends on which actions the administrator has enabled. We verified restarts on a dedicated test container.
 
 ### How a command runs
 
-The Go controller accepts authenticated agents and exposes a local HTTP management
-API. Agents publish configured resources and available actions. The CLI resolves a
-selected node/resource/action and submits a command with a stable ID. The agent
-executes the corresponding local adapter and returns a structured result. The
-resource allowlist bounds the remote interface; scripts are locally configured named
-actions, rather than arbitrary shell text supplied by a remote caller.
+The web interface and CLI both send requests to the controller. The controller checks access and passes the command to the agent on the host running the containers. For a live status check, the agent asks Podman for the container's current state. The caller can retrieve a saved result later using the command ID.
 
-The container adapter invokes Podman for live observation and lifecycle operations.
-Resource status performs `podman container inspect` on the agent. Inventory and node
-status read the controller's current snapshot, so they represent a different task.
-The latency comparison uses a resource status action to match direct SSH inspection.
+## 4. How we tested HLCP
 
-The agent/controller persistence mechanisms support deduplication and retained-result
-lookup. The implementation exposes uncertain states when it cannot establish an
-outcome. This behavior matters for mutation safety even if it adds execution overhead.
+The controller and agent ran on separate virtual machines, each with two logical CPUs. We used the same test container and the same account on the agent for all three access paths. A short pilot gave us a chance to check that each path worked before collecting data.
 
-## 4. Experimental method
+- **Status and restart.** We compared HLCP, SSH with a fresh connection for each command and SSH with a shared connection. After warming up the status commands, we measured 300 status checks per path. We timed another 30 restarts per path separately. We shuffled the order within each block and timed each command from launch to return. After every restart, we checked that the same container was running with a new start time.
+- **Resource use.** We sampled CPU and memory for both services over three two-minute windows at idle and three windows with one status check per second. Memory covers the entire service cgroup [4].
+- **Recovery and access.** On a temporary setup, we stopped and relaunched the agent five times and paused it with its connection open five times. We recorded when the controller noticed the interruption and when a live status check worked again. In three separate runs we also checked how HLCP handled invalid credentials, disallowed actions and requests for a saved result.
 
-The [evaluation protocol](README.md) and [run register](data/final-agent-720dcad/README.md) contain
-the procedures and measured data.
-
-All five experiments used controller v1.1.0 (revision `0f11951`) and agent revision `720dcad`, built with Go 1.27.3 for Linux amd64. The recovery and policy trials used disposable instances of these binaries.
-
-| Parameter | Controller | Agent |
-|---|---|---|
-| Available processors (`nproc`) | 2 | 2 |
-| OS-visible total memory (`free -m`) | 1906 MiB | 1906 MiB |
-| Podman | Not part of controller role | 5.4.2 |
-
-The agent also hosts ordinary application workloads. These remain outside
-the experiment's mutation targets but contribute normal background load. Whole-VM
-used memory is separate from the cgroup measurements. Detailed host and
-storage characteristics were not captured for the final runs. Source provenance is in
-[the initial inventory](environment/2026-11-03-user-inventory.json).
-
-### Preparation and pilot
-
-We checked both binary versions and used a dedicated container, `hlcp-bench`. Before timing anything, the pilot checked that HLCP and SSH under the same remote account could observe the running container. For restart, we also ran one pilot trial through each path before the final run.
-
-### Experiment procedure and success criteria
-
-| Experiment | Procedure | How we judged the outcome |
-|---|---|---|
-| E1 · Live status | We compared an established HLCP session, a fresh SSH connection per invocation and an established SSH master. After ten warm-ups per mode, we ran three blocks of 100 requests per mode and shuffled the order within each block. | A monotonic timer on the controller covered CLI launch through process return. We then checked command success and the live state `running`. We excluded warm-ups from the latency summary. |
-| E2 · Restart | In each of three blocks, we issued ten restarts per mode. Before each trial the script waited two seconds, then used SSH to inspect the container ID, test label, state and start time. | We timed the restart command alone. An independent SSH inspection then had to find the same running container with a changed start time. |
-| E3 · CPU and memory | We sampled both service cgroups once per second during three paired 120-second windows at idle and three at one live status request per second. | We divided the change in CPU time by elapsed time and reported memory per run from cgroup samples [4]. |
-| E4 · Recovery | We started a disposable controller and agent on one VM over loopback. We stopped and relaunched the agent five times. In a second series, we paused and resumed the same process five times with its socket open. | Starting at interruption, we measured time to observe offline. Starting at relaunch or resume, we measured time to a new session and to the first successful live status. |
-| E5 · Policy and results | On a disposable instance we tried an invalid token, missing and untrusted certificates, a disallowed restart, a conflicting command ID, result lookup and a repeated request. | We compared each API or TLS response with the expected refusal or retained result. Each case ran on three independent disposable instances. |
-
-For each latency mode we counted successes, failures and timeouts. The median describes a typical successful invocation. The nearest-rank p95 is the time by which at least 95% of successful invocations finished. We independently recomputed the per-block and pooled status and restart summaries from the sample rows. [Run register and datasets](data/final-agent-720dcad/README.md)
+The latency table reports the median and p95. The p95 is the time by which at least 95% of successful commands had finished. [Scripts and measurement data](data/final-agent-720dcad/README.md)
 
 ## 5. Results
 
@@ -151,11 +76,11 @@ After a clean agent stop, the observer saw the node offline after a median of 8.
 
 TLS rejected connections with a missing client certificate and with a certificate from an unrelated authority. The API returned 401 for an invalid token, 422 for a disallowed restart and 409 for a conflicting command ID. A lookup and a repeated submission returned the same result as the original request. All three independent trials returned the expected responses.
 
-## 6. Discussion and conclusion
+## 6. Conclusion
 
-HLCP exposed the permitted operations for two applications through a common interface and let the operator retrieve a completed command by ID. On this VM pair, live status took a median of 80.29 ms and restart 165.31 ms. With one live status per second the agent used about 7% of one logical CPU.
+HLCP gives us one place to find a container, check its logs and look up the outcome of an action. In our tests, its command times were closer to SSH over a shared connection than to SSH with a new connection for every command.
 
-The SSH comparison distinguishes opening a connection from reusing one and measures all work between CLI launch and return. It covers one VM pair and one container. The recovery times apply to loopback and the configured heartbeat and backoff. The two-minute sampling windows describe resource use under the specified workload. Long-running and multi-node workloads would require separate experiments. [Data and verification procedure](data/final-agent-720dcad/README.md)
+We measured latency on one container across two virtual machines, recovery on a single machine and resource use in two-minute windows. The results describe those tasks in our HomeLab setup.
 
 ## References
 

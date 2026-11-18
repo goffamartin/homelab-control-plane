@@ -1,6 +1,6 @@
 # Final evaluation dataset
 
-All five experiments characterize the same build pair on 18 November 2026. The controller and CLI used v1.1.0, revision `0f119514b1739652d709aee7b07db742d44dc0a0`. The agent used revision `720dcad18f0105f7fe65d33a1f55d4281a492a3c`. Both were built with Go 1.27.3 for Linux amd64. The agent executable had SHA-256 `c24b74835a6ca3da1c0e803b9fbaa113e810759a592dee9914db9aa068d38883`.
+We used the same controller and agent builds across all five experiments. The table links to the measurements behind the report and presentation.
 
 | Experiment | Evidence |
 |---|---|
@@ -21,3 +21,10 @@ python3 evaluation/scripts/analyze_status.py evaluation/data/final-agent-720dcad
 python3 evaluation/scripts/analyze_status.py evaluation/data/final-agent-720dcad/e2/samples.csv
 python3 evaluation/scripts/summarize_resource_pairs.py evaluation/data/e3-refresh-20261118T104656Z
 ```
+
+<details>
+<summary>Build details for reproducing the tests</summary>
+
+All five experiments characterize the same build pair on 18 November 2026. The controller and CLI used v1.1.0, revision `0f119514b1739652d709aee7b07db742d44dc0a0`. The agent used revision `720dcad18f0105f7fe65d33a1f55d4281a492a3c`. Both were built with Go 1.27.3 for Linux amd64. The agent executable had SHA-256 `c24b74835a6ca3da1c0e803b9fbaa113e810759a592dee9914db9aa068d38883`.
+
+</details>
