@@ -90,6 +90,30 @@ func TestObservationAtConnectAndAfterAction(t *testing.T) {
 		t.Fatalf("second=%+v", second)
 	}
 }
+
+func TestNativeStatusDoesNotScheduleInventoryScan(t *testing.T) {
+	runner := new(observationRunner)
+	runner.state.Store("running")
+	config := observationConfig(t, runner)
+	dispatcher, err := config.NewDispatcher()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dispatcher.Close()
+	for i, state := range []string{"running", "exited"} {
+		runner.state.Store(state)
+		_, result := dispatcher.Execute(protocol.CommandPayload{CommandID: fmt.Sprint(i), ResourceID: "catalog", Action: "status"})
+		want := []string{"running", "stopped"}[i]
+		if !result.Success || result.Message != want {
+			t.Fatalf("live status: got %+v, want %s", result, want)
+		}
+		select {
+		case <-config.refresh:
+			t.Fatal("native status requested an inventory-wide refresh")
+		default:
+		}
+	}
+}
 func TestPeriodicObservationSeesExternalStop(t *testing.T) {
 	runner := new(observationRunner)
 	runner.state.Store("running")
