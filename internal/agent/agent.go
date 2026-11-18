@@ -76,7 +76,6 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 		scripts := adapter.Script{Commands: commands}
 		resource := resource
 		execute := func(executionContext context.Context, action string) protocol.CommandResultPayload {
-			defer config.requestRefresh()
 			if !contains(resource.Actions, action) {
 				return protocol.CommandResultPayload{Code: "ACTION_NOT_SUPPORTED", Message: "action is not enabled"}
 			}
@@ -84,7 +83,11 @@ func (config Config) NewDispatcher() (*command.Dispatcher, error) {
 				return protocol.CommandResultPayload{Code: "READ_ONLY_LOG_API_REQUIRED", Message: "Use the container log read API; logs are never stored as command results."}
 			}
 			if _, custom := scripts.Commands[action]; custom {
+				defer config.requestRefresh()
 				return scripts.Execute(executionContext, action)
+			}
+			if action != "status" {
+				defer config.requestRefresh()
 			}
 			switch resource.Adapter {
 			case "systemd":

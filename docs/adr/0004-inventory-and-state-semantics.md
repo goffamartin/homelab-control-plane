@@ -21,7 +21,9 @@ example, an online node can report a stopped container and a failed restart.
 
 ## Consequences
 
-The agent observes all resources on connection, after an action and periodically.
+The agent observes all resources on connection, after a potentially mutating action
+and periodically. A native status request reads its target directly. The inventory
+snapshot receives external state changes during the next observation round.
 The controller rejects updates from stale sessions or unrelated revisions.
 
 F7 replaces YAML `state` with runtime observation. Old configuration using that
