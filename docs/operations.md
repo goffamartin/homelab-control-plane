@@ -30,7 +30,8 @@ again. Use the original command ID to look up a result if the reply was lost.
 ## Update an existing managed installation
 
 Use a trusted helper downloaded for the intended release, as described in
-[Getting started](getting-started.md). Set `VERSION=v1.1.0` for this release.
+[Getting started](getting-started.md). Public updates are available only when a
+signed release is listed. Set `VERSION` to that release tag.
 Public downloads need `curl` and the explicit `--public` flag, not a GitHub
 account or token. Keep a consistent private backup first. Update the controller
 before agents. Do not use fresh-install `--configure` on an existing installation.

@@ -40,10 +40,14 @@ setup, including subordinate UID/GID mappings if needed, before configuring HLCP
 
 ## 2. Obtain the installer
 
-On each host, in a new working directory:
+Public installer downloads are currently unavailable. Use these steps once a
+new signed release is listed on the [Releases page](https://github.com/goffamartin/homelab-control-plane/releases).
+To build and test HLCP from source in the meantime, see [Development and releases](development.md).
+
+On each host, in a new working directory, set the version to that release tag:
 
 ```sh
-VERSION=v1.1.0
+VERSION=vX.Y.Z
 HLCP_DOWNLOAD_DIR=$(mktemp -d "$HOME/hlcp-download.XXXXXXXX")
 cd "$HLCP_DOWNLOAD_DIR"
 curl --disable --proto '=https' --proto-redir '=https' --tlsv1.2 \
@@ -52,7 +56,7 @@ curl --disable --proto '=https' --proto-redir '=https' --tlsv1.2 \
   "https://github.com/goffamartin/homelab-control-plane/releases/download/$VERSION/hlcp-install.sh"
 ```
 
-The repository and release assets are public: no GitHub account, token or `gh`
+Public release downloads need no GitHub account, token or `gh`
 installation is required. The new directory avoids overwriting an older helper.
 Keep the same shell open for the following steps so `VERSION` remains set.
 Use `--public` on every installer invocation below: the helper retains its
@@ -61,14 +65,10 @@ authenticated download mode by default for compatibility with private repositori
 Bootstrap trust matters: the helper must come from a repository/release you
 trust. Review its source and compare its SHA-256 with the release's trusted
 announcement before executing it. A checksum downloaded from the same untrusted
-source is not independent authentication. For this release's helper:
+source is not independent authentication. Run `sha256sum hlcp-install.sh` and
+compare the value with the trusted checksum for the selected release.
 
-```sh
-printf '%s\n' '91bb55f96c8afbad6ae51595e6f054f0eac121df4d4169ef8d679661cbb2529e  hlcp-install.sh' \
-  | sha256sum -c -
-```
-
-Continue only if it reports `OK`; stop on mismatch. The helper then verifies the signed
+Continue only if the checksums match. The helper then verifies the signed
 manifest, exact version, architecture and package checksums against its pinned
 release key before installation. It does not run a download piped into a shell.
 

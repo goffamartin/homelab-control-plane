@@ -20,7 +20,10 @@ have different readiness and validation limits; see [validation](docs/validation
 
 ## Start here
 
-Follow [Getting started](docs/getting-started.md) to install signed packages,
+Public signed packages are currently unavailable. To build and test HLCP from
+source, see [Development and releases](docs/development.md).
+
+When a signed release is available, follow [Getting started](docs/getting-started.md) to install signed packages,
 pair an agent and configure your first resource. Installation does not create
 containers or grant access to all resources automatically.
 
