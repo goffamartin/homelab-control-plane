@@ -1,29 +1,21 @@
-# Results presentation — working outline
+# HLCP results talk
 
-English content to match the report; confirm the teaching group's language if needed.
-Target: 12 minutes of prepared material, with room within 15 minutes for explanation.
-No new PPTX with invented results: create the final deck after collecting the data.
+Allow 14 minutes 35 seconds for the thirteen slides. Use the deployed applications to introduce the problem, then use the dedicated test container for every performance claim.
 
-| Slide | Time | Content and evidence |
+| Slide | Time | Point to make |
 |---|---|---|
-| 1. HLCP and the research question | 0:45 | One practical problem, research question, measured scope |
-| 2. Controller–agent architecture | 1:00 | One diagram, local API vs mTLS connection, real topology |
-| 3. Protocol and command lifecycle | 1:15 | Identity, resource/action allowlist, stable ID, result/unknown outcome |
-| 4. Implemented system | 1:00 | Compact CLI example and one real UI screenshot; demo optional |
-| 5. Experimental method | 1:30 | Same container/user/work, three connection modes, timing boundary, repetitions |
-| 6. Command latency | 1:30 | Real distributions, sample sizes, failures, fresh and reused SSH |
-| 7. CPU and memory | 1:00 | Actual idle/load values with units and accounting boundary |
-| 8. Recovery and rejected requests | 1:30 | Timeline plus selected expected/observed cases; counter evidence |
-| 9. Interpretation and limitations | 1:00 | Explain measured costs and benefits; one host pair, no usability/security overclaim |
-| 10. Conclusion | 0:30 | Answer research question, repository/data link, remaining work |
+| 1. HomeLab Control Plane | 0:45 | Start with a service whose logs the operator needs to inspect. |
+| 2. Two deployed applications | 1:00 | One application spans three containers. Tags let the operator find its resources. The web client can open a log stream. |
+| 3. Controller and agent | 1:15 | Trace a named action to the local Podman adapter and a retained result. |
+| 4. Working features | 0:55 | Show the workflow from tag and log stream to a permitted command and retained result. |
+| 5. Experiment | 1:25 | Compare the same live operation with fresh SSH and an established SSH master on one VM pair. |
+| 6. Restart trial | 1:00 | Explain exactly when timing starts and stops and how the independent inspection detects a real restart. |
+| 7. Live status | 1:15 | Use the medians and p95 values in the chart to distinguish connection setup from command execution. |
+| 8. Restart | 1:10 | All 90 trials changed the start time of the same running container. Application readiness needs a separate probe. |
+| 9. CPU | 1:10 | At one live query per second the agent service used about 7% of one logical CPU. |
+| 10. Memory | 1:05 | The three loaded agent cgroup medians were 11.91, 12.83 and 12.88 MiB. These are two-minute windows. |
+| 11. Recovery | 1:25 | On loopback, the controller detected each silent pause in about 15 seconds. After resume, the first successful live status took progressively longer. |
+| 12. Policy | 1:05 | Show one rejected restart and one retained result. Each case ran on three disposable instances. |
+| 13. Conclusion | 1:05 | The operator gains named actions and retrievable outcomes. All 90 restarts passed an independent inspection. The three polling runs returned all 480 expected results. |
 
-Total: 11:00. Allow about one extra minute for slide transitions or a short demo;
-the prepared talk should stay below 15 minutes even if the demo fails.
-
-Prepare backup material: exact versions/topology, failure definitions, complete
-policy matrix, raw-data permalink, and the crash window around external side effects.
-
-Likely questions: Why an application protocol instead of SSH/Ansible? Why CBOR?
-What does mTLS protect? How did SSH multiplexing affect the comparison? What happens
-when the connection fails after execution? Is running equivalent to healthy? What
-was measured rather than merely demonstrated by a test?
+For questions about connection reuse, CPU accounting or repeated pauses, use the [report](report.md) and the [per-run data](data/final-agent-720dcad/README.md).
