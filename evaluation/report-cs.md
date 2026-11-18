@@ -2,13 +2,11 @@
 
 Martin Goffa · ANI-COM · 18. listopadu 2026
 
-[Zdroj kontroleru v1.1.0](https://github.com/goffamartin/homelab-control-plane/tree/v1.1.0) · [Zdroj měřeného agenta](https://github.com/goffamartin/homelab-control-plane/tree/720dcad18f0105f7fe65d33a1f55d4281a492a3c) ·
-[Měřicí skripty a data](https://github.com/goffamartin/homelab-control-plane/tree/90b730d631fceba9b57f402b14ba6557e3ebad3b/evaluation/data/final-agent-720dcad) ·
-[Anglická verze](report.md)
+[Kód projektu](https://github.com/goffamartin/homelab-control-plane) · [Podklady k měření](data/final-agent-720dcad/README.md) · [Anglická verze](report.md)
 
 ## Abstrakt
 
-HomeLab Control Plane (HLCP) umožňuje správci z jednoho místa vyhledat kontejner, sledovat jeho výstup a provést povolenou akci. Systém jsme nasadili pro dvě aplikace. Na vyhrazeném kontejneru jsme změřili, jak dlouho trvá získat živý stav a provést restart. Přes HLCP dosáhly tyto operace mediánu 80,29 a 165,31 ms. U již navázaného SSH jsme naměřili 66,69 a 159,41 ms. Při jednom dotazu za sekundu jsme obdrželi všech 480 očekávaných odpovědí a agent využíval přibližně 7 % jednoho logického CPU.
+V HomeLabu provozujeme dvě aplikace v několika kontejnerech. Abychom je mohli spravovat z jednoho místa, vytvořili jsme HomeLab Control Plane (HLCP). Přes jeho rozhraní lze najít správný kontejner, sledovat logy a spustit povolenou akci. Na testovacím kontejneru trval dotaz na stav v mediánu 80 ms a restart 165 ms. Nové SSH spojení zabralo u obou úloh víc času, sdílené SSH bylo o něco rychlejší. Při jednom dotazu za sekundu agent využíval přibližně 7 % jednoho logického jádra.
 
 ## 1. Problém a výzkumná otázka
 
@@ -18,49 +16,23 @@ Zajímalo nás, kolik času přidá cesta přes kontroler při zjištění stavu
 
 ## 2. Co jsme vyvinuli a nasadili
 
-| Část systému | Co dnes umí | Kde jsme to ověřili |
-|---|---|---|
-| Kontroler a agent | Agent zveřejní uzel, jeho prostředky, tagy a povolené akce. Správce může například najít všechny kontejnery jedné aplikace. | Inventář nasazeného kontroleru vrátil pro jednu aplikaci tři kontejnery a pro druhou jeden. |
-| Ovládání kontejnerů | Podle konfigurace lze vyžádat živý stav, spustit, zastavit či restartovat kontejner. Výsledek příkazu lze dohledat podle ID. | U běžící aplikace jsme přečetli stav přes CLI. Na testovacím kontejneru jsme nezávisle ověřili každý měřený restart. |
-| Logy a webový klient | CLI přečte poslední řádky, umí je filtrovat a sledovat nový výstup. Web nabízí dashboard, detail uzlu a prostředku i sledování logu. | V CLI jsme sledovali průběžný výstup, přerušili čtení a po zastavení kontejneru znovu načetli posledních pět řádků. Čtení logů fungovalo i v nasazeném webu. |
-| Instalace a správa | Balíčky pro Debian, párování uzlů, příkazy pro správu služby a doplňování v Bashi tvoří obsluhu nasazení. | Kontroler i agent po aktualizaci hlásily v1.1.0 a uzel se znovu objevil online. |
+Když se objeví problém s aplikací, obvykle začínáme u logů. V HLCP vyfiltrujeme kontejnery podle tagu a v prohlížeči otevřeme výstup služby, která nás zajímá. Stejné kontejnery vidíme i z příkazové řádky. Na testovacím kontejneru jsme ověřili, že lze sledovat nové řádky za běhu a načíst poslední výstup i po jeho zastavení.
 
-### Jak se provede jeden příkaz
+U běžící aplikace jsme přes HLCP ověřili stav kontejneru. Start, zastavení a restart závisí na tom, jaké akce pro kontejner správce povolil. Restart jsme při měření ověřovali na vyhrazeném kontejneru.
 
-Kontroler a agent jsou implementované v Go. CLI komunikuje s lokálním HTTP API
-kontroleru. Agent navazuje trvalé spojení s kontrolerem a obě strany se
-autentizují certifikáty pomocí mTLS. Aplikační protokol používá ohraničené rámce
-s daty v CBOR [2, 3]. Inventář sděluje, co lze na uzlu ovládat. Provedení
-operace dále podléhá pravidlům API a seznamu akcí konkrétního prostředku.
+### Jak příkaz projde systémem
 
-Kontroler předá strukturovaný příkaz s ID a agent spustí místní adaptér. Adaptér
-Podmanu například zjišťuje stav pomocí `podman container inspect`. Záznamy
-výsledků umožňují dohledat operaci po ztrátě odpovědi. Pád mezi provedením
-externí akce a uložením výsledku může ponechat výsledek neurčený. Webový klient
-používá stejné rozhraní kontroleru a do měření jeho režie nevstupoval.
+Web i CLI posílají požadavky kontroleru. Kontroler ověří oprávnění a předá příkaz agentovi, který běží na stroji s kontejnery. Při dotazu na stav agent požádá přímo Podman o aktuální stav kontejneru. Kontroler uloží výsledek pod ID příkazu, takže se k němu správce může vrátit později. Pokud agent po provedení akce spadne dřív, než stihne uložit výsledek, může výsledek zůstat neznámý.
 
-## 3. Metodika
+## 3. Jak jsme měřili
 
-Měření latencí běželo na dvojici HomeLab VM s dvěma dostupnými logickými CPU
-a 1 906 MiB systémem viditelné paměti na každé VM. Ve všech pěti experimentech jsme použili kontroler v1.1.0 (revize `0f11951`) a agenta v revizi `720dcad`, sestavené pomocí Go 1.27.3 pro Linux amd64. Na agentovi běžel Podman 5.4.2. Všechny varianty pracovaly se stejným rootless
-kontejnerem pod stejným účtem na agentovi. Čas se měřil monotónními hodinami na
-kontroleru od spuštění příkazu do jeho návratu.
+Kontroler i agent běžely na samostatných virtuálních strojích se dvěma logickými jádry. Pro všechny varianty jsme použili stejný testovací kontejner a stejný účet na agentovi. Před měřením jsme si v krátkém pilotu ověřili, že všechny tři varianty fungují.
 
-### Příprava a pilot
+- **Stav a restart.** Porovnali jsme HLCP, SSH s novým spojením pro každý příkaz a SSH se sdíleným spojením. Po zahřátí jsme v každé variantě změřili 300 dotazů na stav a samostatně 30 restartů. Pořadí variant se v každém bloku měnilo. Měřili jsme dobu od spuštění příkazu do jeho návratu. Po každém restartu jsme zvlášť ověřili, že stejný kontejner běží a má nový čas startu.
+- **Spotřeba.** CPU a paměť obou služeb jsme sledovali ve třech dvouminutových oknech v klidu a třech při jednom dotazu na stav za sekundu. Paměť zahrnuje celou skupinu procesů služby.
+- **Obnova a oprávnění.** Na dočasné instalaci jsme agenta pětkrát ukončili a znovu spustili a pětkrát pozastavili s otevřeným spojením. Sledovali jsme, kdy kontroler výpadek zaznamenal a kdy znovu prošel dotaz na stav. Ve třech samostatných sériích jsme také zkoušeli neplatné přihlašovací údaje, nepovolenou akci a práci s výsledkem příkazu.
 
-Před sběrem dat jsme zkontrolovali verze a založili vyhrazený kontejner `hlcp-bench`. Pilot ověřil, že HLCP i SSH pod stejným uživatelem vidí běžící kontejner. Pro restart jsme před ostrým během provedli jeden pokus každou cestou.
-
-### Co přesně jsme testovali
-
-| Experiment | Postup | Jak jsme vyhodnotili pokus |
-|---|---|---|
-| E1 · Živý stav | Stejný kontejner jsme kontrolovali přes HLCP s trvalým spojením, nové SSH a již navázané SSH. Po 10 zahřívacích dotazech na variantu následovaly tři bloky po 100 dotazech na variantu. Skript v každém bloku promíchal pořadí. | Na kontroleru jsme měřili čas od spuštění CLI do návratu procesu. Poté jsme ověřili úspěch příkazu a odpověď `running`. Zahřívací dotazy jsme vynechali ze statistiky. |
-| E2 · Restart | Každý ze tří bloků zahrnoval deset restartů každou cestou. Před pokusem skript počkal dvě sekundy a přes SSH přečetl ID, testovací značku, stav a čas startu kontejneru. | Časomíra běžela pouze během příkazu restart. Další nezávislé čtení přes SSH muselo najít stejný běžící kontejner s novým časem startu. |
-| E3 · CPU a paměť | Na obou VM jsme po sekundě odečítali čítače cgroup služby. Provedli jsme tři párová 120sekundová měření v klidu a tři při jednom živém dotazu za sekundu. | Využití CPU jsme spočítali ze změny času CPU vůči uplynulému času. U paměti jsme pro každý běh uvedli medián vzorků. |
-| E4 · Obnova spojení | Dočasný agent a kontroler běžely na jedné VM přes loopback. Pětkrát jsme agenta ukončili a znovu spustili. V druhé sérii jsme pětkrát pozastavili a obnovili stejný proces s otevřeným spojením. | Od přerušení jsme měřili dobu do zjištění stavu offline. Od nového spuštění či obnovení jsme měřili čas do nové relace a prvního úspěšného živého dotazu. |
-| E5 · Pravidla a výsledky | Na dočasné instanci jsme jednotlivě vyzkoušeli chybný token, chybějící či nedůvěryhodný certifikát, nepovolený restart, konflikt ID, načtení výsledku a opakování požadavku. | Pro každý případ jsme porovnali skutečnou odpověď API nebo TLS s očekávanou. Každý případ jsme zopakovali na třech nezávislých dočasných instancích. |
-
-Z jednotlivých pokusů jsme pro každou variantu spočítali počty úspěchů, chyb a timeoutů. Medián popisuje typický úspěšný pokus, p95 dobu, do níž doběhlo alespoň 95 % úspěšných pokusů. Souhrny stavu a restartů jsme přepočítali z řádků CSV po blocích i za celý běh. [Přehled běhů a dat](data/final-agent-720dcad/README.md)
+V tabulce latencí uvádíme medián a p95. Hodnota p95 říká, do jakého času doběhlo alespoň 95 % úspěšných pokusů. [Skripty a naměřená data](data/final-agent-720dcad/README.md)
 
 ## 4. Výsledky
 
@@ -75,7 +47,7 @@ Z jednotlivých pokusů jsme pro každou variantu spočítali počty úspěchů,
 | Restart · nové SSH | 30/30 | 272,37 | 301,17 |
 | Restart · sdílené SSH | 30/30 | 159,41 | 199,46 |
 
-Nejvyšší medián mělo u obou úloh nové SSH spojení. Sdílené SSH bylo v mediánu rychlejší než HLCP o 13,60 ms u stavu a o 5,90 ms u restartu. U všech 90 restartů nezávislé čtení potvrdilo stejný kontejner, nový čas startu a stav `running`. Uživatel čeká na návrat příkazu. Připravenost aplikace přijímat požadavky by vyžadovala vlastní sondu.
+Nejvyšší medián mělo u obou úloh nové SSH spojení. Sdílené SSH bylo v mediánu rychlejší než HLCP o 13,60 ms u stavu a o 5,90 ms u restartu. U všech 90 restartů nezávislé čtení potvrdilo stejný kontejner, nový čas startu a stav `running`. Připravenost aplikace přijímat požadavky by vyžadovala vlastní sondu.
 
 ### Spotřeba při pravidelném dotazování
 
@@ -94,11 +66,11 @@ Po ukončení agenta kontroler zaznamenal stav offline za 8,26 ms v mediánu. Od
 
 TLS odmítlo spojení bez klientského certifikátu i s certifikátem od cizí autority. API vrátilo 401 při chybném tokenu, 422 při nepovoleném restartu a 409 při opětovném použití ID pro odlišný příkaz. Dohledání i zopakování původního požadavku vrátilo shodný výsledek. Všechny tři nezávislé série poskytly očekávané odpovědi.
 
-## 5. Závěr a meze měření
+## 5. Závěr
 
-HLCP zpřístupnilo povolené operace nad kontejnery dvou aplikací přes společné rozhraní. Správce může dohledat výsledek příkazu i po jeho dokončení. Na měřené dvojici VM zabral živý dotaz v mediánu 80,29 ms a restart 165,31 ms. Při jednom živém dotazu za sekundu využil agent přibližně 7 % jednoho logického CPU.
+HLCP v našem HomeLabu zjednodušilo běžný postup při kontrole služby. Z jednoho místa můžeme najít správný kontejner, podívat se do logu a zjistit, jak dopadla povolená akce. Při měření bylo HLCP časově blíž sdílenému SSH než navazování nového spojení pro každý příkaz.
 
-Výsledky latence platí pro jeden kontejner na jedné dvojici VM. Časy zotavení popisují lokální experiment přes loopback. Dvouminutová okna dávají podklad pro odhad spotřeby při dané zátěži. Pro dlouhodobý provoz nebo souběžné řízení více uzlů by bylo potřeba další měření. [Data a postup ověření](data/final-agent-720dcad/README.md)
+Latenci jsme měřili na jednom kontejneru a dvojici virtuálních strojů. Obnovu spojení jsme zkoušeli místně na jednom stroji a spotřebu sledovali v krátkých intervalech. Výsledky tak popisují běžné úkony v našem prostředí.
 
 ## Zdroje
 

@@ -10,7 +10,7 @@ The deliverables are a Go controller and agent, a CLI and a separate web client.
 
 The study began with pilot runs to verify the target and both SSH baselines. We then measured live operations, sampled service resource use and exercised recovery and policy on disposable instances. Each report gives the procedure and success criteria for all five experiments.
 
-The [English report](report.md), [Czech report](report-cs.md) and [results presentation](HLCP_final_results_EN.pptx) describe the deployed system. All five final experiments used controller v1.1.0 and agent revision `720dcad`. The [final dataset](data/final-agent-720dcad/README.md) identifies the exact samples for each experiment. The [talk outline](presentation-outline.md) gives the timing and speaker prompts.
+The [English report](report.md), [Czech report](report-cs.md) and [results presentation](HLCP_final_results_EN.pptx) describe the deployed system. The [final dataset](data/final-agent-720dcad/README.md) identifies the exact samples for each experiment. The [talk outline](presentation-outline.md) gives the timing and speaker prompts.
 
 The original study protocol follows. Its planned scope and repetition counts can be compared with the executed methods in the reports.
 
