@@ -1,13 +1,18 @@
 # Semester evaluation
 
-The November 2026 evaluation is documented in the [English report](report.md)
-and [Czech report](report-cs.md). The [run register](data/results.md) links the
-measured samples and outcomes. The protocol below records the intended design.
-The reports and run notes describe the executed method, including deviations.
+HLCP is deployed on a Debian node that hosts two applications. An operator can select containers by application tag and read their logs from a single interface. The November 2026 study measured the controller and agent on a dedicated Podman container.
 
-Deliverables: a concise English report, code and raw data in this Git repository,
-and a 10–15 minute presentation. The original proposal's evaluation slide commits
-to latency against SSH, idle/load CPU and memory, recovery, and access rejection.
+### Development outcome
+
+The deliverables are a Go controller and agent, a CLI and a separate web client. On the deployed system we used application tags to find containers and read their logs. The test container let us verify lifecycle actions without restarting the applications. Both reports describe the implemented features, the deployment evidence and the path of a command from the controller to Podman.
+
+### Testing and evaluation
+
+The study began with pilot runs to verify the target and both SSH baselines. We then measured live operations, sampled service resource use and exercised recovery and policy on disposable instances. Each report gives the procedure and success criteria for all five experiments.
+
+The [English report](report.md), [Czech report](report-cs.md) and [results presentation](HLCP_final_results_EN.pptx) describe the deployed system. All five final experiments used controller v1.1.0 and agent revision `720dcad`. The [final dataset](data/final-agent-720dcad/README.md) identifies the exact samples for each experiment. The [talk outline](presentation-outline.md) gives the timing and speaker prompts.
+
+The original study protocol follows. Its planned scope and repetition counts can be compared with the executed methods in the reports.
 
 ## Research question
 

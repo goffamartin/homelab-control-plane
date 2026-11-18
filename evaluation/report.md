@@ -2,35 +2,20 @@
 
 Martin Goffa — ANI-COM
 
-16 November 2026
+18 November 2026
 
-[Implementation at v1.1.0](https://github.com/goffamartin/homelab-control-plane/tree/v1.1.0) ·
-[Evaluation scripts and data](https://github.com/goffamartin/homelab-control-plane/tree/codex/semester-evaluation/evaluation)
+[Controller source at v1.1.0](https://github.com/goffamartin/homelab-control-plane/tree/v1.1.0) · [Measured agent source](https://github.com/goffamartin/homelab-control-plane/tree/720dcad18f0105f7fe65d33a1f55d4281a492a3c) ·
+[Evaluation scripts and data](https://github.com/goffamartin/homelab-control-plane/tree/90b730d631fceba9b57f402b14ba6557e3ebad3b/evaluation/data/final-agent-720dcad)
 
 ## Abstract
 
-HLCP is a controller–agent application protocol for managing explicitly configured
-HomeLab resources. The implementation provides resource discovery and named actions
-through a central interface, with authenticated transport and persistent command
-identifiers. This report examines its execution overhead relative to SSH and its
-behavior during connection failures and rejected requests. For live status, the observed median was 80.02 ms for HLCP, 181.42 ms for fresh SSH, and 69.92 ms for multiplexed SSH. In five successive agent pauses, the test controller observed the node offline after about 15 seconds. The functional policy checks confirmed certificate and API request refusals under the tested configuration.
+HomeLab Control Plane (HLCP) gives an operator one interface to find a container, follow its output and invoke a permitted action. We deployed it for two applications. On a dedicated test container, median HLCP latency was 80.29 ms for live status and 165.31 ms for restart. Over an established SSH connection the same tasks took 66.69 and 159.41 ms. At one status request per second all 480 requests succeeded, and the agent used about 7% of one logical CPU.
 
 ## 1. Problem and research question
 
-A HomeLab can contain several services with different management commands and access
-paths. SSH provides a flexible remote interface, but the operator still needs to know
-the relevant host, runtime and command. HLCP exposes configured resources and their
-allowed actions through a consistent controller interface. The implementation also
-has a separate web client; the evaluation focuses on the core controller and agent.
+One application in our HomeLab spans three containers. A second runs in a single container on the same node. When investigating a fault, the operator can select an application tag, find the relevant container and read its logs in the web client. The CLI exposes the same inventory and allowed actions. For a restart, the controller assigns a command ID that the operator can use to look up the outcome later.
 
-The research question is: **What execution overhead does HLCP introduce compared
-with direct SSH management, and how does it behave when connections fail or requests
-violate its access policy?**
-
-The study uses a real HomeLab with a controller VM and a Debian agent managing a
-dedicated rootless Podman test container. It evaluates one topology and implementation
-version. It does not establish a general usability advantage or universal security
-guarantee.
+This deployment motivated two questions. How much time does the controller add to a live status check or restart compared with SSH? When an agent disconnects or a request exceeds its permissions, what does the operator actually observe? We timed the core CLI path on a dedicated test container. The deployed web client illustrates the workflow. Its response time and operator usability would require separate measurements.
 
 ## 2. Technical background
 
@@ -72,7 +57,16 @@ can query the original result and duplicate requests can be recognized. An exter
 side effect and a journal update still have separate failure boundaries. A crash
 between these steps can leave the outcome unresolved.
 
-## 3. Implementation
+## 3. What we built and deployed
+
+| Component | What the operator can do | Evidence from the HomeLab |
+|---|---|---|
+| Controller and agent | Discover a node and its resources, inspect allowed actions and filter containers by application tag. | The deployed controller listed three containers under one application tag and one under the other. |
+| Container control | Request live status, start, stop or restart where configured. Look up the result by command ID. | The CLI returned the running state of a deployed application container. Every timed restart of the dedicated test container passed an independent inspection. |
+| Logs and web client | Read recent lines, filter them or follow new output in the CLI. The web dashboard provides node and resource pages and a live log view. | In the CLI we followed new output, interrupted the reader, then retrieved the last five lines after stopping the test container. We also read logs in the deployed web client. |
+| Installation and maintenance | Install Debian packages, pair a node, manage the agent service and complete commands in Bash. | After upgrading both ends to v1.1.0, the controller listed the agent online with the new version. |
+
+### How a command runs
 
 The Go controller accepts authenticated agents and exposes a local HTTP management
 API. Agents publish configured resources and available actions. The CLI resolves a
@@ -92,12 +86,10 @@ outcome. This behavior matters for mutation safety even if it adds execution ove
 
 ## 4. Experimental method
 
-The [evaluation protocol](README.md) and [run register](data/results.md) contain
+The [evaluation protocol](README.md) and [run register](data/final-agent-720dcad/README.md) contain
 the procedures and measured data.
 
-The operator supplied an initial environment inventory on 3 November 2026. Both
-binaries report v1.1.0 revision `0f119514b1739652d709aee7b07db742d44dc0a0`, built with
-Go 1.27.3 for Linux amd64. This is preparation evidence, not a performance result.
+All five experiments used controller v1.1.0 (revision `0f11951`) and agent revision `720dcad`, built with Go 1.27.3 for Linux amd64. The recovery and policy trials used disposable instances of these binaries.
 
 | Parameter | Controller | Agent |
 |---|---|---|
@@ -111,169 +103,59 @@ used memory is separate from the cgroup measurements. Detailed host and
 storage characteristics were not captured for the final runs. Source provenance is in
 [the initial inventory](environment/2026-11-03-user-inventory.json).
 
-The primary comparison measures CLI invocation to a validated terminal result on the
-controller using a monotonic clock. The three paths are HLCP with an established agent
-session, fresh SSH and SSH over an established master connection. All inspect the same
-running test container under the same agent-side user. Warm-up samples are marked
-separately. Mode order changes between repeated blocks with a recorded random seed.
+### Preparation and pilot
 
-Each attempted request was recorded. The tables summarize successful latencies
-using the median and nearest-rank p95 and give the total sample count. The
-measurement includes process startup, local API work, persistence, transport and
-runtime work. It does not isolate network-only latency.
+We checked both binary versions and used a dedicated container, `hlcp-bench`. Before timing anything, the pilot checked that HLCP and SSH under the same remote account could observe the running container. For restart, we also ran one pilot trial through each path before the final run.
 
-Service CPU and memory measurements cover idle and specified request loads, with
-separate controller and agent accounting. Cgroup CPU time and memory are defined by
-the Linux accounting interface [4]; charged cgroup memory must not be mislabeled RSS.
-Recovery experiments distinguish clean disconnects from silent communication loss.
-The policy experiment compares expected rejections and retained results with
-observed API and TLS responses.
+### Experiment procedure and success criteria
+
+| Experiment | Procedure | How we judged the outcome |
+|---|---|---|
+| E1 · Live status | We compared an established HLCP session, a fresh SSH connection per invocation and an established SSH master. After ten warm-ups per mode, we ran three blocks of 100 requests per mode and shuffled the order within each block. | A monotonic timer on the controller covered CLI launch through process return. We then checked command success and the live state `running`. We excluded warm-ups from the latency summary. |
+| E2 · Restart | In each of three blocks, we issued ten restarts per mode. Before each trial the script waited two seconds, then used SSH to inspect the container ID, test label, state and start time. | We timed the restart command alone. An independent SSH inspection then had to find the same running container with a changed start time. |
+| E3 · CPU and memory | We sampled both service cgroups once per second during three paired 120-second windows at idle and three at one live status request per second. | We divided the change in CPU time by elapsed time and reported memory per run from cgroup samples [4]. |
+| E4 · Recovery | We started a disposable controller and agent on one VM over loopback. We stopped and relaunched the agent five times. In a second series, we paused and resumed the same process five times with its socket open. | Starting at interruption, we measured time to observe offline. Starting at relaunch or resume, we measured time to a new session and to the first successful live status. |
+| E5 · Policy and results | On a disposable instance we tried an invalid token, missing and untrusted certificates, a disallowed restart, a conflicting command ID, result lookup and a repeated request. | We compared each API or TLS response with the expected refusal or retained result. Each case ran on three independent disposable instances. |
+
+For each latency mode we counted successes, failures and timeouts. The median describes a typical successful invocation. The nearest-rank p95 is the time by which at least 95% of successful invocations finished. We independently recomputed the per-block and pooled status and restart summaries from the sample rows. [Run register and datasets](data/final-agent-720dcad/README.md)
 
 ## 5. Results
 
-### Live container status latency
+### Live status and restart
 
-The 16 November 2026 run recorded 930 observations: 30 warm-ups and 900 measured
-requests across three blocks. Each mode had 300 successful measured requests and
-zero failures or timeouts. The [original summary](data/e1-final-20261116T083722Z/summary.csv) was independently reproduced from the per-request samples for all three blocks and pooled results.
-
-| Mode | Successful / attempted | Median (ms) | p95 (ms) |
+| Task and access path | Successful / attempted | Median (ms) | p95 (ms) |
 |---|---:|---:|---:|
-| HLCP | 300 / 300 | 80.02 | 101.09 |
-| Fresh SSH | 300 / 300 | 181.42 | 201.84 |
-| Multiplexed SSH | 300 / 300 | 69.92 | 97.13 |
+| Live status · HLCP | 300/300 | 80.29 | 92.54 |
+| Live status · Fresh SSH | 300/300 | 179.10 | 192.59 |
+| Live status · Multiplexed SSH | 300/300 | 66.69 | 74.81 |
+| Restart · HLCP | 30/30 | 165.31 | 191.24 |
+| Restart · Fresh SSH | 30/30 | 272.37 | 301.17 |
+| Restart · Multiplexed SSH | 30/30 | 159.41 | 199.46 |
 
-Fresh SSH had 2.27 times the median latency of HLCP. HLCP's median exceeded
-multiplexed SSH by 10.10 ms (14.4%). This ordering also held in each block.
-The comparison measures the end-to-end invocation paths, so it cannot attribute
-the differences to a single protocol component.
+Opening a new SSH connection took the longest at the median for both tasks. With a shared SSH connection, the median was 13.60 ms below HLCP for status and 5.90 ms below HLCP for restart. All 90 restarts passed independent inspection of container identity, start time and running state. The timed command ends before that inspection. Application readiness would require an application-level probe.
 
-![Median and p95 of live container status latency](figures/status-latency.png)
+### Resource use during polling
 
-### Idle service resource use
-
-Three paired 120-second runs yielded 121 samples per service per run. The recorded
-UTC windows overlap by 117.1–118.2 seconds, assuming synchronized VM clocks.
-The table summarizes the range across runs. CPU is expressed relative to one
-logical CPU. Memory is sampled cgroup usage.
-
-| Service | Mean CPU per run (%) | Median memory per run (MiB) | Highest sampled memory (MiB) |
+| Service | Idle CPU (%) | CPU at one request/s (%) | Loaded memory, median in each run (MiB) |
 |---|---:|---:|---:|
-| Controller | 0.053–0.054 | 11.16–11.17 | 11.41 |
-| Agent | 2.944–2.982 | 20.79–20.82 | 21.11 |
+| Controller | 0.052–0.054 | 0.47–1.01 | 11.52 / 14.48 / 15.46 |
+| Agent | 3.00–3.03 | 6.90–7.11 | 11.91 / 12.83 / 12.88 |
 
-See the [per-run summary](data/e3-idle-summary.csv) and
-[experiment register](data/results.md).
+All three runs completed 160 of 160 scheduled requests. CPU values are 120-second run averages as percentages of one logical CPU. Memory values cover the service cgroup. The highest sampled agent memory under load was 13.42 MiB.
 
-### Service resource use at one status request per second
+![Service CPU at idle and under load](data/final-agent-720dcad/figures/cpu.png)
 
-All 480 scheduled requests succeeded across three runs. Each 120-second
-service window contained 120 request starts. The paired windows overlapped
-by 113.6–115.3 seconds according to VM UTC timestamps.
+### Recovery and access policy
 
-| Service | Mean CPU per run (%) | Median memory per run (MiB) | Highest sampled memory (MiB) |
-|---|---:|---:|---:|
-| Controller | 1.245–1.939 | 13.00–15.04 | 17.04 |
-| Agent | 36.927–37.070 | 21.50, 22.16, 54.99 | 66.95 |
+After a clean agent stop, the observer saw the node offline after a median of 8.26 ms. After relaunch the first successful live status took a median of 107.69 ms. When we paused the process with its socket open, the controller saw it offline after a median of 15.03 s. A new session and live status confirmed recovery in all five trials. After resume, time to the first successful status ranged from 1.05 to 15.86 s. Reconnect backoff can carry over between these successive short sessions.
 
-Agent CPU rose by about 34 percentage points of one logical CPU relative to
-idle and stayed close to 37% across all three loaded runs. Agent memory had
-substantially more variation. The third run started at 36.45 MiB and reached
-66.95 MiB. The available cgroup counters cannot identify which processes or
-memory categories account for the increase. All three runs are included.
-See the [per-run summary](data/e3-load-summary.csv) for observed timings.
+TLS rejected connections with a missing client certificate and with a certificate from an unrelated authority. The API returned 401 for an invalid token, 422 for a disallowed restart and 409 for a conflicting command ID. A lookup and a repeated submission returned the same result as the original request. All three independent trials returned the expected responses.
 
-![CPU use during idle and loaded runs](figures/service-cpu.png)
+## 6. Discussion and conclusion
 
-![Median cgroup memory in each loaded run](figures/service-memory.png)
+HLCP exposed the permitted operations for two applications through a common interface and let the operator retrieve a completed command by ID. On this VM pair, live status took a median of 80.29 ms and restart 165.31 ms. With one live status per second the agent used about 7% of one logical CPU.
 
-### Container restart latency
-
-The E2 final run completed 90 restarts in three blocks with ten requests per
-mode per block. All trials passed the checks for the same container identity,
-running state and a changed start timestamp. The timed interval ends when
-the restart command returns. The separate running-state check follows it
-outside that interval. This workload uses an idle test container.
-
-| Mode | Successful / attempted | Median (ms) | p95 (ms) |
-|---|---:|---:|---:|
-| HLCP | 30 / 30 | 173.18 | 201.27 |
-| Fresh SSH | 30 / 30 | 268.74 | 291.44 |
-| Multiplexed SSH | 30 / 30 | 160.50 | 187.27 |
-
-HLCP's median was 95.56 ms lower than fresh SSH and 12.68 ms higher than
-multiplexed SSH. The same median ordering held in all three blocks and
-in the separate status experiment. The [restart summary](data/e2-final-20261116T115111Z/summary.csv) was verified against the original samples for all three blocks and pooled results.
-
-![Median and p95 of container restart latency](figures/restart-latency.png)
-
-### Recovery after a clean agent stop
-
-Five trials ran with a disposable controller and agent over loopback on the
-Debian agent VM. The observer saw offline after a median of 8.34 ms from the
-stop request (range 8.00–16.32 ms). From relaunch, the median time to observe a
-new online session was 52.48 ms (51.67–54.74 ms). The first successful live
-status result arrived after a median of 103.29 ms (101.39–113.66 ms). These
-observations include local process handling and polling granularity. The
-[raw recovery samples](data/e4-clean-20261116T130119Z/) describe orderly socket
-closure and relaunch on one host.
-
-### Recovery after a silent agent interruption
-
-Five successive trials suspended the same disposable agent process with its
-socket still open. The controller observed offline after a median of 15.028 s
-(15.024–15.034 s) from the pause request, consistent with its three missed
-five-second heartbeat intervals. From resume, the median time to a new online
-session was 4.397 s (1.074–16.816 s). The first successful status result
-followed after a median of 4.447 s (1.116–16.882 s).
-Reconnect delays increased across the successive trials. This is consistent
-with the agent's reconnect backoff and its one-minute stable-session criterion
-for resetting it. The immediate succession of trials matters when interpreting
-the result. See the [timing samples](data/e4-silent-20261116T130404Z/).
-
-![Time to a new session and first successful status after resuming the agent](figures/silent-recovery.png)
-
-### Functional access policy
-
-In a separate disposable loopback run, a missing client certificate and a
-certificate issued by an unrelated CA received TLS rejection alerts. The local
-API rejected an invalid token (401), a restart outside the resource's allowed
-actions (422), and a changed payload using an existing command ID (409).
-A result lookup and a repeated status submission with the original ID returned
-the previously observed result. This is one run per case. Matching responses
-do not independently count adapter executions.
-See the [observed responses](data/e5-policy-20261116T130605Z/policy.json).
-
-## 6. Discussion and limitations
-
-The median ranking in every latency block was multiplexed SSH, HLCP, then fresh
-SSH. Connection setup matters in this comparison because HLCP and multiplexed
-SSH reuse a connection. The measured gap also includes process startup and
-application work such as action admission and result recording. The design does
-not isolate the cost of each component or the effect of CBOR.
-
-The agent's cgroup includes the Podman processes it launches. The measured CPU
-therefore reflects the deployed service and its runtime work. Background workload
-and charged memory may vary even at the same request rate. We kept the third
-loaded memory series because we had no evidence of a measurement fault.
-
-The LAN measurements characterize one VM pair and one container. The loopback
-tests characterize process recovery under the stated heartbeat and backoff
-configuration. The 30 restart samples per mode provide a descriptive p95
-with limited resolution. Restart completion and the follow-up running check
-do not measure application readiness. Policy results cover the tested cases once
-and leave other configurations and guarantees outside the experiment.
-
-## 7. Conclusion
-
-HLCP completed both workloads faster than fresh SSH in this environment.
-Relative to multiplexed SSH, HLCP added about 10 ms to the median live status
-operation and about 13 ms to the median restart. At one status request per second
-the agent service used about 37% of one logical CPU, compared with about 3% at
-idle. The isolated recovery trials showed that clean socket closure was detected
-quickly and that a silent interruption followed the heartbeat timeout. Repeated
-brief interruptions increased time to reconnect. The policy trials verified
-the tested trust and action boundaries and retained-result behavior.
+The SSH comparison distinguishes opening a connection from reusing one and measures all work between CLI launch and return. It covers one VM pair and one container. The recovery times apply to loopback and the configured heartbeat and backoff. The two-minute sampling windows describe resource use under the specified workload. Long-running and multi-node workloads would require separate experiments. [Data and verification procedure](data/final-agent-720dcad/README.md)
 
 ## References
 
