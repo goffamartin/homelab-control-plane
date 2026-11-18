@@ -1,6 +1,6 @@
 # HLCP results talk
 
-The [presentation](HLCP_final_results_EN.pptx) has 13 English slides with Czech speaker notes. The suggested pace is about 13 minutes 55 seconds.
+The [presentation (PDF)](HLCP_final_results_EN.pdf) has 13 English slides. The suggested pace is about 13 minutes 55 seconds.
 
 | Slide | Time | Point to make |
 |---|---|---|
