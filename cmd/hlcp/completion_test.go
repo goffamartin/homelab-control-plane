@@ -42,7 +42,7 @@ func TestCompletionUsesOnlyScopedReadAPIAndPrivateProfile(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"-n", "de"}, "example-node\n"},
+		{[]string{"-n", "ex"}, "example-node\n"},
 		{[]string{"-n", "example-node", "-r", ""}, "app\n"},
 		{[]string{"-n", "example-node", "-r", "app", "-a", ""}, "status\nrestart\n"},
 	} {
