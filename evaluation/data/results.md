@@ -1,5 +1,7 @@
 # Experiment register
 
+The [final dataset](final-agent-720dcad/README.md) is the source for the submitted reports and slides. It covers E1–E5 on agent revision `720dcad`. Earlier measurements below retain their original build and date.
+
 | Run | Scenario | Evidence | Status |
 |---|---|---|---|
 | E1 pilot | Live container status, 10 measured requests per mode | Operator screenshot. HLCP median 71.49 ms, fresh SSH 184.26 ms, multiplexed SSH 71.68 ms. All 30 succeeded. | Pilot completed |
@@ -12,6 +14,7 @@
 | E4 clean stop, 2026-11-16 13:01 UTC | Five stops and relaunches of a disposable agent on Debian loopback | [Timing samples and method](e4-clean-20261116T130119Z/) | 5 of 5 completed |
 | E4 silent interruption, 2026-11-16 13:04 UTC | Five pauses and resumes of one agent process over loopback | [Timing samples and method](e4-silent-20261116T130404Z/) | 5 of 5 completed |
 | E5, 2026-11-16 13:06 UTC | Functional policy and retained-result checks on test controller | [Observed TLS and API responses](e5-policy-20261116T130605Z/policy.json) | 7 checks passed in one run |
+| E3 follow-up, 2026-11-18 10:46 UTC | Repeat idle and polling measurements after removing the full inventory refresh from native status | [Method, samples and before/after comparison](e3-refresh-20261118T104656Z/) | Three idle and three load pairs completed. 480/480 scheduled requests succeeded. |
 
 Keep the original CSV files for each run. Record the script revision, service
 versions, run duration and any concurrent activity. Publish sanitized copies of

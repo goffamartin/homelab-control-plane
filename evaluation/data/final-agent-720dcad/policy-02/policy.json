@@ -1,0 +1,18 @@
+{
+  "invalid_token": {
+    "http": 401,
+    "code": "UNAUTHORIZED"
+  },
+  "unlisted_action": {
+    "http": 422,
+    "code": "ACTION_NOT_SUPPORTED"
+  },
+  "retained_result_matches": true,
+  "same_id_result_matches": true,
+  "conflicting_command_id": {
+    "http": 409,
+    "code": "COMMAND_CONFLICT"
+  },
+  "missing_client_certificate": "TLSV13_ALERT_CERTIFICATE_REQUIRED",
+  "untrusted_client_certificate": "TLSV1_ALERT_UNKNOWN_CA"
+}
