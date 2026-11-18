@@ -8,6 +8,7 @@ HomeLab Control Plane lets an operator find a service on a remote machine, read 
 - [Czech report](report-cs.md)
 - [English presentation with Czech speaker notes](HLCP_final_results_EN.pptx)
 - [Talk outline](presentation-outline.md)
+- [Figures from the final measurements](figures/README.md)
 - [Final measurements and commands to reproduce the summaries](data/final-agent-720dcad/README.md)
 
 ## What we tested

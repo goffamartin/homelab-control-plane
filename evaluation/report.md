@@ -68,7 +68,9 @@ Opening a new SSH connection took the longest at the median for both tasks. With
 
 All three runs completed 160 of 160 scheduled requests. CPU values are 120-second run averages as percentages of one logical CPU. Memory values cover the service cgroup. The highest sampled agent memory under load was 14.07 MB.
 
-![Service CPU at idle and under load](data/final-agent-720dcad/figures/cpu.png)
+![Service CPU at idle and under load](figures/service-cpu.png)
+
+[Memory figure](figures/service-memory.png)
 
 ### Recovery and access policy
 
