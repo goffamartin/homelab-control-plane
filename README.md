@@ -36,6 +36,16 @@ hlcp -n debian-01 -r app -a logs --follow --tail 20
 Only actions explicitly enabled in the agent YAML are available. Ctrl+C stops
 log reading, not the container. Use `--json` for machine consumers.
 
+## Web dashboard
+
+[HLCP Web](https://github.com/goffamartin/hlcp-web) is a separate browser client
+for a controller you already run. Use it to browse nodes, filter resources by
+tag, check a container's state, and view or follow its logs. The resource page
+also lets you run actions allowed by the controller and see their results.
+
+The web client connects to the controller API from the server. Its deployment
+guide covers local HTTPS access and the credentials it needs. [HLCP Web deployment guide](https://github.com/goffamartin/hlcp-web/blob/main/docs/lan-deployment.md)
+
 ## Documentation
 
 | Guide | Purpose |
@@ -53,7 +63,7 @@ historical design notes. Historical plans are not current installation instructi
 
 ## Scope
 
-HLCP is not a web UI, remote terminal, container orchestrator or log archive.
+HLCP provides the controller API and CLI for managing configured resources.
 There is no arbitrary remote command execution, interactive container console,
 Docker Compose/Kubernetes management, scheduler or multi-controller HA.
 Interrupted actions may have unknown outcomes; a timeout is not a rollback.
