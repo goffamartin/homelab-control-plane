@@ -4,7 +4,7 @@ Martin Goffa — ANI-COM
 
 18 November 2026
 
-[Project source](https://github.com/goffamartin/homelab-control-plane) · [Measurement data](data/final-agent-720dcad/README.md)
+[Project source](../README.md) · [Measurement data](data/final-agent-720dcad/README.md)
 
 ## Abstract
 
@@ -32,7 +32,7 @@ We also used HLCP to check the state of a live application container. Starting, 
 
 ### How a command runs
 
-The web interface and CLI both send requests to the controller. The controller checks access and passes the command to the agent on the host running the containers. For a live status check, the agent asks Podman for the container's current state. The caller can retrieve a saved result later using the command ID.
+[HLCP Web](https://github.com/goffamartin/hlcp-web) and the CLI both send requests to the controller. The controller checks access and passes the command to the agent on the host running the containers. For a live status check, the agent asks Podman for the container's current state. The caller can retrieve a saved result later using the command ID.
 
 ## 4. How we tested HLCP
 
@@ -57,28 +57,32 @@ The latency table reports the median and p95. The p95 is the time by which at le
 | Restart · Fresh SSH | 30/30 | 272.37 | 301.17 |
 | Restart · Multiplexed SSH | 30/30 | 159.41 | 199.46 |
 
-Opening a new SSH connection took the longest at the median for both tasks. With a shared SSH connection, the median was 13.60 ms below HLCP for status and 5.90 ms below HLCP for restart. All 90 restarts passed independent inspection of container identity, start time and running state. The timed command ends before that inspection. Application readiness would require an application-level probe.
+Opening a new SSH connection took the longest at the median for both tasks. With a shared SSH connection, the median was 13.60 ms below HLCP for status and 5.90 ms below HLCP for restart. For restart, HLCP had a p95 that was 8.22 ms lower than shared SSH. All 90 restarts passed independent inspection of container identity, start time and running state. The timed command ends before that inspection. Application readiness would require an application-level probe.
 
 ### Resource use during polling
 
-| Service | Idle CPU (%) | CPU at one request/s (%) | Loaded memory, median in each run (MiB) |
+| Service | Idle CPU (%) | CPU at one request/s (%) | Loaded memory, median in each run (MB) |
 |---|---:|---:|---:|
-| Controller | 0.052–0.054 | 0.47–1.01 | 11.52 / 14.48 / 15.46 |
-| Agent | 3.00–3.03 | 6.90–7.11 | 11.91 / 12.83 / 12.88 |
+| Controller | 0.052–0.054 | 0.47–1.01 | 12.08 / 15.18 / 16.21 |
+| Agent | 3.00–3.03 | 6.90–7.11 | 12.49 / 13.46 / 13.50 |
 
-All three runs completed 160 of 160 scheduled requests. CPU values are 120-second run averages as percentages of one logical CPU. Memory values cover the service cgroup. The highest sampled agent memory under load was 13.42 MiB.
+All three runs completed 160 of 160 scheduled requests. CPU values are 120-second run averages as percentages of one logical CPU. Memory values cover the service cgroup. The highest sampled agent memory under load was 14.07 MB.
 
 ![Service CPU at idle and under load](data/final-agent-720dcad/figures/cpu.png)
 
 ### Recovery and access policy
 
-After a clean agent stop, the observer saw the node offline after a median of 8.26 ms. After relaunch the first successful live status took a median of 107.69 ms. When we paused the process with its socket open, the controller saw it offline after a median of 15.03 s. A new session and live status confirmed recovery in all five trials. After resume, time to the first successful status ranged from 1.05 to 15.86 s. Reconnect backoff can carry over between these successive short sessions.
+After a clean stop, the controller showed the agent offline after a median of 8.26 ms. After relaunch, the first live status check succeeded after a median of 107.69 ms. [Clean-stop samples](data/final-agent-720dcad/clean/samples.csv)
+
+For a silent interruption, we paused the same process five times in a row with its connection open. The controller showed it offline after a median of 15.03 s from pause. We then measured the time from resuming the process to a new connection. It took 0.97 s after the first pause and 15.80 s after the fifth. A live status check succeeded after every reconnect. [Repeated-pause samples](data/final-agent-720dcad/silent/samples.csv)
+
+The agent deliberately waits longer after short sessions to avoid retrying too often on an unstable connection. The delay resets after a session lasts at least one minute. In this series, each new pause followed shortly after a successful status check, so the delay grew across trials.
 
 TLS rejected connections with a missing client certificate and with a certificate from an unrelated authority. The API returned 401 for an invalid token, 422 for a disallowed restart and 409 for a conflicting command ID. A lookup and a repeated submission returned the same result as the original request. All three independent trials returned the expected responses.
 
 ## 6. Conclusion
 
-HLCP gives us one place to find a container, check its logs and look up the outcome of an action. In our tests, its command times were closer to SSH over a shared connection than to SSH with a new connection for every command.
+HLCP gives us one place to find a container, check its logs and look up the outcome of an action. The controller and agent check each other’s certificates, and operators can only run allowed actions. The agent reconnects after an interruption, and operators can look up saved results. In our tests, HLCP added about 14 ms to a typical status check and 6 ms to a restart compared with shared SSH. At one status check per second, the agent used about 7% of one logical CPU and had run medians of 12.49 to 13.50 MB.
 
 We measured latency on one container across two virtual machines, recovery on a single machine and resource use in two-minute windows. The results describe those tasks in our HomeLab setup.
 
