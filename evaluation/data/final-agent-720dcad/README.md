@@ -2,6 +2,8 @@
 
 We used the same controller and agent builds across all five experiments. The table links to the measurements behind the report and presentation.
 
+The [figures](../../figures/README.md) show the final measurements.
+
 | Experiment | Evidence |
 |---|---|
 | E1. Live status | [Samples including warm-ups](e1/samples.csv) and [per-block and pooled statistics](e1/summary.csv) |

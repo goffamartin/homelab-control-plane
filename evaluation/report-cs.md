@@ -58,7 +58,9 @@ Nejvyšší medián mělo u obou úloh nové SSH spojení. Sdílené SSH bylo v 
 
 Všechny tři série dokončily 160 ze 160 naplánovaných dotazů. Procenta CPU jsou průměry za jednotlivá 120sekundová okna vůči jednomu logickému CPU. Paměť udává spotřebu účtovanou celé cgroup služby. Nejvyšší zaznamenaný vzorek agenta při zátěži činil 14,07 MB.
 
-![Využití CPU na obou službách](data/final-agent-720dcad/figures/cpu.png)
+![Využití CPU na obou službách](figures/service-cpu.png)
+
+[Graf využití paměti](figures/service-memory.png)
 
 ### Obnova a pravidla přístupu
 
