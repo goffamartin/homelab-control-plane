@@ -2,7 +2,7 @@
 
 HLCP is a small controller–agent system for operating explicitly allowed HomeLab
 resources. Agents connect outward over mutual TLS; the controller exposes a
-local authenticated API used by the `hlcp` CLI. The application protocol uses
+local authenticated API used by the `hlcp` CLI and the optional HLCP Web client. The application protocol uses
 Go and CBOR, with durable command tracking and explicit uncertain outcomes.
 
 ## What it does
@@ -36,6 +36,17 @@ hlcp -n example-node -r app -a logs --follow --tail 20
 Only actions explicitly enabled in the agent YAML are available. Ctrl+C stops
 log reading, not the container. Use `--json` for machine consumers.
 
+## Web dashboard
+
+[HLCP Web](https://github.com/goffamartin/hlcp-web) is a separate browser client
+for a controller you already run. Use it to browse nodes, filter resources by
+tag, check a container's state, and view or follow its logs. The resource page
+lets you run configured actions when the web client's credentials permit them
+and see the result.
+
+The web client uses server-side credentials to call the controller API. For
+local HTTPS and credential setup, see the [HLCP Web deployment guide](https://github.com/goffamartin/hlcp-web/blob/main/docs/lan-deployment.md).
+
 ## Documentation
 
 | Guide | Purpose |
@@ -53,7 +64,7 @@ historical design notes. Historical plans are not current installation instructi
 
 ## Scope
 
-HLCP is not a web UI, remote terminal, container orchestrator or log archive.
+HLCP provides the controller API and CLI for managing configured resources.
 There is no arbitrary remote command execution, interactive container console,
 Docker Compose/Kubernetes management, scheduler or multi-controller HA.
 Interrupted actions may have unknown outcomes; a timeout is not a rollback.

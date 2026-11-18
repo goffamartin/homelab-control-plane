@@ -14,6 +14,19 @@ An empty inventory is not a failed installation: resources must be enabled in
 YAML. A stopped container is not an offline agent. An active service is not proof
 of controller connectivity.
 
+## Agent reconnection
+
+Use `hlcp -n` to see whether the controller has observed the agent go offline
+or come back. The controller can detect a closed connection directly. When an
+agent goes quiet with its connection open, the controller relies on missed
+heartbeats.
+
+The agent reconnects automatically. After repeated short sessions, it waits
+longer between attempts to limit traffic while the connection is unstable.
+A session that lasts at least one minute resets the retry delay. Once the node
+is online, a resource `status` action checks that commands reach the runtime
+again. Use the original command ID to look up a result if the reply was lost.
+
 ## Update an existing managed installation
 
 Use a trusted helper downloaded for the intended release, as described in

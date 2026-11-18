@@ -120,9 +120,14 @@ An already-running `start` does not reload YAML; use `restart` after edits.
 
 For non-root use user scope without sudo. Root defaults to system scope;
 use `--scope` explicitly when needed. The generic `hlcp-agent.service` is the
-default; an existing compatible Podman profile needs
-`--scope user --unit hlcp-agent-podman.service`. Custom units/drop-ins are not
-silently adopted. See the [service contract](reference/57-agent-service-and-bash-completion.md).
+default. For an existing compatible Podman profile, pass
+`--scope user --unit hlcp-agent-podman.service`. The guarded commands support
+packaged units. `start --enable` in user scope requires linger.
+
+`restart` validates the configuration before stopping the agent. If a restart
+fails after dispatch, inspect the service state before retrying. Both `stop`
+and `status` can inspect the service even when the YAML is invalid. After the
+agent starts, use `hlcp -n` on the controller to check its connection.
 
 ## Machine-readable output
 
@@ -139,14 +144,23 @@ are secrets regardless of output format.
 | Container log follow | Versioned newline-delimited JSON events |
 | Installer | One result on stdout; progress/details on stderr |
 
-There is not one universal envelope. Administrative consumers should inspect
-`schema_version`, `status`, `code`, `changed`, `completed` and `uncertain`, as
-applicable; service consumers also inspect `state`. Reject unsupported schema
-versions and tolerate unknown fields. A partial result can mean configuration
-was saved but service startup failed. It is not equivalent to “nothing changed.”
-See [administrative output](reference/55-administrative-output.md) and the
-command-specific references for fields and exit codes. Installer
-`--json --configure` is rejected because the setup wizard is interactive.
+Managed administrative commands use `schema_version: 1` with `operation`,
+`status`, `code`, `phase`, `changed`, `uncertain` and a `completed` array.
+They may add `next` and command-specific `data`. Reject unsupported schema
+versions and tolerate unknown fields. `ok` and `preview` exit zero. A
+`failed`, `partial` or `uncertain` result exits nonzero. For example, a
+partial join may have saved the identity and YAML before startup failed.
+Check `completed` before deciding whether to resume the join or start the agent.
+
+`configure --json` reports the YAML path without opening the editor.
+`check-config --json` checks syntax and schema. The installer rejects
+`--json --configure` because the setup wizard is interactive.
+
+Agent service reports use `schema_version: 1` and an operation such as
+`agent.restart`. Check `read_only`, `changed`, `completed` and `uncertain`
+for the operation and `state.active` when inspecting service state. These
+commands exit 0 on completion, 1 on a refused or unverified operation, and 2
+on invalid options or output failure.
 
 ## Bash completion
 
@@ -161,6 +175,7 @@ source <(hlcp-agent completion bash)       # agent host
 ```
 
 Load only installed binaries. Press Tab twice when several choices match.
-Commands/flags complete offline. Node/resource/action names need a reachable
-controller API and an authorized CLI profile. Dynamic completion performs
-bounded read-only queries, never actions. Only Bash is supported in v1.0.
+Commands and flags complete offline. Nodes, resources, actions and tags need
+a reachable controller API and an authorized CLI profile. The helper uses
+at most one read-only GET with a 500 ms budget. An unavailable or denied API
+returns no suggestions. Bash is the supported shell.
